@@ -1,0 +1,9 @@
+results/
+paraview/
+__pycache__/
+videos/
+miscellaneous/
+/literature
+/meshes
+/fmu
+/fenicsx
