@@ -1,9 +1,8 @@
 from mpi4py import MPI
-import meshio
+from math import pi
 import gmsh
 import os
-import utilities
-from math import pi
+from .utilities import convert_to_legacy_fenics, save_data
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
@@ -61,6 +60,7 @@ def build_geometry(
         mesh_growth = 0.5,   # priblizna min velikost elemenu (-)
         fltk=False,
         symetry_3d=None,
+        verbosity=0,
     ):
 
     if MPI.COMM_WORLD.rank == 0:
@@ -72,6 +72,7 @@ def build_geometry(
         os.makedirs(dir, exist_ok=True)
         gmsh.initialize()
         gmsh.option.setNumber('General.Terminal', 1)
+        gmsh.option.setNumber('General.Verbosity', verbosity)
 
         gmsh.model.add('Experiment_3d')
         gmsh.logger.start()
@@ -188,7 +189,6 @@ def build_geometry(
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
 
-        #exit()
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.field.add('Distance', 1)
         surface_list = [dimtag[1] for dimtag in gmsh.model.getBoundary([(dim, cartridge_heated)], oriented=False)]
@@ -238,14 +238,11 @@ def build_geometry(
             'cartridge_heated_index':4}
             
         if legacy_fenics:
-            utilities.convert_to_legacy_fenics(gmsh_file)
+            convert_to_legacy_fenics(gmsh_file)
 
-        utilities.save_data(add_data_file, add_data)
+        save_data(add_data_file, add_data)
 
     MPI.COMM_WORLD.Barrier()
 
     return None
-
-build_geometry(mesh_size_max=0.005, mesh_size_min=0.003, dim=2, symetry_3d="quarter")
-#build_geometry_2d(mesh_size=0.002)
 

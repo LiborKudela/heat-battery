@@ -35,6 +35,7 @@ class Experiment_data():
         ]
     
     def detect_steady_state(self, start='2023-10-13 15:00', end='2023-10-13 17:00'):
+        #TODO: make this automatic
         self.steady_state_start = start
         self.steady_state_end = end
         self.steady_state_data = self.df[(self.df.index > start) & (self.df.index < end)]

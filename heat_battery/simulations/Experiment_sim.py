@@ -11,7 +11,7 @@ import pandas as pd
 
 from .utilities import Probe_writer, probe_function
 from .. import materials
-from ..experiments import Experiment_data
+from ..data import Experiment_data
 
 class Experiment():
     def __init__(self, geometry_dir='meshes/experiment', 

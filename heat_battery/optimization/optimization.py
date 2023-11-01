@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 from mpi4py import MPI
 import os
 from ..simulations import Experiment
-from ..experiments import Experiment_data
+from ..data import Experiment_data
 import random
 import numpy as np
 
@@ -42,63 +42,9 @@ class DataFitter:
         self.steady_state.update()
 
         g = np.array(g)
-        return g
+        return org_err, g
     
-    def optimise_steady_state_v2(self, max_iter=1000, alpha=0.01, k0=None):
-
-        if k0 is not None:
-            for i, y_values in enumerate(k0):
-                self.sim.mats[i].k.set_values(y_values)
-
-        idx_couples = self.idx_couples.copy()
-
-        for j in range(max_iter):
-            #random.shuffle(idx_couples)
-            #idx_couples = MPI.COMM_WORLD.bcast(idx_couples, root=0)
-            if MPI.COMM_WORLD.rank == 0:
-                print(f"iter {j}")
-            for sub_iter, ic in enumerate(idx_couples):
-                m = ic[0]
-                k = ic[1]
-
-                nominal = self.sim.mats[m].k.get_value(k)
-                self.steady_state.update()
-                switched_sign = False
-                if MPI.COMM_WORLD.rank == 0:
-                    abs_e = self.steady_state.total_abs_error.copy()
-                    sqr_e = self.steady_state.total_square_error.copy()
-                    print(f"  sub iter: {sub_iter}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
-                local_d = np.abs(nominal)*alpha[m][k]
-                for i in range(2):
-                    prev_e = np.sqrt(self.steady_state.total_max_error.copy())
-                    v = self.sim.mats[m].k.get_value(k)
-                    self.sim.mats[m].k.set_value(k, v+local_d)
-
-                    try:
-                        self.steady_state.update()
-                        new_e = np.sqrt(self.steady_state.total_max_error.copy())
-                    except:
-                        new_e = np.inf
-                        
-                    if new_e > prev_e:
-                        self.sim.mats[m].k.set_value(k, v)
-                        if switched_sign:
-                            break
-                        else:
-                            local_d = -local_d
-                            switched_sign = True
-                            continue
-            res = [mat.k.get_values() for mat in self.sim.mats]
-            if MPI.COMM_WORLD.rank == 0:
-                print(res)
-
-        if MPI.COMM_WORLD.rank == 0:   
-            abs_e = self.steady_state.total_abs_error.copy()
-            sqr_e = self.steady_state.total_square_error.copy()
-            print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
-        return res
-    
-    def optimise_steady_state_v3(self, k0=None, max_iter=100, alpha=1e-1):
+    def optimise_steady_state_v2(self, k0=None, max_iter=100, alpha=1e-1, beta_1=0.8, beta_2=0.8):
         if k0 is not None:
             for i, y_values in enumerate(k0):
                 self.sim.mats[i].k.set_values(y_values)
@@ -109,25 +55,72 @@ class DataFitter:
             sqr_e = self.steady_state.total_square_error.copy()
             print(f"initial state:", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
 
+        g_w = 0
+        g_norm_w = 1e5
+        g_s = 1
         for j in range(max_iter):
-            self.steady_state.update()
-            res_err = self.steady_state.data['Difference']
-            g = self.gradient_aproximation()
-            g_norm = np.linalg.norm(g[-2:])
+            org_err, g = self.gradient_aproximation()
             prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])
 
-            # update values        
-            update = alpha * g/(g_norm+1e-1)
+            # update values
+            g = g*np.concatenate([[0], [0, 0], [0], [0], [1.0, 1.0, 1.0]])
+            g_norm = np.linalg.norm(g)
+            g_w = beta_1*g_w + (1-beta_1)*g
+            g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
+            g_s = beta_2*g_s + (1-beta_2)*g**2
+
+            update = alpha * g_w/(g_norm_w+1e-3)
             for i, ic in enumerate(self.idx_couples):
-                self.sim.mats[ic[0]].k.set_value(ic[1], max(1e-3, prev_k[i]-update[i]))
+                self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
+            self.steady_state.update()
 
             res = [mat.k.get_values() for mat in self.sim.mats]
             if MPI.COMM_WORLD.rank == 0:
                 abs_e = self.steady_state.total_abs_error.copy()
                 sqr_e = self.steady_state.total_square_error.copy()
-                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}")
-                if j % 5 == 0:
-                    print(res)
+                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}", f"g_norm_w: {g_norm_w}")
+                if j % 10 == 0:
+                    print("k = ", res)
+        
+        return res
+    
+    def optimise_steady_state_v3(self, k0=None, max_iter=100, alpha=1e-1, beta_1=0.8, beta_2=0.8):
+        if k0 is not None:
+            for i, y_values in enumerate(k0):
+                self.sim.mats[i].k.set_values(y_values)
+
+        self.steady_state.update()
+        if MPI.COMM_WORLD.rank == 0:
+            abs_e = self.steady_state.total_abs_error.copy()
+            sqr_e = self.steady_state.total_square_error.copy()
+            print(f"initial state:", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
+
+        g_w = 0
+        g_norm_w = 1e5
+        g_s = 1
+        for j in range(max_iter):
+            org_err, g = self.gradient_aproximation()
+            prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])[-3:]
+
+            # update values
+            #g = g*np.concatenate([[0], [0, 0], [0], [0], [1.0, 1.0, 1.0]])
+            g_norm = np.linalg.norm(g)
+            g_w = beta_1*g_w + (1-beta_1)*g
+            g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
+            g_s = beta_2*g_s + (1-beta_2)*g**2
+
+            update = alpha[-3:] * g_w/(g_norm_w+1e-3)
+            for i, ic in enumerate(self.idx_couples[-3:]):
+                self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
+            self.steady_state.update()
+
+            res = [mat.k.get_values() for mat in self.sim.mats]
+            if MPI.COMM_WORLD.rank == 0:
+                abs_e = self.steady_state.total_abs_error.copy()
+                sqr_e = self.steady_state.total_square_error.copy()
+                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}", f"g_norm_w: {g_norm_w}")
+                if j % 10 == 0:
+                    print("k = ", res)
         
         return res
 
