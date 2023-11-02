@@ -57,7 +57,7 @@ class Sand(Material):
         eps = 0.9
         d = 0.0015
         super().__init__(h0_T_ref = 20, 
-                         k = Lagrange_property(domain, [0, 300, 1000], [0.42, 0.5, 0.7], PropertyUnits.k), 
+                         k = Lagrange_property(domain, [0, 500, 600], [0.42, 0.5, 0.4], PropertyUnits.k), 
                          rho = Lagrange_property(domain, [0, 600], [2650.0, 2650.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [0, 600], [830, 830], PropertyUnits.cp), 
                          name=name)

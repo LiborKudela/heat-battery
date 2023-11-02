@@ -22,7 +22,7 @@ class DataFitter:
     def get_k(self):
         return [mat.k.get_values() for mat in self.sim.mats]
 
-    def gradient_aproximation(self, perturbation=1e-4):
+    def gradient_aproximation(self, perturbation=1e-6):
         
         g = []
         self.steady_state.update()
@@ -69,7 +69,7 @@ class DataFitter:
             g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
             g_s = beta_2*g_s + (1-beta_2)*g**2
 
-            update = alpha * g_w/(g_norm_w+1e-3)
+            update = alpha * g_w/(np.srqr(g_s)+1e-1)
             for i, ic in enumerate(self.idx_couples):
                 self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
             self.steady_state.update()
@@ -84,7 +84,7 @@ class DataFitter:
         
         return res
     
-    def optimise_steady_state_v3(self, k0=None, max_iter=100, alpha=1e-1, beta_1=0.8, beta_2=0.8):
+    def optimise_steady_state_v3(self, k0=None, max_iter=100, alpha=1e-2, beta_1=0.9, beta_2=0.9, epsilon=1e-5):
         if k0 is not None:
             for i, y_values in enumerate(k0):
                 self.sim.mats[i].k.set_values(y_values)
@@ -99,18 +99,19 @@ class DataFitter:
         g_norm_w = 1e5
         g_s = 1
         for j in range(max_iter):
-            org_err, g = self.gradient_aproximation()
-            prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])[-3:]
 
-            # update values
-            #g = g*np.concatenate([[0], [0, 0], [0], [0], [1.0, 1.0, 1.0]])
+            # calculate
+            org_err, g = self.gradient_aproximation()
             g_norm = np.linalg.norm(g)
             g_w = beta_1*g_w + (1-beta_1)*g
-            g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
+            #g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
             g_s = beta_2*g_s + (1-beta_2)*g**2
+            g_w_hat = g_w/(1-beta_1**(j+1))
+            g_s_hat = g_s/(1-beta_2**(j+1))
+            update = alpha * g_w_hat/(np.sqrt(g_s_hat)+epsilon)
 
-            update = alpha[-3:] * g_w/(g_norm_w+1e-3)
-            for i, ic in enumerate(self.idx_couples[-3:]):
+            prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])
+            for i, ic in enumerate(self.idx_couples):
                 self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
             self.steady_state.update()
 
@@ -118,7 +119,7 @@ class DataFitter:
             if MPI.COMM_WORLD.rank == 0:
                 abs_e = self.steady_state.total_abs_error.copy()
                 sqr_e = self.steady_state.total_square_error.copy()
-                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}", f"g_norm_w: {g_norm_w}")
+                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}")
                 if j % 10 == 0:
                     print("k = ", res)
         
