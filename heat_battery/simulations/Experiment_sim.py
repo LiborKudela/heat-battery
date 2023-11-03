@@ -80,7 +80,7 @@ class Experiment():
         self.xdmf_steady.write_mesh(self.domain)
 
         self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
-        self.V = fem.FunctionSpace(self.domain, ("CG", 1))
+        self.V = fem.FunctionSpace(self.domain, ("Lagrange", 1))
         T_v = ufl.TestFunction(self.V)
 
         # temperature in current time step
@@ -330,9 +330,9 @@ class Experiment():
             plotter.view_xy()
             plotter.show()
 
-    def pseudoexperimental_data_steady(self, Qc=100, T_amb=20):
+    def pseudoexperimental_data_steady(self, Qc=100, T_amb=20, save_xdmf=True):
         exp_data = Experiment_data()
-        exp_data.steady_state_mean = self.solve_steady(Qc=Qc, T_amb=T_amb)
+        exp_data.steady_state_mean = self.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=save_xdmf)
         exp_data.steady_state_mean['Power [W]'] = Qc
         exp_data.steady_state_mean['16 - Ambient [°C]'] = T_amb
         exp_data.steady_state_std = exp_data.steady_state_mean.copy()
@@ -341,76 +341,3 @@ class Experiment():
         exp_data.steady_state_std.rename("Experiment Std", inplace=True)
 
         return exp_data
-        
-
-# sim = Experiment(dim = 2)
-# experiment_file = 'experiment_data/20231009_third/Test_TF24_Third_measurement_054411.csv'
-# exp = Experiment_data(experiment_file)
-# T_amb = exp.steady_state_mean['16 - Ambient [°C]']
-# Qc = exp.steady_state_mean['Power [W]']
-# comparer = SteadyStateComparer(sim, exp)
-# exp.plot_data_series()
-# exit()
-
-# sim.mats[0].k.value[:] = np.array([20.89, 0.1875])
-# sim.mats[1].k.value[:] = np.array([5.498e-02, 7.890e-06])
-# sim.mats[2].k.value[:] = np.array([50.54, 0.0])
-# sim.mats[3].k.value[:] = np.array([2.331, 0.0])
-# sim.mats[3].k.value[:] = np.array([ 2.5052e+00, -6.4800e-04])
-# sim.mats[4].k.value[:] = np.array([ 5.05460e-01,  8.49000e-05, -8.42500e-07, 1.96939e-09]) #1764
-# comparer.update()
-# d = [[5e-3, 5e-4],[1e-6, 1e-9],[5e-2, 5e-3],[1e-5, 1e-6],[1e-5, 1e-9, 1e-10, 1e-13]]
-
-
-# Qc_t = lambda t: Qc
-# T_amb_t = lambda t: T_amb
-# sim.solve_unsteady(Qc_t=Qc_t, T_amb_t=T_amb_t)
-# sim.close_results()
-# m=4
-# for j in range(300):
-#     k = random.randint(0, len(d[m])-1)
-#     sig = 1 if random.random() < 0.5 else -1
-#     k = MPI.COMM_WORLD.bcast(k, root=0)
-#     sig = MPI.COMM_WORLD.bcast(sig, root=0)
-#     comparer.update()
-#     for i in range(10):
-#         local_d = d[m][k]
-#         prev_e = comparer.total_square_error.copy()
-#         sim.mats[m].k.value[k] += sig*local_d
-#         try:
-#             comparer.update()
-#         except:
-#             sim.mats[m].k.value[k] -= sig*local_d
-#             break
-#         new_e = comparer.total_square_error.copy()
-#         if new_e >= prev_e:
-#             sim.mats[m].k.value[k] -= sig*local_d
-#             #comparer.update()
-#             break
-#         if MPI.COMM_WORLD.rank == 0:
-#             abs_e = comparer.total_abs_error.copy()
-#             sqr_e = comparer.total_square_error.copy()
-#             print(abs_e, sqr_e, sim.mats[m].k.value, j, m)
-
-# if MPI.COMM_WORLD.rank == 0:
-#     print(sim.mats[0].k.value)
-#     print(sim.mats[1].k.value)
-#     print(sim.mats[2].k.value)
-#     print(sim.mats[3].k.value)
-#     print(sim.mats[4].k.value)
-
-# comparer.print_data()
-# comparer.save_data()
-# comparer.create_figure(save_path=sim.result_dir + "/comparer.html")
-# T_range = sim.get_current_range(cell_tag=1)
-# sim.mats[0].plot(T_lim_used=T_range, save_path=sim.result_dir + "/mat0.html")
-# T_range = sim.get_current_range(cell_tag=2)
-# sim.mats[1].plot(T_lim_used=T_range, save_path=sim.result_dir + "/mat1.html")
-# T_range = sim.get_current_range(cell_tag=3)
-# sim.mats[2].plot(T_lim_used=T_range, save_path=sim.result_dir + "/mat2.html")
-# T_range = sim.get_current_range(cell_tag=4)
-# sim.mats[3].plot(T_lim_used=T_range, save_path=sim.result_dir + "/mat3.html")
-# T_range = sim.get_current_range(cell_tag=5)
-# sim.mats[4].plot(T_lim_used=T_range, save_path=sim.result_dir + "/mat4.html")
-# sim.solve_steady(T_amb = T_amb, Qc=Qc)
-

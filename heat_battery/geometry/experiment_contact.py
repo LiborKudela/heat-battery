@@ -2,7 +2,7 @@ from mpi4py import MPI
 from math import pi
 import gmsh
 import os
-from .utilities import convert_to_legacy_fenics, save_data
+from utilities import convert_to_legacy_fenics, save_data
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
@@ -33,7 +33,7 @@ def add_bottom_plate(a, t, dim=3, angle=2*pi):
 
 def build_geometry(
         dim=3,
-        dir='meshes/experiment',
+        dir='meshes/experiment_contact',
         legacy_fenics=False,
         h_b=0.118,           # vyska spodni casti (m)
         h_t=0.2485,          # vyska horni casti (m)
@@ -144,16 +144,22 @@ def build_geometry(
         cartridge_bolt = add_cylinder(h0_bolt, h_c_bolt, r_c_bolt, dim=dim, angle=angle)
         cartridge_unheated = gmsh.model.occ.fuse([(dim, cartridge_unheated)], [(dim, cartridge_thread), (dim, cartridge_bolt)])
 
-        f_tags, f_dim_tags = gmsh.model.occ.fragment(steel[0], insulation[0]+sand[0]+cartridge_unheated[0]+[(dim, cartridge_heated)]+top_plate[0])
+        dr = 0.0001
+        contact_enlarged = add_cylinder(h0_heater-dr, h_c_heated+dr, r_c+dr, dim=dim, angle=angle)
+        contact_hole = add_cylinder(h0_heater, h_c_heated, r_c, dim=dim, angle=angle)
+        cartridge_contact = gmsh.model.occ.cut([(dim, contact_enlarged)], [(dim, contact_hole)])
+
+        f_tags, f_dim_tags = gmsh.model.occ.fragment(steel[0], insulation[0]+sand[0]+cartridge_unheated[0]+[(dim, cartridge_heated)]+top_plate[0]+cartridge_contact[0])
 
         gmsh.model.occ.synchronize()
 
         # mark subdomains
-        gmsh.model.addPhysicalGroup(dim, [f_tags[0][1], f_tags[6][1]], 1, 'steel')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[0][1], f_tags[5][1]], 1, 'steel')
         gmsh.model.addPhysicalGroup(dim, [f_tags[1][1], f_tags[2][1]], 2, 'insulation')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 3, 'cartridge_unheated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[5][1]], 4, 'cartridge_heated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 5, 'sand')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 3, 'cartridge_unheated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 4, 'cartridge_heated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[7][1]], 5, 'sand')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[6][1]], 6, 'cartridge_contact')
 
         mats = [
             'Steel04', 
@@ -161,6 +167,7 @@ def build_geometry(
             'Cartridge_unheated',  
             'Cartridge_heated', 
             'Sand',
+            'Contact_sand'
             ]
         
         mats_names = [
@@ -169,22 +176,23 @@ def build_geometry(
             'Unheated part of cartridge', 
             'Heated part of cartridge', 
             'Sand',
+            'Contact_sand'
             ]
 
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 27, 28], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [12, 13, 14, 15, 16, 17, 18, 19, 20, 34, 35], 1, 'outer_surface')
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                gmsh.model.addPhysicalGroup(dim-1, [1, 3, 4, 5, 6, 9, 14, 15, 29, 30], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [13, 15, 16, 17, 18, 21, 26, 27, 37, 38], 1, 'outer_surface')
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                gmsh.model.addPhysicalGroup(dim-1, [5, 6, 7, 8, 23, 24, 25, 31, 32], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [18, 19, 20, 21, 33, 34, 35, 40, 41], 1, 'outer_surface')
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3, 4, 5, 6, 24, 25], 1, 'outer_surface')
+            gmsh.model.addPhysicalGroup(dim-1, [13, 14, 15, 16, 17, 18, 33, 34], 1, 'outer_surface')
             volume_symm_coeff, surface_symm_coeff = 1, 1
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
@@ -206,6 +214,7 @@ def build_geometry(
         gmsh.finalize()
 
         h_ref = h_b-h_d+h_t-h_unfill
+        
         probes_coords = [
             [r_c+0.022, 0.0, h_ref-0.06],[r_c+2*0.022, 0.0, h_ref-0.06],[r_c+3*0.022, 0.0, h_ref-0.06], # radial top sensors
             [r_c+0.022, 0.0, h_ref-2*0.06],[r_c+2*0.022, 0.0, h_ref-2*0.06],[r_c+3*0.022, 0.0, h_ref-2*0.06], # radial mid sensors

@@ -10,10 +10,13 @@ class PropertyUnits:
     k = {'name':'Heat Conductivity', 'unit': '[W/m.K]'}
     rho = {'name':'Mass density', 'unit': '[kg/m3]'}
     cp = {'name':'Specific heat capacity', 'unit': '[J/kg.K]'}
+    K = {'name':'Thermal contact conductance', 'unit': '[W/m2K]'}
+    R = {'name':'Thermal contact resistance', 'unit': '[m2K/W]'}
     T = {'name':'Temperature', 'unit': '[C]'}
     T_amb = {'name':'Absolute temperature', 'unit': '[K]'}
 
 class Material_property:
+
     def set_values(self, y_values) -> None:
         pass
 
@@ -47,12 +50,13 @@ class Material_property:
                 fig.write_image(f'{save_name}.jpg', scale=3)
 
 class Polynomial_property(Material_property):
-    def __init__(self, domain, c=[1,1,1], unit=PropertyUnits.default):
+    def __init__(self, domain, c=[1,1,1], unit=PropertyUnits.default, multiplier=1.0):
         self.domain = domain
         self.fem_const = fem.Constant(domain, PETSc.ScalarType(c))
         self.unit = unit
         self.n_values = len(c)
         self.order = len(c)-1
+        self.multiplier = multiplier
 
     def set_values(self, c_values):
         self.fem_const.value[:] = np.array(c_values)
@@ -70,10 +74,16 @@ class Polynomial_property(Material_property):
         e = 0
         for i in range(len(self.fem_const)):
             e += self.fem_const[i]*T**i
-        return e
+        return e*self.multiplier
+    
+    def to_lagrange_property(self, x):
+        assert self.order <= len(x), f"x must be at least of len n_values - {self.n_values}"
+        # TODO write test for this
+        y = np.polyval(np.flip(self.fem_const.value), x)
+        return Lagrange_property(self.domain, x=x, y=y, unit=self.unit)
 
 class Lagrange_property(Material_property):
-    def __init__(self, domain, x=[0.0, 1.0], y=[1.0, 1.0], unit=PropertyUnits.default):
+    def __init__(self, domain, x=[0.0, 1.0], y=[1.0, 1.0], unit=PropertyUnits.default, multiplier=1.0):
         assert len(x) == len(y), "x and y must be the same length"
         self.domain = domain
         self.x_values = x
@@ -81,6 +91,7 @@ class Lagrange_property(Material_property):
         self.unit = unit
         self.n_values = len(x)
         self.order = len(x)-1
+        self.multiplier = multiplier
 
         self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*(self.order+1)))
         self.update_fem_const()
@@ -103,7 +114,7 @@ class Lagrange_property(Material_property):
         e = 0
         for i in range(len(self.fem_const)):
             e += self.fem_const[i]*T**i
-        return e
+        return e*self.multiplier
 
     def update_fem_const(self):
         coefs = np.flip(lagrange(self.x_values, self.y_values).coef)
@@ -135,7 +146,7 @@ class Material():
         e = -e_offset
         for i in range(len(self.cp.fem_const.value)):
             e += self.cp.fem_const[i]*T**(i+1)/(i+1)
-        return e
+        return e*self.cp.multiplier
     
     def plot_k(self, T_lim=(20, 600), T_lim_used=None, save_name=None, show=False):
         if MPI.COMM_WORLD.rank == 0:
@@ -156,3 +167,6 @@ class Material():
             if save_name is not None:
                 fig.write_html(f'{save_name}.html')
                 fig.write_image(f'{save_name}.jpg', scale=2)
+
+                         
+
