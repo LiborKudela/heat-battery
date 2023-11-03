@@ -1,46 +1,84 @@
-
+import numpy as np
+from mpi4py import MPI
 
 class Optimizer:
-    def __init__(self, g) -> None:
-        pass
+    def __init__(self, loss=None, grad=None, k0=None) -> None:
+        self.loss = loss
+        self.grad = grad
 
-    def optimize(self, loss, k0=None, max_iter=1000, alpha=0.01, k0=None):
+        # optimizer state
+        self.future_update = None
+        self.g_value = None
+        self.g_norm = None
+        self.loss_value = None
+        if k0 is not None:
+            self.k = k0.copy()
+
+    def get_k(self):
+        return self.k.copy()
+
+    def set_k(self, k):
+        self.k = np.array(k)
+
+    def gradient_finite_differences(self, k, perturbation=1e-5, return_loss=True):
+        org_loss_value = self.loss(k)
+        k_pert = k.copy()
+        g = []
+        for i in range(len(k)):
+            k_pert[i] += perturbation
+            pert_loss_value = self.loss(k_pert)
+            k_pert[i] -= perturbation
+            g_err = (pert_loss_value-org_loss_value)/perturbation
+            g.append(g_err)
+        if return_loss:
+            return np.array(g), org_loss_value
+        else:
+            return np.array(g)
+        
+    def objective(self, k):
+        if self.grad is None:
+            return self.gradient_finite_differences(k, return_loss=True)
+        else:
+            return self.grad(k), self.loss(k)
+
+    def print_state(self):
+        if MPI.COMM_WORLD.rank == 0:
+            print(f"step: {self.j}" , 
+                  f"loss: {self.loss_value}", 
+                  f"g_norm: {self.g_norm}",
+                  )
+
+class ADAM(Optimizer):
+    def __init__(self, loss=None, grad=None, k0=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-3):
+        assert loss is not None, "loss function must be given"
+        
+        # hyper parameters
+        self.alpha = alpha
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.eps = eps
+
+        # optimizer state
+        self.g_w = 0.0
+        self.g_s = 0.0
+        self.j = 0
+
+        super().__init__(loss=loss, grad=grad, k0=k0)
+
+    def step(self):
+        self.j += 1
+        if self.j > 1:
+            self.k -= self.future_update
+        g, l = self.objective(self.k)
+
+        # update optimizer state
+        self.g_norm = np.linalg.norm(g)
+        self.g_value = g
+        self.loss_value = l
+        self.g_w = self.beta_1*self.g_w + (1-self.beta_1)*g
+        self.g_s = self.beta_2*self.g_s + (1-self.beta_2)*g**2
+        self.g_w_hat = self.g_w/(1-self.beta_1**(self.j))
+        self.g_s_hat = self.g_s/(1-self.beta_2**(self.j))
+        self.future_update = self.alpha * self.g_w_hat/(np.sqrt(self.g_s_hat)+self.eps)
 
 
-        for j in range(max_iter): 
-            if MPI.COMM_WORLD.rank == 0:
-                print(f"iter {j}")
-            
-            for sub_iter, ic in enumerate(idx_couples):
-                m = ic[0]
-                k = ic[1]
-                nominal = self.sim.mats[m].k.get_value(k)
-                self.steady_state.update()
-                switched_sign = False
-                if MPI.COMM_WORLD.rank == 0:
-                    abs_e = self.steady_state.total_abs_error.copy()
-                    sqr_e = self.steady_state.total_square_error.copy()
-                    print(f"  sub iter: {sub_iter}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
-                local_d = np.abs(nominal)*alpha
-                for i in range(2):
-                    prev_e = np.sqrt(self.steady_state.total_max_error.copy())
-                    v = self.sim.mats[m].k.get_value(k)
-                    self.sim.mats[m].k.set_value(k, v+local_d)
-
-                    try:
-                        self.steady_state.update()
-                        new_e = np.sqrt(self.steady_state.total_max_error.copy())
-                    except:
-                        new_e = np.inf
-                        
-                    if new_e > prev_e:
-                        self.sim.mats[m].k.set_value(k, v)
-                        if switched_sign:
-                            break
-                        else:
-                            local_d = -local_d
-                            switched_sign = True
-                            continue
-            res = [mat.k.get_values() for mat in self.sim.mats]
-            if MPI.COMM_WORLD.rank == 0:
-                print(res)

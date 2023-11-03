@@ -51,6 +51,7 @@ class Polynomial_property(Material_property):
         self.domain = domain
         self.fem_const = fem.Constant(domain, PETSc.ScalarType(c))
         self.unit = unit
+        self.n_values = len(c)
         self.order = len(c)-1
 
     def set_values(self, c_values):
@@ -73,12 +74,14 @@ class Polynomial_property(Material_property):
 
 class Lagrange_property(Material_property):
     def __init__(self, domain, x=[0.0, 1.0], y=[1.0, 1.0], unit=PropertyUnits.default):
+        assert len(x) == len(y), "x and y must be the same length"
         self.domain = domain
         self.x_values = x
         self.y_values = y
         self.unit = unit
-
+        self.n_values = len(x)
         self.order = len(x)-1
+
         self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*(self.order+1)))
         self.update_fem_const()
 

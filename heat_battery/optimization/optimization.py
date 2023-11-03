@@ -1,164 +1,52 @@
+from typing import List
 import pandas as pd
 import plotly.graph_objects as go
 from mpi4py import MPI
 import os
+import numpy as np
 from ..simulations import Experiment
 from ..data import Experiment_data
-import random
-import numpy as np
-
-
-class DataFitter:
-    def __init__(self, sim : Experiment, exp_data: Experiment_data):
-        self.exp_data = exp_data
-        self.sim = sim
-        self.steady_state = SteadyStateComparer(sim, exp_data)
-
-        self.idx_couples = []
-        for m in range(len(self.sim.mats)):
-            for k in range(self.sim.mats[m].k.order+1):
-                self.idx_couples.append((m, k))
-
-    def get_k(self):
-        return [mat.k.get_values() for mat in self.sim.mats]
-
-    def gradient_aproximation(self, perturbation=1e-6):
-        
-        g = []
-        self.steady_state.update()
-        org_err = self.steady_state.total_square_error.copy()
-        
-        for i, ic in enumerate(self.idx_couples):
-            m = ic[0]
-            k = ic[1]
-            original_value = self.sim.mats[m].k.get_value(k)
-            self.sim.mats[m].k.set_value(k, original_value+perturbation)
-            self.steady_state.update()
-            pert_err = self.steady_state.total_square_error.copy()
-            g_err = (pert_err-org_err)/perturbation
-            self.sim.mats[m].k.set_value(k, original_value)
-            g.append(g_err)
-
-        self.steady_state.update()
-
-        g = np.array(g)
-        return org_err, g
-    
-    def optimise_steady_state_v2(self, k0=None, max_iter=100, alpha=1e-1, beta_1=0.8, beta_2=0.8):
-        if k0 is not None:
-            for i, y_values in enumerate(k0):
-                self.sim.mats[i].k.set_values(y_values)
-
-        self.steady_state.update()
-        if MPI.COMM_WORLD.rank == 0:
-            abs_e = self.steady_state.total_abs_error.copy()
-            sqr_e = self.steady_state.total_square_error.copy()
-            print(f"initial state:", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
-
-        g_w = 0
-        g_norm_w = 1e5
-        g_s = 1
-        for j in range(max_iter):
-            org_err, g = self.gradient_aproximation()
-            prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])
-
-            # update values
-            g = g*np.concatenate([[0], [0, 0], [0], [0], [1.0, 1.0, 1.0]])
-            g_norm = np.linalg.norm(g)
-            g_w = beta_1*g_w + (1-beta_1)*g
-            g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
-            g_s = beta_2*g_s + (1-beta_2)*g**2
-
-            update = alpha * g_w/(np.srqr(g_s)+1e-1)
-            for i, ic in enumerate(self.idx_couples):
-                self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
-            self.steady_state.update()
-
-            res = [mat.k.get_values() for mat in self.sim.mats]
-            if MPI.COMM_WORLD.rank == 0:
-                abs_e = self.steady_state.total_abs_error.copy()
-                sqr_e = self.steady_state.total_square_error.copy()
-                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}", f"g_norm_w: {g_norm_w}")
-                if j % 10 == 0:
-                    print("k = ", res)
-        
-        return res
-    
-    def optimise_steady_state_v3(self, k0=None, max_iter=100, alpha=1e-2, beta_1=0.9, beta_2=0.9, epsilon=1e-5):
-        if k0 is not None:
-            for i, y_values in enumerate(k0):
-                self.sim.mats[i].k.set_values(y_values)
-
-        self.steady_state.update()
-        if MPI.COMM_WORLD.rank == 0:
-            abs_e = self.steady_state.total_abs_error.copy()
-            sqr_e = self.steady_state.total_square_error.copy()
-            print(f"initial state:", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}")
-
-        g_w = 0
-        g_norm_w = 1e5
-        g_s = 1
-        for j in range(max_iter):
-
-            # calculate
-            org_err, g = self.gradient_aproximation()
-            g_norm = np.linalg.norm(g)
-            g_w = beta_1*g_w + (1-beta_1)*g
-            #g_norm_w = beta_2*g_norm_w + (1-beta_2)*g_norm
-            g_s = beta_2*g_s + (1-beta_2)*g**2
-            g_w_hat = g_w/(1-beta_1**(j+1))
-            g_s_hat = g_s/(1-beta_2**(j+1))
-            update = alpha * g_w_hat/(np.sqrt(g_s_hat)+epsilon)
-
-            prev_k = np.array([self.sim.mats[m].k.get_value(k) for m, k in self.idx_couples])
-            for i, ic in enumerate(self.idx_couples):
-                self.sim.mats[ic[0]].k.set_value(ic[1], max(2e-2, prev_k[i]-update[i]))
-            self.steady_state.update()
-
-            res = [mat.k.get_values() for mat in self.sim.mats]
-            if MPI.COMM_WORLD.rank == 0:
-                abs_e = self.steady_state.total_abs_error.copy()
-                sqr_e = self.steady_state.total_square_error.copy()
-                print(f"iter {j}", f"abs_err: {abs_e}" , f"sqr_err: {sqr_e}", f"g_norm: {g_norm}")
-                if j % 10 == 0:
-                    print("k = ", res)
-        
-        return res
 
 class SteadyStateComparer:
-    def __init__(self, sim: Experiment, exp_data: Experiment_data):
-        self.exp_data = exp_data
+    def __init__(self, sim: Experiment, exp_data: List[Experiment_data]):
         self.sim = sim
-        self.data = 0
-        self.total_error = 0
+        if isinstance(exp_data, Experiment_data):
+            exp_data = [exp_data]
 
-        self.idx_couples = []
-        for m in range(len(self.sim.mats)):
-            for k in range(self.sim.mats[m].k.order+1):
-                self.idx_couples.append((m, k))
+        self.exp_data = exp_data
+        self.n = len(self.exp_data)
+        self.data = [pd.Series()]*self.n 
+        self.total_abs_error = [0.0]*self.n 
+        self.total_square_error = [0.0]*self.n 
+        self.total_max_error = [0.0]*self.n
+        self.total_error = 0.0
 
     def get_k(self, m=None):
         if m is None:
             array = []
             for i in range(len(self.sim.mats)):
                 array.append(self.sim.mats[i].k.get_values())
-            return np.array(array)
+            return np.concatenate(array)
         elif type(m) == int:
             return self.sim.mats[m].k.get_values()
     
     def set_k(self, k, m=None):
         if m is None:
+            start_idx = 0
             for i in range(len(self.sim.mats)):
-                self.sim.mats[i].k.set_values(k[i])
+                end_idx = start_idx + self.sim.mats[i].k.n_values
+                self.sim.mats[i].k.set_values(k[start_idx:end_idx])
+                start_idx = end_idx 
         elif type(m) == int:
             self.sim.mats[m].k.set_values(k)
 
     def loss_function(self, k, m=None):
         original_k = self.get_k(m=m)
         self.set_k(k, m=m)
-        data = self.compare_steady_state()
+        self.update()
+        err = self.total_error
         self.set_k(original_k, m=m)
-        return data["Square Error"].sum()    
+        return err.copy() 
 
     def generate_loss_for_material(self, m):
         def restricted_loss(k):
@@ -166,18 +54,19 @@ class SteadyStateComparer:
         return restricted_loss
 
     def update(self):
-        self.data = self.compare_steady_state()
-        self.total_abs_error = self.data["Abs Error"].sum()
-        self.total_square_error = self.data["Square Error"].sum()
-        self.total_max_error = self.data["Abs Error"].max()
-        return self.total_abs_error.copy(), self.total_square_error.copy()
+        for i, exp_data in enumerate(self.exp_data):
+            self.data[i] = self.compare_steady_state(exp_data)
+            self.total_abs_error[i] = self.data[i]["Abs Error"].sum()
+            self.total_square_error[i] = self.data[i]["Square Error"].sum()
+            self.total_max_error[i] = self.data[i]["Abs Error"].max()
+        self.total_error = np.sum(self.total_square_error)
 
-    def compare_steady_state(self):
-        T_amb = self.exp_data.steady_state_mean['16 - Ambient [°C]']
-        Qc = self.exp_data.steady_state_mean['Power [W]']
+    def compare_steady_state(self, exp_data):
+        T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
+        Qc = exp_data.steady_state_mean['Power [W]']
         s_sim = self.sim.solve_steady(Qc=Qc, T_amb=T_amb, save_xdmf=False) # this must run on all ranks
-        exp_mean = self.exp_data.steady_state_mean
-        exp_std = self.exp_data.steady_state_std
+        exp_mean = exp_data.steady_state_mean
+        exp_std = exp_data.steady_state_std
         data = pd.concat([exp_mean, exp_std, s_sim], axis=1)
         data["Difference"] = data["Experiment Mean"] - data["Simulation"]
         data["Square Error"] = data["Difference"].pow(2)
