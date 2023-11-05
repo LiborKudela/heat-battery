@@ -10,8 +10,8 @@ class PropertyUnits:
     k = {'name':'Heat Conductivity', 'unit': '[W/m.K]'}
     rho = {'name':'Mass density', 'unit': '[kg/m3]'}
     cp = {'name':'Specific heat capacity', 'unit': '[J/kg.K]'}
-    K = {'name':'Thermal contact conductance', 'unit': '[W/m2K]'}
-    R = {'name':'Thermal contact resistance', 'unit': '[m2K/W]'}
+    K = {'name':'Thermal contact conductance', 'unit': '[kW/m2K]'}
+    R = {'name':'Thermal contact resistance', 'unit': '[m2K/kW]'}
     T = {'name':'Temperature', 'unit': '[C]'}
     T_amb = {'name':'Absolute temperature', 'unit': '[K]'}
 
@@ -29,25 +29,24 @@ class Material_property:
     def __call__(self, T):
         pass
 
-    def plot(self, save_name=None, show=False, T_lim_used=None):
-        if MPI.COMM_WORLD.rank == 0:
-            if T_lim_used is None:
-                T_lim_used = self.x_values[0], self.x_values[-1]
-            T = np.arange(T_lim_used[0], T_lim_used[1], 1.0)
-            k = np.polyval(np.flip(self.fem_const.value), T)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=T, y=k, mode='lines', name="poly"))
-            #fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, name="L points"))
+    def get_figure(self, T_lim=None) -> go.Figure:
+        pass
 
+    def plot(self, T_lim=None, show=False, return_fig=False, save_name=None):
+        if MPI.COMM_WORLD.rank == 0:
+            fig = self.get_figure(T_lim=T_lim)
             fig.update_layout(
                 xaxis_title='Temperature [°C]',
-                yaxis_title=self.unit['name'] + ' ' + self.unit['unit'])
+                yaxis_title=f"{self.unit['name']} {self.unit['unit']}",
+                )
 
             if show:
                 fig.show()
             if save_name is not None:
                 fig.write_html(f'{save_name}.html')
                 fig.write_image(f'{save_name}.jpg', scale=3)
+            if return_fig:
+                return fig
 
 class Polynomial_property(Material_property):
     def __init__(self, domain, c=[1,1,1], unit=PropertyUnits.default, multiplier=1.0):
@@ -81,13 +80,22 @@ class Polynomial_property(Material_property):
         # TODO write test for this
         y = np.polyval(np.flip(self.fem_const.value), x)
         return Lagrange_property(self.domain, x=x, y=y, unit=self.unit)
+    
+    def get_figure(self, T_lim=None):
+        if MPI.COMM_WORLD.rank == 0:
+            fig = go.Figure()
+            T_lim = T_lim or (0, 1000)
+            x = np.arange(T_lim[0], T_lim[1], 1.0)
+            y = np.polyval(np.flip(self.fem_const.value), x)
+            fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
+            return fig
 
 class Lagrange_property(Material_property):
     def __init__(self, domain, x=[0.0, 1.0], y=[1.0, 1.0], unit=PropertyUnits.default, multiplier=1.0):
         assert len(x) == len(y), "x and y must be the same length"
         self.domain = domain
-        self.x_values = x
-        self.y_values = y
+        self.x_values = np.array(x, dtype=float)
+        self.y_values = np.array(y, dtype=float)
         self.unit = unit
         self.n_values = len(x)
         self.order = len(x)-1
@@ -123,6 +131,16 @@ class Lagrange_property(Material_property):
 
     def to_polynomial_property(self):
         return Polynomial_property(self.domain, c=self.fem_const.value.copy(), unit=self.unit)
+        
+    def get_figure(self, T_lim=None):
+        if MPI.COMM_WORLD.rank == 0:
+            fig = go.Figure()
+            T_lim = T_lim or (0, 1000)
+            x = np.arange(T_lim[0], T_lim[1], 1.0)
+            y = np.polyval(np.flip(self.fem_const.value), x)
+            fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
+            fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, mode='markers', name="lagrange points"))
+            return fig
     
 class Material():
     def __init__(self,
@@ -161,7 +179,7 @@ class Material():
             fig.update_layout(
                 title=self.name,
                 xaxis_title='Temperature [°C]',
-                yaxis_title='Heat conductivity [W/(m.K)]')
+                yaxis_title=f"{self.k.unit['name']} {self.k.unit['unit']}")
             if show:
                 fig.show()
             if save_name is not None:
