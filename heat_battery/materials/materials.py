@@ -57,7 +57,7 @@ class Sand(Material):
         eps = 0.9
         d = 0.0015
         super().__init__(h0_T_ref = 20, 
-                         k = Lagrange_property(domain, [0, 500, 600], [0.42, 0.5, 0.4], PropertyUnits.k), 
+                         k = Lagrange_property(domain, [0, 300, 600], [0.42, 0.5, 0.6], PropertyUnits.k), 
                          rho = Lagrange_property(domain, [0, 600], [2650.0, 2650.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [0, 600], [830, 830], PropertyUnits.cp), 
                          name=name)
@@ -65,7 +65,7 @@ class Sand(Material):
 class Contact_sand(Material):
     def __init__(self, domain, d=0.0001, name="Contact sand-cartridge"):
         super().__init__(h0_T_ref = 20,
-                         k = Lagrange_property(domain, [0, 1000], [500, 500], PropertyUnits.K, multiplier=d), 
+                         k = Lagrange_property(domain, [0, 1000], [1, 1], PropertyUnits.K, multiplier=d*1000), 
                          rho = Lagrange_property(domain, [0, 1000], [40.0, 40.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [0, 1000], [1200, 1200], PropertyUnits.cp), 
                          name=name)
