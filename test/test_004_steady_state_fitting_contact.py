@@ -11,19 +11,21 @@ class TestOptimization(unittest.TestCase):
             result_dir='results/experiment_contact_test')
         exp = sim.pseudoexperimental_data_steady()
         fitter = SteadyStateComparer(sim, [exp])
-        true_k = fitter.get_k()
+        true_k = fitter.get_k(m=5)
         
-        k0 = true_k[-2:].copy()
-        k0 += 100
+        k0 = true_k.copy()
+        k0 *= 1.1
         loss = fitter.generate_loss_for_material(5)
-        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=10)
+        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
 
         for i in range(200):
             opt.step()
+            opt.alpha *= 0.995
             opt.print_state()
 
-        print(opt.get_k())
-        self.assertTrue(np.isclose(true_k[-2:], opt.get_k(), atol=1).all(), "Values do not agree")
+        sim.close_results()
+
+        self.assertTrue(np.isclose(true_k, opt.get_k(), atol=1e-4).all(), "Values do not agree")
 
 if __name__ == '__main__':
     unittest.main()

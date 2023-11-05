@@ -8,17 +8,20 @@ class TestOptimization(unittest.TestCase):
         sim = Experiment(dim = 2)
         exp = sim.pseudoexperimental_data_steady()
         fitter = SteadyStateComparer(sim, [exp])
-        true_k = fitter.get_k()
-        k0 = true_k[-3:].copy()
-        k0 += 0.01
+        true_k = fitter.get_k(4)
+        k0 = true_k.copy()
+        k0 *= 1.1
         loss = fitter.generate_loss_for_material(4)
-        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=3e-4)
+        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
 
-        for i in range(200):
+        for i in range(300):
             opt.step()
+            opt.alpha *= 0.995
             opt.print_state()
 
-        self.assertTrue(np.isclose(true_k[-3:], opt.get_k(), atol=3e-03).all(), "Values do not agree")
+        sim.close_results()
+
+        self.assertTrue(np.isclose(true_k, opt.get_k(), atol=1e-03).all(), "Values do not agree")
 
 if __name__ == '__main__':
     unittest.main()

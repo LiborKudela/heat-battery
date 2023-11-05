@@ -98,8 +98,13 @@ class Experiment():
         self.T_xdmf.name = "T"
         self.T_xdmf.interpolate(self.initial_condition)
 
-        self.Vc = fem.assemble_scalar(fem.form(jac*dx(cartridge_index)))
-        self.Vc = self.domain.comm.allreduce((self.Vc), op=MPI.SUM)
+        self.V_subdomain = []
+        for i, mat in enumerate(self.mats, 1):
+            V_subdomain = fem.assemble_scalar(fem.form(jac*dx(i)))
+            V_subdomain = self.domain.comm.allreduce(V_subdomain, op=MPI.SUM)
+            self.V_subdomain.append(V_subdomain)
+
+        self.Vc = self.V_subdomain[cartridge_index-1]
         self.q = fem.Constant(self.domain, PETSc.ScalarType((self.Qc/self.Vc)))
         self.q_n = fem.Constant(self.domain, PETSc.ScalarType((self.Qc/self.Vc)))
 
@@ -128,12 +133,23 @@ class Experiment():
         F += -theta*self.dt*self.q*T_v*jac*dx(cartridge_index) - (1-theta)*self.dt*self.q_n*T_v*jac*dx(cartridge_index)
         self.unsteady_solver = self.create_solver(F, self.T)
 
-        f = 0
+        # form for calculating heat in the whole domain
+        h_form = 0
         for i, mat in enumerate(self.mats, 1):
-            f += mat.h(self.T)*mat.rho(self.T)*jac*dx(i)
-        self.H_form = fem.form(f)
+            h_form += mat.h(self.T)*mat.rho(self.T)*jac*dx(i)
+        self.H_form = fem.form(h_form)
         self.Qloss_form = fem.form(alpha*(self.T - self.T_amb)*jac*ds(bc_idx))
 
+        # greek-Psi forms for calculating cumulative temperature density of subdomains
+        self.T_hat = fem.Constant(self.domain, PETSc.ScalarType((1.0)))
+        self.b = fem.Constant(self.domain, PETSc.ScalarType((10.0)))
+        self.psi_forms = []
+        self.psi_prime_forms = []
+        for i, mat in enumerate(self.mats, 1):
+            self.psi_forms.append(fem.form(1/(1+ufl.exp(self.b*(self.T-self.T_hat)))/self.V_subdomain[i-1]*jac*dx(i)))
+            self.psi_prime_forms.append(fem.form((self.b*ufl.exp(self.b*(self.T-self.T_hat)))/(1+ufl.exp(self.b*(self.T-self.T_hat)))**2/self.V_subdomain[i-1]*jac*dx(i)))
+
+        # probe writer
         self.probes = Probe_writer(os.path.join(self.result_dir, 'probes.csv'))
         self.create_probes(self.probes)
 
@@ -299,6 +315,22 @@ class Experiment():
         T_min = np.min(T, initial=np.inf)
         T_min = self.domain.comm.allreduce((T_min), op=MPI.MIN)
         return T_min, T_max
+    
+    def get_current_temperature_density(self, cell_tag=None, sampling=1e-1, smoothness=1, cumulative=False):
+        T_min, T_max = self.get_current_range(cell_tag=cell_tag)
+        if cumulative:
+            psi = self.psi_forms[cell_tag-1]
+        else:
+            psi = self.psi_prime_forms[cell_tag-1]
+        T_hat = np.arange(T_min, T_max, sampling)
+        c = np.zeros_like(T_hat)
+        self.b.value = smoothness 
+        for i in range(len(T_hat)):
+            self.T_hat.value = T_hat[i]
+            c_value = fem.assemble_scalar(psi)
+            c_value = self.domain.comm.allreduce(c_value, op=MPI.SUM)
+            c[i] = c_value
+        return T_hat, c
 
     def plot(self):
         # TODO: move static stuff into offline phase, no need to calculate each time
