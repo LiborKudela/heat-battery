@@ -2,7 +2,7 @@ from mpi4py import MPI
 from math import pi
 import gmsh
 import os
-from utilities import convert_to_legacy_fenics, save_data
+from .utilities import convert_to_legacy_fenics, save_data
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
