@@ -1,13 +1,15 @@
 from mpi4py import MPI
+import pandas as pd
 from petsc4py import PETSc
-from dolfinx import mesh, io, fem, nls, __version__, plot
 import numpy as np
 import ufl
 import time
 import os
 import cloudpickle
 import pyvista
-import pandas as pd
+from dolfinx import io, fem, __version__, plot
+import dolfinx.fem.petsc
+import dolfinx.nls.petsc
 
 from .utilities import Probe_writer, probe_function
 from .. import materials
@@ -211,8 +213,8 @@ class Experiment():
             return self.q.value*self.Vc
 
     def create_solver(self, F, u):
-        problem = fem.petsc.NonlinearProblem(F, u)
-        solver = nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
+        problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
+        solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
         solver.convergence_criterion = "residual"
         solver.atol = self.atol
         solver.rtol = self.rtol
@@ -242,7 +244,7 @@ class Experiment():
 
         return pd.Series(data=self.probes.get_value('T'), index=self.T_probes_names, name="Simulation")
 
-    def solve_unsteady(self, Qc_t=None, T_amb_t=None):
+    def solve_unsteady(self, Qc_t=None, T_amb_t=None, t_max=100):
         self.t = 0
         self.t_n = self.t
         self.T_amb.value = T_amb_t(self.t)
@@ -252,6 +254,7 @@ class Experiment():
         self.probes.evaluate_probes()
         self.probes.write_probes()
         self.probes.print()
+        self.t_max = t_max
         while self.t < self.t_max:
             i_start = time.time()
 

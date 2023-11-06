@@ -7,8 +7,8 @@ from termcolor import colored
 
 def probe_function(p_coords, domain, f):
     points = np.array(p_coords)
-    bb_tree = geometry.BoundingBoxTree(domain, domain.topology.dim)
-    cell_candidates = geometry.compute_collisions(bb_tree, points)
+    bb_tree = geometry.bb_tree(domain, domain.topology.dim)
+    cell_candidates = geometry.compute_collisions_points(bb_tree, points)
     colliding_cells = geometry.compute_colliding_cells(domain, cell_candidates, points)
     cells = []
     points_on_proc = []
