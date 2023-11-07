@@ -1,18 +1,19 @@
 from mpi4py import MPI
+import sys
 import pandas as pd
 from petsc4py import PETSc
 import numpy as np
 import ufl
 import time
 import os
-import cloudpickle
 import pyvista
 from dolfinx import io, fem, __version__, plot
 import dolfinx.fem.petsc
 import dolfinx.nls.petsc
 
 from .utilities import Probe_writer, probe_function
-from .. import materials
+from ..materials import MaterialsSet
+from ..geometry.utilities import load_data
 from ..data import Experiment_data
 
 class Experiment():
@@ -56,17 +57,13 @@ class Experiment():
         # load geometry
         self.geometry_path = os.path.join(geometry_dir, f'mesh_{dim}d')
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geometry_path}.msh', MPI.COMM_WORLD, 0, gdim=dim)
+        geometry_ad_data = load_data(f'{self.geometry_path}.ad')
 
         # define measures for integration on subdomains
         dx = ufl.Measure("dx", domain=self.domain, subdomain_data=self.cell_tags)
         ds = ufl.Measure("ds", domain=self.domain, subdomain_data=self.facet_tags)
 
-        # load aditional data of the geometry
-        with open(f'{self.geometry_path}.ad', 'rb') as fp:
-            geometry_ad_data = cloudpickle.load(fp)
-        mats = [eval(f'materials.{mat}') for mat in geometry_ad_data['materials']]
-        mats_names = geometry_ad_data['materials_names']
-        self.mats = [mat(self.domain, name=name) for mat, name in zip(mats, mats_names)]
+        self.mats = MaterialsSet(self.domain, geometry_ad_data['materials'])
         bc_idx = geometry_ad_data['outer_surface_index']
         cartridge_index = geometry_ad_data['cartridge_heated_index']
         self.T_probes_coords = geometry_ad_data['probes_coords']

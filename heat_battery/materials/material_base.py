@@ -165,26 +165,24 @@ class Material():
         for i in range(len(self.cp.fem_const.value)):
             e += self.cp.fem_const[i]*T**(i+1)/(i+1)
         return e*self.cp.multiplier
+
+class MaterialsSet():
+    def __init__(self, domain, mat_dict):
+        self.mats = []
+        for constructor, name in mat_dict.items():
+            self.mats.append(constructor(domain, name=name))
+
+    def __getitem__(self, i):
+        return self.mats[i]
     
-    def plot_k(self, T_lim=(20, 600), T_lim_used=None, save_name=None, show=False):
-        if MPI.COMM_WORLD.rank == 0:
-            T = np.arange(T_lim[0], T_lim[1], 1.0)
-            k = np.polyval(np.flip(self.k.fem_const.value), T)
-            fig = go.Figure()
-            fig.add_trace(go.Line(x=T, y=k))
-            if T_lim_used is not None:
-                fig.add_trace(go.Line(x=[T_lim_used[0], T_lim_used[0]], y=[np.min(k), np.max(k)], name="T_min"))
-                fig.add_trace(go.Line(x=[T_lim_used[1], T_lim_used[1]], y=[np.min(k), np.max(k)], name="T_max"))
-            fig.add_trace(go.Scatter(x=self.k.x_values, y=self.k.y_values, name="lagrange points"))
-            fig.update_layout(
-                title=self.name,
-                xaxis_title='Temperature [°C]',
-                yaxis_title=f"{self.k.unit['name']} {self.k.unit['unit']}")
-            if show:
-                fig.show()
-            if save_name is not None:
-                fig.write_html(f'{save_name}.html')
-                fig.write_image(f'{save_name}.jpg', scale=2)
+    def __setitem__(self, i, value):
+        self.mats[i] = value
+
+    def __len__(self):
+        return len(self.mats)
+    
+
+
 
                          
 

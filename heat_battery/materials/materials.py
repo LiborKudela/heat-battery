@@ -1,7 +1,8 @@
 from . material_base import (Material, 
                              Lagrange_property, 
                              Polynomial_property, 
-                             PropertyUnits)
+                             PropertyUnits,
+                             MaterialsSet)
 
 class Steel04(Material):
     def __init__(self, domain, name="Steel04"):

@@ -2,6 +2,7 @@ from mpi4py import MPI
 from math import pi
 import gmsh
 import os
+from .. import materials
 from .utilities import convert_to_legacy_fenics, save_data
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
@@ -160,24 +161,15 @@ def build_geometry(
         gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 4, 'cartridge_heated')
         gmsh.model.addPhysicalGroup(dim, [f_tags[7][1]], 5, 'sand')
         gmsh.model.addPhysicalGroup(dim, [f_tags[6][1]], 6, 'cartridge_contact')
-
-        mats = [
-            'Steel04', 
-            'Standard_insulation',
-            'Cartridge_unheated',  
-            'Cartridge_heated', 
-            'Sand',
-            'Contact_sand'
-            ]
         
-        mats_names = [
-            'Steel parts', 
-            'Insulation',
-            'Unheated part of cartridge', 
-            'Heated part of cartridge', 
-            'Sand',
-            'Contact_sand'
-            ]
+        mats = {
+            materials.Steel04: 'Steel parts', 
+            materials.Standard_insulation: 'Insulation',
+            materials.Cartridge_unheated: 'Unheated part of cartridge',  
+            materials.Cartridge_heated: 'Heated part of cartridge', 
+            materials.Sand: 'Sand',
+            materials.Contact_sand: 'Contact_sand',
+        }
 
         # mark surfaces
         if dim == 3:
@@ -240,7 +232,6 @@ def build_geometry(
             'probes_coords':probes_coords,
             'probes_names':probes_names,
             'materials':mats,
-            'materials_names': mats_names,
             'jac_f':jac_f,
             'outer_surface_index':1,
             'cartridge_heated_index':4}
