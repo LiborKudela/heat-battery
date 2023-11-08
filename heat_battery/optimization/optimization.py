@@ -41,11 +41,18 @@ class SteadyStateComparer:
             self.sim.mats[m].k.set_values(k)
 
     def loss_function(self, k, m=None):
+        # save original state
         original_k = self.get_k(m=m)
+        original_T = self.sim.T.x.array.copy()
+
+        # calculate new state
         self.set_k(k, m=m)
         self.update()
         err = self.total_error
+
+        # return to the original state
         self.set_k(original_k, m=m)
+        self.sim.T.x.array[:] = original_T
         return err.copy() 
 
     def generate_loss_for_material(self, m):

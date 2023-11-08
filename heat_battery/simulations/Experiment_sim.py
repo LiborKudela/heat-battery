@@ -10,6 +10,7 @@ import pyvista
 from dolfinx import io, fem, __version__, plot
 import dolfinx.fem.petsc
 import dolfinx.nls.petsc
+import plotly.graph_objects as go
 
 from .utilities import Probe_writer, probe_function
 from ..materials import MaterialsSet
@@ -33,7 +34,7 @@ class Experiment():
                 T_cartridge_max = np.inf,
                 atol=1e-10,
                 rtol=1e-10):
-        
+ 
         self.geometry_dir=geometry_dir
         self.result_dir = result_dir
         self.dim = dim
@@ -145,7 +146,10 @@ class Experiment():
         self.psi_forms = []
         self.psi_prime_forms = []
         for i, mat in enumerate(self.mats, 1):
+            #cumulative forms
             self.psi_forms.append(fem.form(1/(1+ufl.exp(self.b*(self.T-self.T_hat)))/self.V_subdomain[i-1]*jac*dx(i)))
+
+            # density forms
             self.psi_prime_forms.append(fem.form((self.b*ufl.exp(self.b*(self.T-self.T_hat)))/(1+ufl.exp(self.b*(self.T-self.T_hat)))**2/self.V_subdomain[i-1]*jac*dx(i)))
 
         # probe writer
@@ -303,6 +307,7 @@ class Experiment():
             self.probes.write_probes()
 
     def get_current_range(self, cell_tag=None):
+        'This method must run on all rank to work properly'
         if cell_tag is not None:
             cells = self.cell_tags.find(cell_tag)
             dofs = fem.locate_dofs_topological(self.V, 2, cells)
@@ -316,7 +321,9 @@ class Experiment():
         T_min = self.domain.comm.allreduce((T_min), op=MPI.MIN)
         return T_min, T_max
     
-    def get_current_temperature_density(self, cell_tag=None, sampling=1e-1, smoothness=1, cumulative=False):
+    def get_current_temperature_density(self, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+        'This method must run on all rank to work properly'
+        assert isinstance(cell_tag, int), "cell_tag must be integer"
         T_min, T_max = self.get_current_range(cell_tag=cell_tag)
         if cumulative:
             psi = self.psi_forms[cell_tag-1]
@@ -332,7 +339,34 @@ class Experiment():
             c[i] = c_value
         return T_hat, c
 
-    def plot(self):
+    def material_plot(self, m=None, property='k', include_density=True):
+        'This method must run on all rank to work properly'
+        m = m or range(len(self.mats))
+        m = [m] if isinstance(m, int) else m
+        figs = []
+        for _m in m:
+            fig = self.mats.plot_property(m=_m, property=property)
+            if include_density:
+                density_res = self.get_current_temperature_density(cell_tag=_m+1)
+                fig.add_trace(go.Scatter(x=density_res[0], 
+                                         y=density_res[1], 
+                                         mode='lines', 
+                                         name="T density", 
+                                         yaxis='y2'))
+                fig.update_layout(     
+                    yaxis2=dict(
+                        title="Temperature density [-]",
+                        overlaying="y",
+                        side="right"))
+                
+            fig.update_layout(
+                title=dict(text=self.mats[_m].name, x=0.5),
+            )
+            figs.append(fig)
+        return figs
+
+    def plot_domain_state(self):
+        'This method must run on all rank to work properly'
         # TODO: move static stuff into offline phase, no need to calculate each time
         cells, types, x = plot.create_vtk_mesh(self.V)
         num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local

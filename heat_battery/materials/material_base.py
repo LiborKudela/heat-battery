@@ -1,9 +1,12 @@
+from mpi4py import MPI
 from dolfinx import fem
 from petsc4py import PETSc
 import numpy as np
 import plotly.graph_objects as go
-from mpi4py import MPI
+from plotly.subplots import make_subplots
 from scipy.interpolate import lagrange
+from typing import List
+import math
 
 class PropertyUnits:
     default = {'name':'', 'unit': '[]'}
@@ -33,20 +36,20 @@ class Material_property:
         pass
 
     def plot(self, T_lim=None, show=False, return_fig=False, save_name=None):
-        if MPI.COMM_WORLD.rank == 0:
-            fig = self.get_figure(T_lim=T_lim)
-            fig.update_layout(
-                xaxis_title='Temperature [°C]',
-                yaxis_title=f"{self.unit['name']} {self.unit['unit']}",
-                )
+        fig = self.get_figure(T_lim=T_lim)
+        fig.update_layout(
+            xaxis_title='Temperature [°C]',
+            yaxis_title=f"{self.unit['name']} {self.unit['unit']}",
+            uirevision = "None",
+            )
 
-            if show:
-                fig.show()
-            if save_name is not None:
-                fig.write_html(f'{save_name}.html')
-                fig.write_image(f'{save_name}.jpg', scale=3)
-            if return_fig:
-                return fig
+        if show:
+            fig.show()
+        if save_name is not None:
+            fig.write_html(f'{save_name}.html')
+            fig.write_image(f'{save_name}.jpg', scale=3)
+        if return_fig:
+            return fig
 
 class Polynomial_property(Material_property):
     def __init__(self, domain, c=[1,1,1], unit=PropertyUnits.default, multiplier=1.0):
@@ -82,13 +85,12 @@ class Polynomial_property(Material_property):
         return Lagrange_property(self.domain, x=x, y=y, unit=self.unit)
     
     def get_figure(self, T_lim=None):
-        if MPI.COMM_WORLD.rank == 0:
-            fig = go.Figure()
-            T_lim = T_lim or (0, 1000)
-            x = np.arange(T_lim[0], T_lim[1], 1.0)
-            y = np.polyval(np.flip(self.fem_const.value), x)
-            fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
-            return fig
+        fig = go.Figure()
+        T_lim = T_lim or (0, 1000)
+        x = np.arange(T_lim[0], T_lim[1], 1.0)
+        y = np.polyval(np.flip(self.fem_const.value), x)
+        fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
+        return fig
 
 class Lagrange_property(Material_property):
     def __init__(self, domain, x=[0.0, 1.0], y=[1.0, 1.0], unit=PropertyUnits.default, multiplier=1.0):
@@ -133,14 +135,13 @@ class Lagrange_property(Material_property):
         return Polynomial_property(self.domain, c=self.fem_const.value.copy(), unit=self.unit)
         
     def get_figure(self, T_lim=None):
-        if MPI.COMM_WORLD.rank == 0:
-            fig = go.Figure()
-            T_lim = T_lim or (0, 1000)
-            x = np.arange(T_lim[0], T_lim[1], 1.0)
-            y = np.polyval(np.flip(self.fem_const.value), x)
-            fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
-            fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, mode='markers', name="lagrange points"))
-            return fig
+        fig = go.Figure()
+        T_lim = T_lim or (0, 1000)
+        x = np.arange(T_lim[0], T_lim[1], 1.0)
+        y = np.polyval(np.flip(self.fem_const.value), x)
+        fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
+        fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, mode='markers', name="L - points"))
+        return fig
     
 class Material():
     def __init__(self,
@@ -168,9 +169,11 @@ class Material():
 
 class MaterialsSet():
     def __init__(self, domain, mat_dict):
-        self.mats = []
-        for constructor, name in mat_dict.items():
-            self.mats.append(constructor(domain, name=name))
+        self.mat_dict = mat_dict
+        self.mats = self.construct_materials(domain, mat_dict)
+
+    def construct_materials(self, domain, mat_dict) -> List[Material]:
+        return [constructor(domain, name=name) for constructor, name in mat_dict.items()]
 
     def __getitem__(self, i):
         return self.mats[i]
@@ -180,6 +183,19 @@ class MaterialsSet():
 
     def __len__(self):
         return len(self.mats)
+    
+    def plot_property(self, m=None, property='k'):
+        assert isinstance(m, int), "m must be an Integer"
+        match property:
+            case 'k':
+                fig = self.mats[m].k.plot(return_fig=True)
+            case 'rho':
+                fig = self.mats[m].rho.plot(return_fig=True)
+            case 'cp':
+                fig = self.mats[m].cp.plot(return_fig=True)
+        return fig
+            
+
     
 
 

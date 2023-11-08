@@ -11,8 +11,8 @@ class TestPlotProperty(unittest.TestCase):
                 result_dir='results/experiment_test')
     
     def test_material_property_plots(self):
-        for mat in self.sim.mats:
-            mat.k.plot(show=False)
+       fig = self.sim.mats.plot_property()
+       fig.show()
 
     def tearDown(self) -> None:
         self.sim.close_results()
