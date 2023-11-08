@@ -9,7 +9,7 @@ class TestPlotCumulativeDensity(unittest.TestCase):
         self.sim = Experiment(
             dim = 2,
             geometry_dir='meshes/experiment_contact', 
-            result_dir='results/experiment_contanct_test',
+            result_dir='results/experiment_contact_test',
             )
     
     def test_contact_self_identification(self):
