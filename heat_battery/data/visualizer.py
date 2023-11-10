@@ -1,12 +1,14 @@
 from mpi4py import MPI
-import dash
-from dash import Dash, html, dcc
+from dash import get_asset_url
+import dash_extensions.enrich as dash_enrich
 import dash_bootstrap_components as dbc
 from dash_extensions import Lottie
 import logging
 import threading
-import time
 from .pages import HomePage
+from plotly_resampler import FigureResampler
+from plotly_resampler.aggregation import MinMaxLTTB
+import numpy as np
 
 def on_master(f):
     def decorated_f(*args, **kwargs):
@@ -15,7 +17,7 @@ def on_master(f):
     return decorated_f
 
 def interval_trigger(triggers, interval):
-    trigger=dcc.Interval(
+    trigger=dash_enrich.dcc.Interval(
         id={'type':'refresh-trigger', 'trigers':triggers},
         interval=interval,
         n_intervals=1)
@@ -26,58 +28,80 @@ class Visualizer():
 
         self.name = name
 
-        # visual components
+        # added pages
         self.pages = {}
         homepage = HomePage()
         self.register_page(homepage)
-
+     
         # trigers
-        self.figure_interval = 1000
-        self.display_interval = 50
+        self.figure_interval = 3000
+        self.breathing_interval = 5000
+
+        #server
+        self.update_data_status = 1
 
     @on_master
     def build_app(self):
-        self.app = Dash(__name__, assets_folder='./assets', external_stylesheets=[dbc.themes.BOOTSTRAP])
+        '''Dash app needs to exist only on rank 0'''
+        self.app = dash_enrich.DashProxy(
+            __name__, 
+            assets_folder='./assets', 
+            external_stylesheets=[dbc.themes.BOOTSTRAP],
+            transforms=[dash_enrich.ServersideOutputTransform(), dash_enrich.TriggerTransform()],
+            prevent_initial_callbacks=True)
+        
+        self.breathing_icon = Lottie(
+            options=dict(loop=False, autoplay=True), 
+            width="30px", 
+            url=get_asset_url('fire_lottie.json')
+        )
+
         self.set_layout()
         self.set_callbacks()
 
     @on_master
     def start_app(self):
-        if MPI.COMM_WORLD.rank == 0:
-            logging.getLogger('werkzeug').setLevel(logging.ERROR)
-            thread = threading.Thread(target = self.app.run_server, daemon=True)
-            thread.start()
+        '''The dash server need to run in separate thread so it does not block other stuff'''
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
+        thread = threading.Thread(target = self.app.run_server, daemon=True)
+        thread.start()
 
-    @on_master
     def debug_mode(self):
-        self.app.run(debug=True)
+        '''The dash server runs in serial so it blocks other evaluations'''
+        if MPI.COMM_WORLD.rank == 0:
+            self.app.run(debug=True)
+        MPI.COMM_WORLD.Barrier()
 
     def register_page(self, page):
+        '''All ranks need acces to page constructors'''
         self.pages[page.get_href()] = page
 
     def update_data(self):
+        '''Some data need all mpi ranks to evaluate sucesfully'''
         for href, page in self.pages.items():
             page.update_data()
+        self.update_data_status += 1
 
     @on_master
     def set_layout(self):
+        '''The frontend layout constuctor (only on rank = 0)'''
         SIDEBAR_STYLE = {
             "position": "fixed",
-            "top": 0,   
+            "top": 1,   
             "left": 0,
             "bottom": 0,
             "width": "16rem",
-            "padding": "2rem 1rem",
+            "padding": "1rem 1rem",
             "background-color": "#f8f9fa",
         }
 
         sidebar = dbc.Offcanvas(
             [
-                dcc.Location(id="url", refresh=False, pathname='/home'),
-                html.H2("Menu", className="display-4"),
-                html.Hr(),
-                html.P(
-                    "Select graph", className="lead"
+                dash_enrich.dcc.Location(id="url", refresh=False, pathname='/home'),
+                dash_enrich.html.H2("Menu", className="display-4"),
+                dash_enrich.html.Hr(),
+                dash_enrich.html.P(
+                    "Select page", className="lead"
                 ),
                 dbc.Nav(
                     [page.get_link() for key, page in self.pages.items()],
@@ -87,50 +111,109 @@ class Visualizer():
             ],
             id="offcanvas-scrollable",
             scrollable=True,
-            title=Lottie(options=dict(loop=True, autoplay=True), width="35%", url=dash.get_asset_url('fire_lottie.json')),
+            close_button=False,
+            title=Lottie(options=dict(loop=True, autoplay=True), width="35%", url=get_asset_url('fire_lottie.json')),
             is_open=False,
             style=SIDEBAR_STYLE,
         )
 
-        self.app.layout = html.Div(
+        self.app.layout = dash_enrich.html.Div(
             [
-                sidebar,    
-                dbc.Button(
-                    "MENU",
-                    id="open-offcanvas-scrollable",
-                    n_clicks=0,
+                sidebar,
+                dash_enrich.dcc.Store(id="update-data-status", data=1),
+                dash_enrich.html.Div(
+                    [    
+                        dbc.Button(
+                            "MENU",
+                            id="open-offcanvas-scrollable",
+                            n_clicks=0,
+                            size="sm",
+                            className="me-2",
+                            style={'display': 'inline-block'}
+                        ),
+                        dash_enrich.html.Div(
+                            self.breathing_icon,
+                            id="breathing-server",
+                            style={'display': 'inline-block', 'vertical-align': 'top', 'text-align': 'center', 'flex-grow': '1'}
+                        ),
+                    ],
+                style={'display':'flex'},
                 ),
-                dbc.Button(
-                    "REFRESFH",
-                    id="resfresh-button",
-                    n_clicks=0,
-                ),
-                html.Div(id="page-content"),
-                #interval_trigger('displays', self.display_interval),
+                dash_enrich.html.Div(id="page-content"),
+                interval_trigger('breathing', self.breathing_interval),
                 interval_trigger('figures', self.figure_interval),
             ],
         )
 
     @on_master
     def set_callbacks(self):
+        '''Sets all callbacks (callbacks are handled only by rank = 0)'''
 
+        # opens and closes the side menu
         @self.app.callback(
-            dash.Output("offcanvas-scrollable", "is_open"),
-            dash.Input("open-offcanvas-scrollable", "n_clicks"),
-            dash.State("offcanvas-scrollable", "is_open"),
+            dash_enrich.Output("offcanvas-scrollable", "is_open"),
+            dash_enrich.Input("open-offcanvas-scrollable", "n_clicks"),
+            dash_enrich.State("offcanvas-scrollable", "is_open"),
         )
         def toggle_offcanvas_scrollable(n1, is_open):
             if n1:
                 return not is_open
             return is_open
         
+        # updates figures with new data (only when server updated, or url requested)
         @self.app.callback(
-            dash.Output("page-content", "children"),
-            [
-            dash.Input({'type': 'refresh-trigger', 'trigers': 'figures'},'n_intervals'),
-            dash.Input('resfresh-button','n_clicks'),
-            dash.Input("url", "pathname")
-            ]
+            dash_enrich.Output("update-data-status", 'data'),
+            dash_enrich.Output("page-content", "children"),
+            dash_enrich.Output({'type': 'refresh-trigger', 'trigers': 'figures'}, "disabled"),
+            dash_enrich.State('update-data-status', 'data'),
+            dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'figures'},'n_intervals'),
+            dash_enrich.Input("url", "pathname"),
+            prevent_initial_call=True,
         )
-        def update_content(n_intervals, n_clicks, pathname):
-            return self.pages[pathname].get_layout()
+        def update_content(data, n_intervals, pathname):
+            if data != self.update_data_status:
+                data = self.update_data_status
+                return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_interval
+            elif dash_enrich.ctx.triggered_id == 'url':
+                return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_interval
+            else:
+                return dash_enrich.no_update
+            
+        # This method constructs the FigureResampler graph and caches it on the server side
+        @self.app.callback(
+            dash_enrich.Output({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "figure"),
+            dash_enrich.Output({"type": "store", "index": dash_enrich.MATCH}, "data"),
+            dash_enrich.Trigger({"type": "interval", "index": dash_enrich.MATCH}, "n_intervals"),
+            prevent_initial_call=True,
+        )
+        def construct_display_graph():
+            index = dash_enrich.ctx.triggered_id['index']
+
+            fig = FigureResampler(
+                self.pages[index].data,
+                default_n_shown_samples=2000,
+                default_downsampler=MinMaxLTTB(parallel=False),
+            )
+
+            return fig, dash_enrich.Serverside(fig)
+        
+        # updates a resampling figure of individual sessions
+        @self.app.callback(
+            dash_enrich.Output({"type": "dynamic-updater", "index": dash_enrich.MATCH}, "updateData"),
+            dash_enrich.Input({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "relayoutData"),
+            dash_enrich.State({"type": "store", "index": dash_enrich.MATCH}, "data"),
+            prevent_initial_call=True,
+            memoize=False,
+        )
+        def update_fig(relayoutdata, fig):
+            if fig is not None:
+                return fig.construct_update_data(relayoutdata)
+            return dash_enrich.no_update
+        
+        # makes the fire lottie at top screen breathe if server is alive and comunicating with the UI
+        @self.app.callback(
+            dash_enrich.Output("breathing-server", "children"),
+            dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'breathing'},'n_intervals'),  
+        )
+        def send_icon(n_intervals):
+            return self.breathing_icon

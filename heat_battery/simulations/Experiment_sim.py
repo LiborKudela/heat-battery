@@ -395,15 +395,3 @@ class Experiment():
             plotter.add_mesh(grid, show_edges=False)
             plotter.view_xy()
             plotter.show()
-
-    def pseudoexperimental_data_steady(self, Qc=100, T_amb=20, save_xdmf=True):
-        exp_data = Experiment_data()
-        exp_data.steady_state_mean = self.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=save_xdmf)
-        exp_data.steady_state_mean['Power [W]'] = Qc
-        exp_data.steady_state_mean['16 - Ambient [°C]'] = T_amb
-        exp_data.steady_state_std = exp_data.steady_state_mean.copy()
-        exp_data.steady_state_std.values[:] = 0.0
-        exp_data.steady_state_mean.rename("Experiment Mean", inplace=True)
-        exp_data.steady_state_std.rename("Experiment Std", inplace=True)
-
-        return exp_data
