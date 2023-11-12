@@ -64,17 +64,19 @@ class ResampingFigurePage(VisualizerPage):
     def get_layout(self):
         div = dash_enrich.html.Div(
             children=[
-                dash_enrich.dcc.Graph(id={"type": "dynamic-graph", "index": self.href}, figure=go.Figure(), config={'responsive':True}, style={'height':'95vh'}),
-                dash_enrich.dcc.Loading(dash_enrich.dcc.Store(id={"type": "store", "index": self.href})),
+                dash_enrich.dcc.Graph(id={"type": "dynamic-graph", "index": self.href}, figure=self.data, config={'responsive':True}, style={'height':'95vh'}),
                 TraceUpdater(id={"type": "dynamic-updater", "index": self.href}, gdID=f"{self.href}"),
-                dash_enrich.dcc.Interval(id={"type": "interval", "index": self.href}, interval=1, max_intervals=1),
             ],
             style={'position':'relative', 'top':0, 'left':0, 'bottom':0, 'right':0, 'width':'100%', 'height':'95vh', 'margin':0, 'padding':0, 'overflow':'hidden'},
         )
         return div
     
     def update_data(self):
-        self.data = self.figure_constructor(*self.args, **self.kwargs)
+        self.data = FigureResampler(
+            self.figure_constructor(*self.args, **self.kwargs),
+            default_n_shown_samples=2000,
+            default_downsampler=MinMaxLTTB(parallel=False),
+        )
     
 def subplot_grid_size(n):
     rows, cols = 1, 1

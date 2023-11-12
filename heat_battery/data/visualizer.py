@@ -47,7 +47,7 @@ class Visualizer():
             __name__, 
             assets_folder='./assets', 
             external_stylesheets=[dbc.themes.BOOTSTRAP],
-            transforms=[dash_enrich.ServersideOutputTransform(), dash_enrich.TriggerTransform()],
+            transforms=[],
             prevent_initial_callbacks=True)
         
         self.breathing_icon = Lottie(
@@ -178,37 +178,18 @@ class Visualizer():
                 return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_interval
             else:
                 return dash_enrich.no_update
-            
-        # This method constructs the FigureResampler graph and caches it on the server side
-        @self.app.callback(
-            dash_enrich.Output({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "figure"),
-            dash_enrich.Output({"type": "store", "index": dash_enrich.MATCH}, "data"),
-            dash_enrich.Trigger({"type": "interval", "index": dash_enrich.MATCH}, "n_intervals"),
-            prevent_initial_call=True,
-        )
-        def construct_display_graph():
-            index = dash_enrich.ctx.triggered_id['index']
-
-            fig = FigureResampler(
-                self.pages[index].data,
-                default_n_shown_samples=2000,
-                default_downsampler=MinMaxLTTB(parallel=False),
-            )
-
-            return fig, dash_enrich.Serverside(fig)
         
         # updates a resampling figure of individual sessions
         @self.app.callback(
             dash_enrich.Output({"type": "dynamic-updater", "index": dash_enrich.MATCH}, "updateData"),
             dash_enrich.Input({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "relayoutData"),
-            dash_enrich.State({"type": "store", "index": dash_enrich.MATCH}, "data"),
             prevent_initial_call=True,
             memoize=False,
         )
-        def update_fig(relayoutdata, fig):
-            if fig is not None:
-                return fig.construct_update_data(relayoutdata)
-            return dash_enrich.no_update
+        def update_fig(relayoutdata):
+            index = dash_enrich.ctx.triggered_id['index']
+            return self.pages[index].data.construct_update_data(relayoutdata)
+            
         
         # makes the fire lottie at top screen breathe if server is alive and comunicating with the UI
         @self.app.callback(
