@@ -186,14 +186,15 @@ class MaterialsSet():
     
     def plot_property(self, m=None, property='k'):
         assert isinstance(m, int), "m must be an Integer"
-        match property:
-            case 'k':
-                fig = self.mats[m].k.plot(return_fig=True)
-            case 'rho':
-                fig = self.mats[m].rho.plot(return_fig=True)
-            case 'cp':
-                fig = self.mats[m].cp.plot(return_fig=True)
-        return fig
+        if MPI.COMM_WORLD.rank == 0:
+            match property:
+                case 'k':
+                    fig = self.mats[m].k.plot(return_fig=True)
+                case 'rho':
+                    fig = self.mats[m].rho.plot(return_fig=True)
+                case 'cp':
+                    fig = self.mats[m].cp.plot(return_fig=True)
+            return fig
             
 
     

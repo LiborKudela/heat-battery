@@ -6,9 +6,6 @@ from dash_extensions import Lottie
 import logging
 import threading
 from .pages import HomePage
-from plotly_resampler import FigureResampler
-from plotly_resampler.aggregation import MinMaxLTTB
-import numpy as np
 
 def on_master(f):
     def decorated_f(*args, **kwargs):
@@ -79,7 +76,7 @@ class Visualizer():
     def update_data(self):
         '''Some data need all mpi ranks to evaluate sucesfully'''
         for href, page in self.pages.items():
-            page.update_data()
+            page._update_data()
         self.update_data_status += 1
 
     @on_master
@@ -171,15 +168,15 @@ class Visualizer():
             prevent_initial_call=True,
         )
         def update_content(data, n_intervals, pathname):
-            if data != self.update_data_status:
-                data = self.update_data_status
-                return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_interval
-            elif dash_enrich.ctx.triggered_id == 'url':
-                return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_interval
+            if (data != self.update_data_status) or dash_enrich.ctx.triggered_id == 'url':
+                # visualizer has new data or new url requsted, send them to client
+                data = self.update_data_status # age of the update send to client
+                return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_client_interval
             else:
+                # no need to send new data
                 return dash_enrich.no_update
         
-        # updates a resampling figure of individual sessions
+        # updates a resampling figure of any sessions
         @self.app.callback(
             dash_enrich.Output({"type": "dynamic-updater", "index": dash_enrich.MATCH}, "updateData"),
             dash_enrich.Input({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "relayoutData"),
@@ -188,7 +185,8 @@ class Visualizer():
         )
         def update_fig(relayoutdata):
             index = dash_enrich.ctx.triggered_id['index']
-            return self.pages[index].data.construct_update_data(relayoutdata)
+            href, i = index.split('-')
+            return self.pages[href].data[int(i)].construct_update_data(relayoutdata)
             
         
         # makes the fire lottie at top screen breathe if server is alive and comunicating with the UI

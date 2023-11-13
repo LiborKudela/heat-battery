@@ -345,25 +345,33 @@ class Experiment():
         m = [m] if isinstance(m, int) else m
         figs = []
         for _m in m:
+            # only rank=0 return fig, other return None
             fig = self.mats.plot_property(m=_m, property=property)
+
             if include_density:
-                density_res = self.get_current_temperature_density(cell_tag=_m+1)
-                fig.add_trace(go.Scatter(x=density_res[0], 
+                # calculate in parallel, but only rank=0 adds trace to the fig
+                self.add_temperature_density_plot(fig, m=_m)
+
+            if MPI.COMM_WORLD.rank == 0:
+                # since fig exist only at rank=0, update layout there
+                fig.update_layout(title=dict(text=self.mats[_m].name, x=0.5))
+                figs.append(fig)
+        return figs
+
+    def add_temperature_density_plot(self, fig, m=None):
+        '''This run on all rank, but edits the fig only at rank=0'''
+        density_res = self.get_current_temperature_density(cell_tag=m+1)
+        if MPI.COMM_WORLD.rank == 0:
+            fig.add_trace(go.Scatter(x=density_res[0],
                                          y=density_res[1], 
                                          mode='lines', 
                                          name="T density", 
                                          yaxis='y2'))
-                fig.update_layout(     
-                    yaxis2=dict(
-                        title="Temperature density [-]",
-                        overlaying="y",
-                        side="right"))
-                
-            fig.update_layout(
-                title=dict(text=self.mats[_m].name, x=0.5),
-            )
-            figs.append(fig)
-        return figs
+            fig.update_layout(     
+                yaxis2=dict(
+                    title="Temperature density [-]",
+                    overlaying="y",
+                    side="right"))
 
     def plot_domain_state(self):
         'This method must run on all rank to work properly'
