@@ -1,4 +1,5 @@
 from heat_battery.simulations import Experiment
+from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer
 import numpy as np
 import unittest
@@ -30,7 +31,11 @@ class TestMaterialAPI(unittest.TestCase):
 class TestSteadyStateComparerAPI(unittest.TestCase):
     def setUp(self) -> None:
         self.sim = Experiment(dim = 2)
-        self.exp = self.sim.pseudoexperimental_data_steady()
+        self.exp = PseudoExperimentalData()
+        Qc = 100
+        T_amb = 20
+        res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
+        self.exp.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
         self.fitter = SteadyStateComparer(self.sim ,[self.exp])
 
     def tearDown(self) -> None:

@@ -1,4 +1,5 @@
 from heat_battery.simulations import Experiment
+from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer, optimizers
 import numpy as np
 import unittest
@@ -6,7 +7,11 @@ import unittest
 class TestOptimization(unittest.TestCase):
     def setUp(self):
         self.sim = Experiment(dim = 2)
-        self.exp = self.sim.pseudoexperimental_data_steady()
+        self.exp = PseudoExperimentalData()
+        Qc = 100
+        T_amb = 20
+        res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
+        self.exp.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
         self.true_k = self.fitter.get_k(4)
 
