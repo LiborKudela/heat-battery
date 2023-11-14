@@ -40,7 +40,7 @@ class Experiment_data():
         self.steady_state_mean = self.steady_state_data.mean().rename("Experiment Mean")
         self.steady_state_std = self.steady_state_data.std().rename("Experiment Std")
 
-    def plot_data_series(self):
+    def data_series_plot(self):
         return self.figure
 
     def plot_steady_data(self):

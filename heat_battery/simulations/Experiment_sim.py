@@ -15,7 +15,6 @@ import plotly.graph_objects as go
 from .utilities import Probe_writer, probe_function
 from ..materials import MaterialsSet
 from ..geometry.utilities import load_data
-from ..data import Experiment_data
 
 class Experiment():
     def __init__(self, geometry_dir='meshes/experiment', 
@@ -156,62 +155,23 @@ class Experiment():
         self.probes = Probe_writer(os.path.join(self.result_dir, 'probes.csv'))
         self.create_probes(self.probes)
 
-    def create_probes(self, probes):
-        @probes.register_probe('progress', '%')
-        def progress():
-            return 100*self.t/self.t_max
-        
-        @probes.register_probe('dt', 's')
-        def dt_value():
-            return float(self.dt.value)
-        
-        @probes.register_probe('t_remain', 's')
-        def remain_t():
-            return (self.t_max - self.t)/self.dt.value*self.ielapsed
-        
-        @probes.register_probe('t_sim', 's')
-        def t_sim():
-            return self.t
-        
-        @probes.register_probe('t_cpu', 's')
-        def t_cpu():
-            return self.elapsed
-        
-        @probes.register_probe('t_i', 's')
-        def t_i():
-            return self.ielapsed
-        
-        @probes.register_probe('NLS_iter', '-', format='d')
-        def NLS_iter():
-            return self.r_unsteady[0]
-        
-        @probes.register_probe('KSP_iter', '-', format='d')
-        def KSP_iter():
-            return self.unsteady_solver.krylov_solver.its
-        
-        @probes.register_probe('ksp_norm', '-')
-        def KSP_norm():
-            return self.unsteady_solver.krylov_solver.norm
-        
-        @probes.register_probe('heat', 'J')
-        def H_probe():
-            H = fem.assemble_scalar(self.H_form)
-            H = self.domain.comm.allreduce((H), op=MPI.SUM)
-            return H
-        
-        @probes.register_probe('heat loss', 'W')
-        def loss_probe():
-            q_flow = fem.assemble_scalar(self.Qloss_form)
-            q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
-            return q_flow
-        
-        @probes.register_probe('T', '°C')
-        def Tc_probe():
-            return probe_function(self.T_probes_coords, self.domain, self.T)
-        
-        @probes.register_probe('power', 'W')
-        def power():
-            return self.q.value*self.Vc
+        # vtk plot stuff that do not need to be recreated every time
+        cells, types, x = plot.vtk_mesh(self.V)
+        num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local
+        num_dofs_local = self.V.dofmap.index_map.size_local * self.V.dofmap.index_map_bs
+        self.num_dofs_local = num_dofs_local
+        num_dofs_per_cell = cells[0]
+        cells_dofs = (np.arange(len(cells)) % (num_dofs_per_cell+1)) != 0
+        global_dofs = self.V.dofmap.index_map.local_to_global(cells[cells_dofs].copy())
+        cells[cells_dofs] = global_dofs
+        root = 0
+        global_cells = self.domain.comm.gather(cells[:(num_dofs_per_cell+1)*num_cells_local], root=root)
+        global_types = self.domain.comm.gather(types[:num_cells_local])
+        global_x = self.domain.comm.gather(x[:self.V.dofmap.index_map.size_local,:], root=root)
+        if MPI.COMM_WORLD.rank == 0:
+            self.root_x = np.vstack(global_x)
+            self.root_cells = np.concatenate(global_cells)
+            self.root_types = np.concatenate(global_types)
 
     def create_solver(self, F, u):
         problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
@@ -306,6 +266,64 @@ class Experiment():
             self.probes.print()
             self.probes.write_probes()
 
+    def create_probes(self, probes):
+
+        @probes.register_probe('progress', '%')
+        def progress():
+            return 100*self.t/self.t_max
+        
+        @probes.register_probe('dt', 's')
+        def dt_value():
+            return float(self.dt.value)
+        
+        @probes.register_probe('t_remain', 's')
+        def remain_t():
+            return (self.t_max - self.t)/self.dt.value*self.ielapsed
+        
+        @probes.register_probe('t_sim', 's')
+        def t_sim():
+            return self.t
+        
+        @probes.register_probe('t_cpu', 's')
+        def t_cpu():
+            return self.elapsed
+        
+        @probes.register_probe('t_i', 's')
+        def t_i():
+            return self.ielapsed
+        
+        @probes.register_probe('NLS_iter', '-', format='d')
+        def NLS_iter():
+            return self.r_unsteady[0]
+        
+        @probes.register_probe('KSP_iter', '-', format='d')
+        def KSP_iter():
+            return self.unsteady_solver.krylov_solver.its
+        
+        @probes.register_probe('ksp_norm', '-')
+        def KSP_norm():
+            return self.unsteady_solver.krylov_solver.norm
+        
+        @probes.register_probe('heat', 'J')
+        def H_probe():
+            H = fem.assemble_scalar(self.H_form)
+            H = self.domain.comm.allreduce((H), op=MPI.SUM)
+            return H
+        
+        @probes.register_probe('heat loss', 'W')
+        def loss_probe():
+            q_flow = fem.assemble_scalar(self.Qloss_form)
+            q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
+            return q_flow
+        
+        @probes.register_probe('T', '°C')
+        def Tc_probe():
+            return probe_function(self.T_probes_coords, self.domain, self.T)
+        
+        @probes.register_probe('power', 'W')
+        def power():
+            return self.q.value*self.Vc
+
     def get_current_range(self, cell_tag=None):
         'This method must run on all rank to work properly'
         if cell_tag is not None:
@@ -359,7 +377,7 @@ class Experiment():
         return figs
 
     def add_temperature_density_plot(self, fig, m=None):
-        '''This run on all rank, but edits the fig only at rank=0'''
+        '''This runs on all ranks, but mutates the fig only at rank=0'''
         density_res = self.get_current_temperature_density(cell_tag=m+1)
         if MPI.COMM_WORLD.rank == 0:
             fig.add_trace(go.Scatter(x=density_res[0],
@@ -373,33 +391,15 @@ class Experiment():
                     overlaying="y",
                     side="right"))
 
-    def plot_domain_state(self):
+    def domain_state_plot(self):
         'This method must run on all rank to work properly'
-        # TODO: move static stuff into offline phase, no need to calculate each time
-        cells, types, x = plot.create_vtk_mesh(self.V)
-        num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local
-        num_dofs_local = self.V.dofmap.index_map.size_local * self.V.dofmap.index_map_bs
-        num_dofs_per_cell = cells[0]
-        cells_dofs = (np.arange(len(cells)) % (num_dofs_per_cell+1)) != 0
-        global_dofs = self.V.dofmap.index_map.local_to_global(cells[cells_dofs].copy())
-        cells[cells_dofs] = global_dofs
-
         root = 0
-        global_cells = self.domain.comm.gather(cells[:(num_dofs_per_cell+1)*num_cells_local], root=root)
-        global_types = self.domain.comm.gather(types[:num_cells_local])
-        global_x = self.domain.comm.gather(x[:self.V.dofmap.index_map.size_local,:], root=root)
-        global_vals = self.domain.comm.gather(self.T.x.array[:num_dofs_local], root=root)
+        global_vals = self.domain.comm.gather(self.T.x.array[:self.num_dofs_local], root=root)
 
         if MPI.COMM_WORLD.rank == 0:
-            root_x = np.vstack(global_x)
-            root_cells = np.concatenate(global_cells)
-            root_types = np.concatenate(global_types)
             root_vals = np.concatenate(global_vals)
 
-            grid = pyvista.UnstructuredGrid(root_cells, root_types, root_x)
-            grid.point_data["u"] = root_vals
-            grid.set_active_scalars("u")
-            plotter = pyvista.Plotter()
-            plotter.add_mesh(grid, show_edges=False)
-            plotter.view_xy()
-            plotter.show()
+            grid = pyvista.UnstructuredGrid(self.root_cells, self.root_types, self.root_x)
+            grid.point_data["T"] = root_vals
+            grid.set_active_scalars("T")
+            return grid

@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from trace_updater import TraceUpdater
 from plotly_resampler import FigureResampler
 from plotly_resampler.aggregation import MinMaxLTTB
+from dash_vtk.utils import to_mesh_state
+import dash_vtk
 
 class VisualizerPage():
     def __init__(self, name):
@@ -21,6 +23,9 @@ class VisualizerPage():
     
     def get_link(self):
         return dbc.NavLink(self.name, href=self.href, active="exact")
+    
+    def get_layout(self):
+        pass
 
     def _update_data(self):
         '''static page switch handling'''
@@ -153,3 +158,34 @@ class ResampingFigurePage(GridLayoutPage):
                 self.data.append(self.resampler_wrapper(data_item))
         else:
             self.data = [self.resampler_wrapper(data)]
+
+class VtkMeshPage(VisualizerPage):
+    def __init__(self, name, f, *args, **kwargs):
+        super().__init__(name=name)
+        self.disable_client_interval = False
+        self.figure_constructor = f
+        self.args = args
+        self.kwargs = kwargs
+
+    def get_layout(self):
+        mesh_state = to_mesh_state(self.data, 'T')
+        color_range = [20, 600]
+        vtk_content = dash_vtk.View(
+            [
+                dash_vtk.GeometryRepresentation(
+                    [
+                        dash_vtk.Mesh(state=mesh_state),
+                    ],
+                    colorMapPreset="jet",
+                    colorDataRange=color_range,
+                    #showScalarBar=True,
+                ),
+            ],
+        )
+        return dash_enrich.html.Div(
+            vtk_content,
+            style={'position':'relative', 'top':0, 'left':0, 'bottom':0, 'right':0, 'width':'100%', 'height':'95vh', 'margin':0, 'padding':0, 'overflow':'hidden'},
+        )
+    
+    def update_data(self):
+        self.data = self.figure_constructor(*self.args, **self.kwargs)

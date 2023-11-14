@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 from dash_extensions import Lottie
 import logging
 import threading
+import time
 from .pages import HomePage
 
 def on_master(f):
@@ -68,6 +69,10 @@ class Visualizer():
         if MPI.COMM_WORLD.rank == 0:
             self.app.run(debug=True)
         MPI.COMM_WORLD.Barrier()
+
+    def stay_alive(self, timeout=60):
+        MPI.COMM_WORLD.Barrier()
+        time.sleep(timeout)
 
     def register_page(self, page):
         '''All ranks need acces to page constructors'''
