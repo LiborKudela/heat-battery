@@ -32,7 +32,7 @@ class Visualizer():
         self.register_page(homepage)
      
         # trigers
-        self.figure_interval = 3000
+        self.figure_interval = 1000
         self.breathing_interval = 5000
 
         #server
