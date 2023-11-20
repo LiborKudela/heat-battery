@@ -22,23 +22,21 @@ class SteadyStateComparer:
         self.total_error = 0.0
 
     def get_k(self, m=None):
-        if m is None:
-            array = []
-            for i in range(len(self.sim.mats)):
-                array.append(self.sim.mats[i].k.get_values())
-            return np.concatenate(array)
-        elif type(m) == int:
-            return self.sim.mats[m].k.get_values()
+        m = m or np.arange(len(self.sim.mats))
+        m = np.atleast_1d(m)
+        k = []
+        for i in m:
+            k.append(self.sim.mats[i].k.get_values())
+        return np.concatenate(k)
     
     def set_k(self, k, m=None):
-        if m is None:
-            start_idx = 0
-            for i in range(len(self.sim.mats)):
-                end_idx = start_idx + self.sim.mats[i].k.n_values
-                self.sim.mats[i].k.set_values(k[start_idx:end_idx])
-                start_idx = end_idx 
-        elif type(m) == int:
-            self.sim.mats[m].k.set_values(k)
+        m = m or np.arange(len(self.sim.mats))
+        m = np.atleast_1d(m)
+        start_idx = 0
+        for i in m:
+            end_idx = start_idx + self.sim.mats[i].k.n_values
+            self.sim.mats[i].k.set_values(k[start_idx:end_idx])
+            start_idx = end_idx 
 
     def loss_function(self, k, m=None):
         # save original state
@@ -59,6 +57,16 @@ class SteadyStateComparer:
         def restricted_loss(k):
             return self.loss_function(k, m=m)    
         return restricted_loss
+    
+    def generate_getter_for_material(self, m):
+        def restricted_getter():
+            return self.get_k(m=m)
+        return restricted_getter
+    
+    def generate_setter_for_material(self, m):
+        def restricted_setter(k):
+            self.set_k(k, m=m)
+        return restricted_setter
 
     def update(self):
         for i, exp_data in enumerate(self.exp_data):
@@ -81,16 +89,16 @@ class SteadyStateComparer:
         data = data.dropna()
         return data
         
-    def create_figure(self, save_name=None, show=False):
+    def compare_plot(self):
         if MPI.COMM_WORLD.rank == 0:
-            fig = go.Figure()
-            fig.add_bar(x=self.data.index, y=self.data["Experiment Mean"], name='Experiment')
-            fig.add_bar(x=self.data.index, y=self.data["Simulation"], name='Simulation')
-            if show:
-                fig.show()
-            if save_name is not None:
-                fig.write_html(f'{save_name}.html')
-                fig.write_image(f'{save_name}.jpg', scale=2)
+            figs = []
+            for data in self.data:
+                fig = go.Figure()
+                fig.add_bar(x=data.index, y=data["Experiment Mean"], name='Experiment')
+                fig.add_bar(x=data.index, y=data["Simulation"], name='Simulation')
+                figs.append(fig)
+            return figs
+        
     
     def print_data(self):
         if MPI.COMM_WORLD.rank == 0:

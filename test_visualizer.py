@@ -7,6 +7,7 @@ sim = Experiment(
     dim = 2,
     geometry_dir='meshes/experiment', 
     result_dir='results/experiment_test')
+m = [3, 4]
 
 # fake experimental data
 Qc = 100
@@ -17,13 +18,13 @@ exp_fake.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
 
 # create 
 fitter = SteadyStateComparer(sim, [exp_fake])
-true_k = fitter.get_k(4)
-exp_real = Experiment_data('data/experiments/20231009_third/Test_TF24_Third_measurement_054411.csv')
+true_k = fitter.get_k(m)
+#exp_real = Experiment_data('data/experiments/20231009_third/Test_TF24_Third_measurement_054411.csv')
 
 V = Visualizer()
 V.register_page(pages.FigurePage("Conductivity", sim.material_plot, property="k", include_density=False))
 V.register_page(pages.VtkMeshPage("VTK_TEST", sim.domain_state_plot))
-V.register_page(pages.ResampingFigurePage("StaticBigData", exp_real.data_series_plot))
+#V.register_page(pages.ResampingFigurePage("StaticBigData", exp_real.data_series_plot))
 
 V.build_app()
 V.start_app()
@@ -32,14 +33,14 @@ V.stay_alive(timeout=1)
 
 k0 = true_k.copy()
 k0 *= 1.1
-loss = fitter.generate_loss_for_material(4)
+loss = fitter.generate_loss_for_material(m)
 opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
 
 for i in range(300):
     opt.step()
     opt.alpha *= 0.995
     if i % 10 == 0:
-        fitter.set_k(opt.get_k(), m=4)
+        fitter.set_k(opt.get_k(), m=m)
         fitter.update()
         V.update_data()
     opt.print_state()
