@@ -49,14 +49,18 @@ class Optimizer:
                   )
 
 class ADAM(Optimizer):
-    def __init__(self, loss=None, grad=None, k0=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-3):
+    def __init__(self, loss=None, grad=None, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-3):
         assert loss is not None, "loss function must be given"
         
         # hyper parameters
         self.alpha = alpha
         self.beta_1 = beta_1
         self.beta_2 = beta_2
-        self.eps = eps
+        self.eps = eps 
+
+
+        self.a_min = k_min or -np.inf
+        self.a_max = k_max or np.inf
 
         # optimizer state
         self.g_w = 0.0
@@ -69,6 +73,7 @@ class ADAM(Optimizer):
         self.j += 1
         if self.j > 1:
             self.k -= self.future_update
+            np.clip(self.k, self.a_min, self.a_max, self.k)
         g, l = self.objective(self.k)
 
         # update optimizer state
