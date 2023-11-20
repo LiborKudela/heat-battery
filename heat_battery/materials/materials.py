@@ -78,7 +78,7 @@ class SandTheory(Material):
 class Contact_sand(Material):
     def __init__(self, domain, d=0.0001, name="Contact sand-cartridge"):
         super().__init__(h0_T_ref = 20,
-                         k = Lagrange_property(domain, [0, 1000], [1, 1], PropertyUnits.K, multiplier=d*1000),
+                         k = Lagrange_property(domain, [0, 1000], [0.1, 0.1], PropertyUnits.K, multiplier=d*1000),
                          rho = Lagrange_property(domain, [0, 1000], [40.0, 40.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [0, 1000], [1200, 1200], PropertyUnits.cp), 
                          name=name)

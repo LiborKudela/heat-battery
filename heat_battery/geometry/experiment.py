@@ -161,7 +161,7 @@ def build_geometry(
             materials.Standard_insulation: 'Insulation',
             materials.Cartridge_unheated: 'Unheated part of cartridge',  
             materials.Cartridge_heated: 'Heated part of cartridge', 
-            materials.Sand: 'Sand',
+            materials.SandTheory: 'Sand',
         }
 
         # mark surfaces
