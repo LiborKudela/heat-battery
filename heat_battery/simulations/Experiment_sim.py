@@ -20,7 +20,8 @@ class Experiment():
     def __init__(self, geometry_dir='meshes/experiment', 
                 result_dir='results/experiment_test', 
                 dim=3, 
-                T0=20, 
+                T0=20,
+                T_guess=None, 
                 Qc=100,
                 alpha = 7.0,
                 t_max=3600,
@@ -38,6 +39,7 @@ class Experiment():
         self.result_dir = result_dir
         self.dim = dim
         self.T0 = T0
+        self.T_guess = T_guess or self.T0
         self.Qc = Qc
         self.alpha = alpha
         self.t_max=t_max
@@ -78,24 +80,27 @@ class Experiment():
         self.xdmf_steady = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, 'steady_functions.xdmf'), "w")
         self.xdmf_steady.write_mesh(self.domain)
 
-        self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
+        #self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
         self.V = fem.FunctionSpace(self.domain, ("Lagrange", 1))
         T_v = ufl.TestFunction(self.V)
 
         # temperature in current time step
         self.T = fem.Function(self.V)
         self.T.name = "T"
-        self.T.interpolate(self.initial_condition)
+        #self.T.interpolate(self.initial_condition)
+        self.T.x.array[:] = self.T_guess
 
         # temperature in previous time step
         self.T_n = fem.Function(self.V)
         self.T_n.name = "T_n"
-        self.T_n.interpolate(self.initial_condition)
+        #self.T_n.interpolate(self.initial_condition)
+        self.T_n.x.array[:] = self.T0
 
         # temperature for interpolation (for equidistant time points)
         self.T_xdmf = fem.Function(self.V)
         self.T_xdmf.name = "T"
-        self.T_xdmf.interpolate(self.initial_condition)
+        #self.T_xdmf.interpolate(self.initial_condition)
+        self.T_xdmf.x.array[:] = self.T0
 
         self.V_subdomain = []
         for i, mat in enumerate(self.mats, 1):
@@ -357,7 +362,7 @@ class Experiment():
             c[i] = c_value
         return T_hat, c
 
-    def material_plot(self, m=None, property='k', include_density=True):
+    def material_plot(self, m=None, property='k', include_density=False):
         'This method must run on all rank to work properly'
         m = m or range(len(self.mats))
         m = [m] if isinstance(m, int) else m
@@ -368,7 +373,7 @@ class Experiment():
 
             if include_density:
                 # calculate in parallel, but only rank=0 adds trace to the fig
-                self.add_temperature_density_plot(fig, m=_m)
+                self.add_current_temperature_density_plot(fig, m=_m)
 
             if MPI.COMM_WORLD.rank == 0:
                 # since fig exist only at rank=0, update layout there
@@ -376,7 +381,7 @@ class Experiment():
                 figs.append(fig)
         return figs
 
-    def add_temperature_density_plot(self, fig, m=None):
+    def add_current_temperature_density_plot(self, fig, m=None):
         '''This runs on all ranks, but mutates the fig only at rank=0'''
         density_res = self.get_current_temperature_density(cell_tag=m+1)
         if MPI.COMM_WORLD.rank == 0:
