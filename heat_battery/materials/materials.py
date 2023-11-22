@@ -70,7 +70,7 @@ class SandTheory(Material):
         d = 0.0015
         kc = [0.4+d*eps*4*sigma*273.15**3, d*eps*4*sigma*3*273.15**2, d*eps*4*sigma*3*273.15, d*eps*4*sigma]
         super().__init__(h0_T_ref = 20,
-                         k = Polynomial_property(domain, kc, PropertyUnits.k).to_lagrange_property([0, 200, 400, 600]),
+                         k = Polynomial_property(domain, kc, PropertyUnits.k).to_lagrange_property([20, 200, 400, 600]),
                          rho = Lagrange_property(domain, [0, 600], [2650.0, 2650.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [0, 600], [830, 830], PropertyUnits.cp),
                          name=name)

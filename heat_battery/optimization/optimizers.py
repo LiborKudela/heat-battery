@@ -20,7 +20,7 @@ class Optimizer:
     def set_k(self, k):
         self.k = np.array(k)
 
-    def gradient_finite_differences(self, k, perturbation=1e-5, return_loss=True):
+    def gradient_finite_differences(self, k, perturbation=1e-6, return_loss=True):
         org_loss_value = self.loss(k)
         k_pert = k.copy()
         g = []
@@ -85,5 +85,13 @@ class ADAM(Optimizer):
         self.g_w_hat = self.g_w/(1-self.beta_1**(self.j))
         self.g_s_hat = self.g_s/(1-self.beta_2**(self.j))
         self.future_update = self.alpha * self.g_w_hat/(np.sqrt(self.g_s_hat)+self.eps)
+
+    def print_state(self):
+        if MPI.COMM_WORLD.rank == 0:
+            print(f"step: {self.j}" , 
+                  f"loss: {self.loss_value}", 
+                  f"g_norm: {self.g_norm}",
+                  f"alpha: {self.alpha}",
+                  )
 
 
