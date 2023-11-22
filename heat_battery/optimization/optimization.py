@@ -15,7 +15,8 @@ class SteadyStateComparer:
 
         self.exp_data = exp_data
         self.n = len(self.exp_data)
-        self.data = [pd.Series()]*self.n 
+        self.data = [pd.Series()]*self.n
+        self.domain_data = [None]*self.n 
         self.total_abs_error = [0.0]*self.n 
         self.total_square_error = [0.0]*self.n 
         self.total_max_error = [0.0]*self.n
@@ -70,7 +71,7 @@ class SteadyStateComparer:
 
     def update(self):
         for i, exp_data in enumerate(self.exp_data):
-            self.data[i] = self.compare_steady_state(exp_data)
+            self.data[i], self.domain_data[i] = self.compare_steady_state(exp_data)
             self.total_abs_error[i] = self.data[i]["Abs Error"].sum()
             self.total_square_error[i] = self.data[i]["Square Error"].sum()
             self.total_max_error[i] = self.data[i]["Abs Error"].max()
@@ -80,6 +81,7 @@ class SteadyStateComparer:
         T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
         Qc = exp_data.steady_state_mean['Power [W]']
         s_sim = self.sim.solve_steady(Qc=Qc, T_amb=T_amb, save_xdmf=False) # this must run on all ranks
+        domain_data = self.sim.T.copy()
         exp_mean = exp_data.steady_state_mean
         exp_std = exp_data.steady_state_std
         data = pd.concat([exp_mean, exp_std, s_sim], axis=1)
@@ -87,7 +89,7 @@ class SteadyStateComparer:
         data["Square Error"] = data["Difference"].pow(2)
         data["Abs Error"] = data["Difference"].abs()
         data = data.dropna()
-        return data
+        return data, domain_data
         
     def compare_plot(self):
         if MPI.COMM_WORLD.rank == 0:
@@ -97,9 +99,15 @@ class SteadyStateComparer:
                 fig.add_bar(x=data.index, y=data["Experiment Mean"], name='Experiment')
                 fig.add_bar(x=data.index, y=data["Simulation"], name='Simulation')
                 figs.append(fig)
+                #TODO: add titles to compare charts
             return figs
         
+    def material_plot(self, m=None, property='k', include_density=False):
+        return self.sim.material_plot(m=m, property=property, include_density=include_density, T=self.domain_data)
     
+    def domain_state_plot(self):
+        return self.sim.domain_state_plot(T=self.domain_data)
+        
     def print_data(self):
         if MPI.COMM_WORLD.rank == 0:
             print(self.data)

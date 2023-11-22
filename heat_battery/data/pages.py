@@ -159,33 +159,39 @@ class ResampingFigurePage(GridLayoutPage):
         else:
             self.data = [self.resampler_wrapper(data)]
 
-class VtkMeshPage(VisualizerPage):
+class VtkMeshPage(GridLayoutPage):
     def __init__(self, name, f, *args, **kwargs):
-        super().__init__(name=name)
-        self.disable_client_interval = False
-        self.figure_constructor = f
-        self.args = args
-        self.kwargs = kwargs
+        super().__init__(name, f, *args, **kwargs)
 
-    def get_layout(self):
-        mesh_state = to_mesh_state(self.data, 'T')
-        color_range = [20, 600]
-        vtk_content = dash_vtk.View(
-            [
-                dash_vtk.GeometryRepresentation(
-                    [
-                        dash_vtk.Mesh(state=mesh_state),
-                    ],
-                    colorMapPreset="jet",
-                    colorDataRange=color_range,
-                    #showScalarBar=True,
-                ),
-            ],
-        )
-        return dash_enrich.html.Div(
-            vtk_content,
-            style={'position':'relative', 'top':0, 'left':0, 'bottom':0, 'right':0, 'width':'100%', 'height':'95vh', 'margin':0, 'padding':0, 'overflow':'hidden'},
-        )
+    def get_grid_items(self):
+        grid_items = []
+        for i, grid_data in enumerate(self.data):
+            mesh_state = to_mesh_state(grid_data, 'T')
+            color_range = [20, 600]
+            vtk_content = dash_vtk.View(
+                [
+                    dash_vtk.GeometryRepresentation(
+                        [
+                            dash_vtk.Mesh(state=mesh_state),
+                        ],
+                        colorMapPreset="jet",
+                        colorDataRange=color_range,
+                        #showScalarBar=True,
+                    ),
+                ],
+                style={'className':'grid-item'},
+            )
+            grid_items.append(vtk_content)
+        return grid_items
+    
+    def update_data(self):
+        data = self.figure_constructor(*self.args, **self.kwargs)
+        if isinstance(data, list):
+            self.data = []
+            for data_item in data:
+                self.data.append(self.resampler_wrapper(data_item))
+        else:
+            self.data = [self.resampler_wrapper(data)]
     
     def update_data(self):
         self.data = self.figure_constructor(*self.args, **self.kwargs)

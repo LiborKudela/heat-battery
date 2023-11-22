@@ -119,23 +119,23 @@ class Experiment():
         self.dt = fem.Constant(self.domain, PETSc.ScalarType((dt_start)))
 
         # steady state form
-        Fss = 0
+        self.Fss = 0
         for i, mat in enumerate(self.mats, 1):
-            Fss += ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(T_v))*jac*dx(i)
-        Fss += alpha*(self.T - self.T_amb)*T_v*jac*ds(bc_idx)
-        Fss += -self.q*T_v*jac*dx(cartridge_index)
-        self.steady_solver = self.create_solver(Fss, self.T)
+            self.Fss += ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(T_v))*jac*dx(i)
+        self.Fss += alpha*(self.T - self.T_amb)*T_v*jac*ds(bc_idx)
+        self.Fss += -self.q*T_v*jac*dx(cartridge_index)
+        self.steady_solver = self.create_solver(self.Fss, self.T)
 
         #unsteady state form
-        F = 0
+        self.F = 0
         for i, mat in enumerate(self.mats, 1):
-            F += mat.rho(self.T)*mat.cp(self.T)*self.T*T_v*jac*dx(i) - mat.rho(self.T_n)*mat.cp(self.T_n)*self.T_n*T_v*jac*dx(i)
-            F += theta*self.dt*ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(T_v))*jac*dx(i) + (1-theta)*self.dt*ufl.dot(mat.k(self.T_n)*ufl.grad(self.T_n), ufl.grad(T_v))*jac*dx(i)
+            self.F += mat.rho(self.T)*mat.cp(self.T)*self.T*T_v*jac*dx(i) - mat.rho(self.T_n)*mat.cp(self.T_n)*self.T_n*T_v*jac*dx(i)
+            self.F += theta*self.dt*ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(T_v))*jac*dx(i) + (1-theta)*self.dt*ufl.dot(mat.k(self.T_n)*ufl.grad(self.T_n), ufl.grad(T_v))*jac*dx(i)
         # outer surface heat loss
-        F += theta*self.dt*alpha*(self.T - self.T_amb)*T_v*jac*ds(bc_idx) + (1-theta)*self.dt*alpha*(self.T_n - self.T_amb_n)*T_v*jac*ds(bc_idx)
+        self.F += theta*self.dt*alpha*(self.T - self.T_amb)*T_v*jac*ds(bc_idx) + (1-theta)*self.dt*alpha*(self.T_n - self.T_amb_n)*T_v*jac*ds(bc_idx)
         # heated cartridge power term
-        F += -theta*self.dt*self.q*T_v*jac*dx(cartridge_index) - (1-theta)*self.dt*self.q_n*T_v*jac*dx(cartridge_index)
-        self.unsteady_solver = self.create_solver(F, self.T)
+        self.F += -theta*self.dt*self.q*T_v*jac*dx(cartridge_index) - (1-theta)*self.dt*self.q_n*T_v*jac*dx(cartridge_index)
+        self.unsteady_solver = self.create_solver(self.F, self.T)
 
         # form for calculating heat in the whole domain
         h_form = 0
@@ -329,7 +329,7 @@ class Experiment():
         def power():
             return self.q.value*self.Vc
 
-    def get_current_range(self, cell_tag=None):
+    def get_temperature_range(self, cell_tag=None):
         'This method must run on all rank to work properly'
         if cell_tag is not None:
             cells = self.cell_tags.find(cell_tag)
@@ -344,10 +344,13 @@ class Experiment():
         T_min = self.domain.comm.allreduce((T_min), op=MPI.MIN)
         return T_min, T_max
     
-    def get_current_temperature_density(self, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+    def get_temperature_density(self, T, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
         'This method must run on all rank to work properly'
         assert isinstance(cell_tag, int), "cell_tag must be integer"
-        T_min, T_max = self.get_current_range(cell_tag=cell_tag)
+        if T is not None:
+            T_original = T.x.array.copy()
+            self.T.x.array[:] = T.x.array
+        T_min, T_max = self.get_temperature_range(cell_tag=cell_tag)
         if cumulative:
             psi = self.psi_forms[cell_tag-1]
         else:
@@ -360,51 +363,59 @@ class Experiment():
             c_value = fem.assemble_scalar(psi)
             c_value = self.domain.comm.allreduce(c_value, op=MPI.SUM)
             c[i] = c_value
+        if T is not None:
+            self.T.x.array[:] = T_original
         return T_hat, c
 
-    def material_plot(self, m=None, property='k', include_density=False):
+    def material_plot(self, m=None, property='k', include_density=False, T=None):
         'This method must run on all rank to work properly'
         m = m or range(len(self.mats))
         m = [m] if isinstance(m, int) else m
         figs = []
-        for _m in m:
+        for i, _m in enumerate(m):
             # only rank=0 return fig, other return None
             fig = self.mats.plot_property(m=_m, property=property)
-
-            if include_density:
-                # calculate in parallel, but only rank=0 adds trace to the fig
-                self.add_current_temperature_density_plot(fig, m=_m)
+            figs.append(fig)
 
             if MPI.COMM_WORLD.rank == 0:
-                # since fig exist only at rank=0, update layout there
-                fig.update_layout(title=dict(text=self.mats[_m].name, x=0.5))
-                figs.append(fig)
+                figs[-1].update_layout(title=dict(text=self.mats[_m].name, x=0.5))
+
+            if include_density:
+                self.add_temperature_density_trace(figs[i], m=_m, T=T)
+
         return figs
 
-    def add_current_temperature_density_plot(self, fig, m=None):
+    def add_temperature_density_trace(self, fig, m=None, T=None):
         '''This runs on all ranks, but mutates the fig only at rank=0'''
-        density_res = self.get_current_temperature_density(cell_tag=m+1)
-        if MPI.COMM_WORLD.rank == 0:
-            fig.add_trace(go.Scatter(x=density_res[0],
-                                         y=density_res[1], 
-                                         mode='lines', 
-                                         name="T density", 
-                                         yaxis='y2'))
-            fig.update_layout(     
-                yaxis2=dict(
-                    title="Temperature density [-]",
-                    overlaying="y",
-                    side="right"))
+        T = T or [self.T]
+        T = T if isinstance(T, list) else [T]
+        for i, _T in enumerate(T):
+            density_res = self.get_temperature_density(_T, cell_tag=m+1)
+            if MPI.COMM_WORLD.rank == 0:
+                fig.add_trace(go.Scatter(x=density_res[0],
+                                        y=density_res[1], 
+                                        mode='lines', 
+                                        name=f"T density ({i})", 
+                                        yaxis='y2'))
+                fig.update_layout(     
+                    yaxis2=dict(
+                        title="Temperature density [-]",
+                        overlaying="y",
+                        side="right"))
 
-    def domain_state_plot(self):
+    def domain_state_plot(self, T=None):
         'This method must run on all rank to work properly'
         root = 0
-        global_vals = self.domain.comm.gather(self.T.x.array[:self.num_dofs_local], root=root)
+        T = T or self.T
+        T = T if isinstance(T, list) else [T]
+        data = [None]*len(T)
+        for i, _T in enumerate(T):
+            global_vals = self.domain.comm.gather(_T.x.array[:self.num_dofs_local], root=root)
 
-        if MPI.COMM_WORLD.rank == 0:
-            root_vals = np.concatenate(global_vals)
-
-            grid = pyvista.UnstructuredGrid(self.root_cells, self.root_types, self.root_x)
-            grid.point_data["T"] = root_vals
-            grid.set_active_scalars("T")
-            return grid
+            if MPI.COMM_WORLD.rank == 0:
+                root_vals = np.concatenate(global_vals)
+                grid = pyvista.UnstructuredGrid(self.root_cells, self.root_types, self.root_x)
+                grid.point_data["T"] = root_vals
+                grid.set_active_scalars("T")
+                data[i] = grid
+        return data
