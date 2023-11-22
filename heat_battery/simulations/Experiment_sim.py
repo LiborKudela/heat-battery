@@ -344,7 +344,7 @@ class Experiment():
         T_min = self.domain.comm.allreduce((T_min), op=MPI.MIN)
         return T_min, T_max
     
-    def get_temperature_density(self, T, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+    def get_temperature_density(self, T=None, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
         'This method must run on all rank to work properly'
         assert isinstance(cell_tag, int), "cell_tag must be integer"
         if T is not None:
@@ -390,7 +390,7 @@ class Experiment():
         T = T or [self.T]
         T = T if isinstance(T, list) else [T]
         for i, _T in enumerate(T):
-            density_res = self.get_temperature_density(_T, cell_tag=m+1)
+            density_res = self.get_temperature_density(T=_T, cell_tag=m+1)
             if MPI.COMM_WORLD.rank == 0:
                 fig.add_trace(go.Scatter(x=density_res[0],
                                         y=density_res[1], 

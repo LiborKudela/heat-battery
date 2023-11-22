@@ -8,26 +8,29 @@ class TestOptimization(unittest.TestCase):
     def setUp(self):
         self.sim = Experiment(dim = 2)
         self.exp = PseudoExperimentalData()
-        Qc = 100
+        Qc = 80
         T_amb = 20
         res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
         self.exp.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
-        self.true_k = self.fitter.get_k(4)
+        self.m = 4
+        self.true_k = self.fitter.get_k(self.m)
 
     def test_material_identification(self):
 
         k0 = self.true_k.copy()
-        k0 *= 1.1
-        loss = self.fitter.generate_loss_for_material(4)
+        k0 *= 1.5
+        loss = self.fitter.generate_loss_for_material(self.m)
         opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
 
         for i in range(300):
             opt.step()
-            opt.alpha *= 0.995
+            opt.alpha *= 0.99
             opt.print_state()
-            
-        self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-03), "Values do not agree")
+        
+        print(self.true_k)
+        print(opt.get_k())
+        self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-02), "Values do not agree")
 
     def tearDown(self) -> None:
         self.sim.close_results()

@@ -14,7 +14,7 @@ class TestPlotCumulativeDensity(unittest.TestCase):
     
     def test_contact_self_identification(self):
         self.sim.solve_steady()
-        res = self.sim.get_current_temperature_density(cell_tag=5, sampling=1e-1, smoothness=1, cumulative=False)
+        res = self.sim.get_temperature_density(cell_tag=5, sampling=1e-1, smoothness=1, cumulative=False)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=res[0], y=res[1]))
         #fig.show()

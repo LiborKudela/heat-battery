@@ -20,7 +20,7 @@ class Optimizer:
     def set_k(self, k):
         self.k = np.array(k)
 
-    def gradient_finite_differences(self, k, perturbation=1e-6, return_loss=True):
+    def gradient_finite_differences(self, k, perturbation=1e-7, return_loss=True):
         org_loss_value = self.loss(k)
         k_pert = k.copy()
         g = []
