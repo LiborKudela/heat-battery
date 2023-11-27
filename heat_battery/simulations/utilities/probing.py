@@ -3,9 +3,9 @@ import pandas as pd
 from mpi4py import MPI
 from dolfinx import geometry
 import numpy as np
-from termcolor import colored
 
-def probe_function(p_coords, domain, f):
+def probe_function(p_coords, f):
+    domain = f.function_space.mesh
     points = np.array(p_coords)
     bb_tree = geometry.bb_tree(domain, domain.topology.dim)
     cell_candidates = geometry.compute_collisions_points(bb_tree, points)
@@ -25,10 +25,11 @@ def probe_function(p_coords, domain, f):
     idx = domain.comm.allgather(idx)
     fv = np.vstack(fv)
     idx = np.concatenate(idx)
-    fv = fv[np.argsort(idx)]    # reorder values to original order of the p_coords
-    idx = idx[np.argsort(idx)]  # indexes to original order (there might be duplicates)
-    _, u_idx = np.unique(idx, return_index=True) # remove duplicates from indexing
-    fv = fv[u_idx] # remove duplicates from temperatures
+    sorted_idx_arg = np.argsort(idx) # sort ascending (might contain duplicates)
+    fv = fv[sorted_idx_arg]    # reorder values to original order of the p_coords
+    idx = idx[sorted_idx_arg]  # indexes to original order (duplicates still in)
+    _, u_idx = np.unique(idx, return_index=True) # create idexing for unique values
+    fv = fv[u_idx] # remove duplicates from values
     return fv.flatten()
 
 class Probe_writer:

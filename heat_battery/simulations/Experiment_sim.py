@@ -323,7 +323,7 @@ class Experiment():
         
         @probes.register_probe('T', '°C')
         def Tc_probe():
-            return probe_function(self.T_probes_coords, self.domain, self.T)
+            return probe_function(self.T_probes_coords, self.T)
         
         @probes.register_probe('power', 'W')
         def power():
