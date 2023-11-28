@@ -60,6 +60,8 @@ class Polynomial_property(Material_property):
         self.order = len(c)-1
         self.multiplier = multiplier
 
+        self.transform_jac = np.identity(self.n_values)
+
     def set_values(self, c_values):
         self.fem_const.value[:] = np.array(c_values)
 
@@ -105,6 +107,7 @@ class Lagrange_property(Material_property):
 
         self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*(self.order+1)))
         self.update_fem_const()
+        self.transform_jac = self.compute_transform_jac()
 
     def set_values(self, y_values):
         self.y_values[:] = np.array(y_values)
@@ -113,6 +116,19 @@ class Lagrange_property(Material_property):
     def set_value(self, i, y):
         self.y_values[i] = y
         self.update_fem_const()
+
+    def compute_transform_jac(self):
+        # since L(x) = sum(y_i*L_i(x)) this is ok method
+        jac_rows = []
+        for i in range(self.n_values):
+            self.y_values[i] += 1.0
+            self.update_fem_const()
+            row = self.fem_const.value.copy()
+            self.y_values[i] -= 1.0
+            self.update_fem_const()
+            row -= self.fem_const.value.copy()
+            jac_rows.append(row)
+        return np.array(jac_rows)
 
     def get_values(self):
         return self.y_values.copy()

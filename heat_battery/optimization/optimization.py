@@ -6,6 +6,8 @@ import os
 import numpy as np
 from ..simulations import Experiment
 from ..data import Experiment_data
+from .derivatives import AdjointDerivative, Point_wise_lsq_objective
+from scipy.linalg import block_diag
 
 class SteadyStateComparer:
     def __init__(self, sim: Experiment, exp_data: List[Experiment_data]):
@@ -23,7 +25,8 @@ class SteadyStateComparer:
         self.total_error = 0.0
 
     def get_k(self, m=None):
-        m = m or np.arange(len(self.sim.mats))
+        if m is None:
+            m = np.arange(len(self.sim.mats))
         m = np.atleast_1d(m)
         k = []
         for i in m:
@@ -31,13 +34,41 @@ class SteadyStateComparer:
         return np.concatenate(k)
     
     def set_k(self, k, m=None):
-        m = m or np.arange(len(self.sim.mats))
+        if m is None:
+            m = np.arange(len(self.sim.mats))
         m = np.atleast_1d(m)
         start_idx = 0
         for i in m:
             end_idx = start_idx + self.sim.mats[i].k.n_values
             self.sim.mats[i].k.set_values(k[start_idx:end_idx])
-            start_idx = end_idx 
+            start_idx = end_idx
+
+    def generate_gradient_for_material(self, m=None):
+        if m is None:
+            m = np.arange(len(self.sim.mats))
+        m = np.atleast_1d(m)
+
+        controls = [self.sim.mats[i].k.fem_const for i in m]
+        transform_jac = block_diag(*[self.sim.mats[i].k.transform_jac for i in m])
+        points = self.sim.T_probes_coords
+        true_vals = self.exp_data[0].steady_state_mean[self.sim.T_probes_names].to_numpy()
+       
+        J = Point_wise_lsq_objective(points, self.sim.T, controls, true_vals)
+        self.adjoint_derivative = AdjointDerivative(J, controls, self.sim.Fss, self.sim.steady_solver, self.sim.T)
+
+        def objective(k):
+            original_k = self.get_k(m=m)
+            original_T = self.sim.T.x.array.copy()
+
+            self.set_k(k, m=m)
+            g, l = self.adjoint_derivative.compute_gradient()
+            g = transform_jac.dot(g)
+
+            self.set_k(original_k, m=m)
+            self.sim.T.x.array[:] = original_T
+            return g, l
+
+        return objective
 
     def loss_function(self, k, m=None):
         # save original state

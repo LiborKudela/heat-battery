@@ -2,9 +2,10 @@ import numpy as np
 from mpi4py import MPI
 
 class Optimizer:
-    def __init__(self, loss=None, grad=None, k0=None) -> None:
+    def __init__(self, loss=None, grad=None, grad_returns_loss=False, k0=None) -> None:
         self.loss = loss
         self.grad = grad
+        self.grad_returns_loss = grad_returns_loss
 
         # optimizer state
         self.future_update = None
@@ -20,7 +21,7 @@ class Optimizer:
     def set_k(self, k):
         self.k = np.array(k)
 
-    def gradient_finite_differences(self, k, perturbation=1e-7, return_loss=True):
+    def gradient_finite_differences(self, k, perturbation=1e-8, return_loss=True):
         org_loss_value = self.loss(k)
         k_pert = k.copy()
         g = []
@@ -39,7 +40,10 @@ class Optimizer:
         if self.grad is None:
             return self.gradient_finite_differences(k, return_loss=True)
         else:
-            return self.grad(k), self.loss(k)
+            if self.grad_returns_loss:
+                return self.grad(k)
+            else:
+                return self.grad(k), self.loss(k)
 
     def print_state(self):
         if MPI.COMM_WORLD.rank == 0:
@@ -49,7 +53,7 @@ class Optimizer:
                   )
 
 class ADAM(Optimizer):
-    def __init__(self, loss=None, grad=None, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-3):
+    def __init__(self, loss=None, grad=None, grad_returns_loss=False, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-3):
         assert loss is not None, "loss function must be given"
         
         # hyper parameters
@@ -67,7 +71,7 @@ class ADAM(Optimizer):
         self.g_s = 0.0
         self.j = 0
 
-        super().__init__(loss=loss, grad=grad, k0=k0)
+        super().__init__(loss=loss, grad=grad, grad_returns_loss=grad_returns_loss, k0=k0)
 
     def step(self):
         self.j += 1

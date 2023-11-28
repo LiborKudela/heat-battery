@@ -15,21 +15,34 @@ class TestOptimization(unittest.TestCase):
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
         self.m = 4
         self.true_k = self.fitter.get_k(self.m)
+        self.grad = self.fitter.generate_gradient_for_material(m=self.m)
 
-    def test_material_identification(self):
+    def test_material_identification_fd(self):
 
         k0 = self.true_k.copy()
         k0 *= 1.5
         loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
+        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-2)
+
+        for i in range(300):
+            opt.step()
+            opt.alpha *= 0.99
+            opt.print_state()
+
+        self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-02), "Values do not agree")
+
+    def test_material_identification_adjoint(self):
+
+        k0 = self.true_k.copy()
+        k0 *= 1.5
+        loss = self.fitter.generate_loss_for_material(self.m)
+        opt = optimizers.ADAM(loss=loss, grad=self.grad, grad_returns_loss=True, k0=k0, alpha=1e-2)
 
         for i in range(300):
             opt.step()
             opt.alpha *= 0.99
             opt.print_state()
         
-        print(self.true_k)
-        print(opt.get_k())
         self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-02), "Values do not agree")
 
     def tearDown(self) -> None:
