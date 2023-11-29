@@ -106,8 +106,15 @@ class Lagrange_property(Material_property):
         self.multiplier = multiplier
 
         self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*(self.order+1)))
+        self.transform_jac = self.langrange_transform_matrix(self.x_values)
         self.update_fem_const()
-        self.transform_jac = self.compute_transform_jac()
+
+    def langrange_transform_matrix(self, x_vec):
+        n = len(x_vec)
+        columns = [None]*n
+        for i in range(n):
+            columns[i] = x_vec**i
+        return np.linalg.inv(np.column_stack(columns))
 
     def set_values(self, y_values):
         self.y_values[:] = np.array(y_values)
@@ -116,19 +123,6 @@ class Lagrange_property(Material_property):
     def set_value(self, i, y):
         self.y_values[i] = y
         self.update_fem_const()
-
-    def compute_transform_jac(self):
-        # since L(x) = sum(y_i*L_i(x)) this is ok method
-        jac_rows = []
-        for i in range(self.n_values):
-            self.y_values[i] += 1.0
-            self.update_fem_const()
-            row = self.fem_const.value.copy()
-            self.y_values[i] -= 1.0
-            self.update_fem_const()
-            row -= self.fem_const.value.copy()
-            jac_rows.append(row)
-        return np.array(jac_rows)
 
     def get_values(self):
         return self.y_values.copy()
@@ -143,9 +137,7 @@ class Lagrange_property(Material_property):
         return e*self.multiplier
 
     def update_fem_const(self):
-        coefs = np.flip(lagrange(self.x_values, self.y_values).coef)
-        for i, coef in enumerate(coefs):
-            self.fem_const.value[i] = coef
+        self.fem_const.value[:] = self.transform_jac.dot(self.y_values)
 
     def to_polynomial_property(self):
         return Polynomial_property(self.domain, c=self.fem_const.value.copy(), unit=self.unit)

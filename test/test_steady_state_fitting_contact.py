@@ -11,7 +11,8 @@ class TestOptimization(unittest.TestCase):
                 geometry_dir='meshes/experiment_contact', 
                 result_dir='results/experiment_contact_test')
         self.exp = PseudoExperimentalData()
-        self.m = [5]
+        self.m = 5
+        self.adam_max_iter = 300
         Qc = 100
         T_amb = 20
         res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
@@ -25,11 +26,11 @@ class TestOptimization(unittest.TestCase):
         k0 = self.true_k.copy()
         k0 *= 1.1
         loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-3)
+        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-4)
 
-        for i in range(300):
+        for i in range(self.adam_max_iter):
             opt.step()
-            opt.alpha *= 0.995
+            opt.alpha *= 0.999
             opt.print_state()
 
         self.assertTrue(np.isclose(self.true_k, opt.get_k(), atol=1e-4).all(), "FD - Values do not agree")
@@ -39,11 +40,11 @@ class TestOptimization(unittest.TestCase):
         k0 = self.true_k.copy()
         k0 *= 1.1
         loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, grad=self.grad, grad_returns_loss=True, k0=k0, alpha=1e-3)
+        opt = optimizers.ADAM(loss=loss, grad=self.grad, grad_returns_loss=True, k0=k0, alpha=1e-4)
 
-        for i in range(300):
+        for i in range(self.adam_max_iter):
             opt.step()
-            opt.alpha *= 0.995
+            opt.alpha *= 0.999
             opt.print_state()
 
         self.assertTrue(np.isclose(self.true_k, opt.get_k(), atol=1e-4).all(), "ADJOINT - Values do not agree")

@@ -62,7 +62,7 @@ class SteadyStateComparer:
 
             self.set_k(k, m=m)
             g, l = self.adjoint_derivative.compute_gradient()
-            g = transform_jac.dot(g)
+            g = g.dot(transform_jac)
 
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
