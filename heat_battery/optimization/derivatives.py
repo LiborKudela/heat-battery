@@ -33,7 +33,7 @@ class UflObjective:
 
     def assemble_adjoint_rhs_vector(self):
         with self.b.localForm() as b_loc:
-            b_loc.set(0)
+            b_loc.set(0.0)
         dolfinx.fem.petsc.assemble_vector(self.b, self.rhs_form)
         self.b.assemble()
         return self.b
@@ -97,21 +97,19 @@ class Point_wise_lsq_objective:
                 self.sensitivities.append(s)
                 self.true_values_map.append(i)
     
-    def assemble_adjoint_rhs_vector(self, true_values=None):
-        b = self.b.vector
-        true_values = true_values or self.true_values
-        with b.localForm() as b_loc:
+    def assemble_adjoint_rhs_vector(self):
+        with self.b.vector.localForm() as b_loc:
             b_loc.set(0)
         for i in range(len(self.points)):
             # contribution to dJdu of single point
-            value = -2*(self.f.eval(self.points[i], self.cells[i])-true_values[self.true_values_map[i]])
-            b[self.dofs[i]] += self.sensitivities[i]*value
-        return b
+            value = -2*(self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])
+            self.b.x.array[self.dofs[i]] += self.sensitivities[i]*value
+        return self.b.vector
 
     def eval_points(self):
         values = []
         for i in range(len(self.points)):
-            values.append(self.f.eval(self.points[i], self.cells[i]))
+            values.append(self.f.eval(self.points[i], self.cells[i])[0])
         return values
     
     def eval_dJdk(self):
@@ -149,7 +147,7 @@ class AdjointDerivative:
         self.adjoint_solver = PETSc.KSP().create(u.function_space.mesh.comm)
         self.adjoint_solver.setOperators(self.A)
         self.adjoint_solver.setType(PETSc.KSP.Type.PREONLY)
-        self.adjoint_solver.setTolerances(atol=1e-6)
+        self.adjoint_solver.setTolerances(atol=1e-16)
         self.adjoint_solver.getPC().setType(PETSc.PC.Type.LU)
 
     def solve_adjoint_problem(self):
@@ -169,18 +167,10 @@ class AdjointDerivative:
         self.lmbda.x.scatter_forward()
         return self.lmbda
 
-    def compute_gradient(self, control_values=None):
-        # set control values
-        if control_values is not None:
-            start_idx = 0
-            for control in self.controls:
-                n = len(control)
-                end_idx = start_idx + n
-                control.value[:] = control_values[start_idx:end_idx]
-                start_idx = end_idx 
+    def compute_gradient(self, *args, **kwargs):
     
-        # solve new solution vector
-        self.forward_solver.solve(self.u)
+        # run forward solve
+        self.forward_solver(*args, **kwargs)
 
         # solve adjoint vector
         self.solve_adjoint_problem()
@@ -190,12 +180,35 @@ class AdjointDerivative:
         for i in range(len(self.dFdk)):
 
             # reassemble adjoint stuff
+            with self.dFdk[i].localForm() as dfdk_loc:
+                dfdk_loc.set(0)
             dolfinx.fem.petsc.assemble_vector(self.dFdk[i], self.dFdk_form[i])
-            #self.dFdk[i].ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.FORWARD)
-
+            self.dFdk[i].ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+            
             # add dFdk*lmbda
             dJdk[i] += self.dFdk[i].dot(self.lmbda.vector)
+            
 
         J_value = self.J.evaluate()
 
         return dJdk, J_value
+    
+def taylor_test(loss, grad, k0, p=1e-3, n=5):
+        g0 = grad(k0)
+        l0 = loss(k0)
+        reminder = []
+        perturbance = []
+        for i in range(0, n):
+            l1 = loss(k0+p)
+            reminder.append(l1 - l0 - np.sum(g0*p))
+            perturbance.append(p)
+            p /= 2
+        conv_rate = convergence_rates(reminder, perturbance)
+        return reminder, perturbance, conv_rate
+
+def convergence_rates(r, p):
+    cr = []
+    for i in range(1, len(p)):
+        cr.append(np.log(r[i] / r[i - 1])
+                 / np.log(p[i] / p[i - 1]))
+    return cr

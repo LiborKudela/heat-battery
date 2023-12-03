@@ -51,19 +51,28 @@ class SteadyStateComparer:
         controls = [self.sim.mats[i].k.fem_const for i in m]
         transform_jac = block_diag(*[self.sim.mats[i].k.transform_jac for i in m])
         points = self.sim.T_probes_coords
-        true_vals = self.exp_data[0].steady_state_mean[self.sim.T_probes_names].to_numpy()
+        true_vals = None
        
         J = Point_wise_lsq_objective(points, self.sim.T, controls, true_vals)
-        self.adjoint_derivative = AdjointDerivative(J, controls, self.sim.Fss, self.sim.steady_solver, self.sim.T)
+        self.adjoint_derivative = AdjointDerivative(J, controls, self.sim.Fss, self.sim.solve_steady, self.sim.T)
 
         def objective(k):
             original_k = self.get_k(m=m)
             original_T = self.sim.T.x.array.copy()
 
             self.set_k(k, m=m)
-            g, l = self.adjoint_derivative.compute_gradient()
-            g = g.dot(transform_jac)
+            g = np.zeros_like(original_k)
+            l = 0.0
+            for exp_data in self.exp_data:
+                T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
+                Qc = exp_data.steady_state_mean['Power [W]']
+                J.true_values = exp_data.steady_state_mean[self.sim.T_probes_names].to_numpy()
+                data = None, dict(Qc=Qc, T_amb=T_amb, save_xdmf=False)
+                res = self.adjoint_derivative.compute_gradient(Qc=Qc, T_amb=T_amb, save_xdmf=False)
+                g += res[0]
+                l += res[1]
 
+            g = g.dot(transform_jac)
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
             return g, l
