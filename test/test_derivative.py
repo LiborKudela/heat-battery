@@ -47,7 +47,6 @@ class TestDerivative(unittest.TestCase):
     
     def test_ufl_objective(self):
         J = ufl.inner(self.u, self.u)*self.dx
-        J_form = dolfinx.fem.form(J)
 
         controls = [self.k]
         Jr = UflObjective(J, self.u, controls)
@@ -61,19 +60,13 @@ class TestDerivative(unittest.TestCase):
         def loss(value):
             self.k.value[:] = value
             self.solver.solve(self.u)
-            l = dolfinx.fem.assemble_scalar(J_form)
-            l = MPI.COMM_WORLD.allreduce(l, op=MPI.SUM)
+            l = Jr.evaluate()
             return l
         
         k0 = np.array([1, 1])
-        #grad(k0)
         r = taylor_test(loss, grad, k0)
-        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"First taylor test failed - Convergence rate: {r[2]}")
+        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"Taylor test failed - Convergence rate: {r[2]}")
 
-        k0 = np.array([1, 1])
-        r = taylor_test(loss, grad, k0)
-        print(r)
-        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"Seccond taylor test failed - Convergenge rate: {r[2]}")
 
     def test_lsq_objective(self):
         points = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.0]]
@@ -95,11 +88,26 @@ class TestDerivative(unittest.TestCase):
         
         k0 = np.array([1, 1])
         r = taylor_test(loss, grad, k0)
-        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"First taylor test failed - Convergence rate: {r[2]}")
+        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"Taylor test failed - Convergence rate: {r[2]}")
 
-        k0 = np.array([1, 1])
-        r = taylor_test(loss, grad, k0)
-        self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"First taylor test failed - Convergence rate: {r[2]}")
+    def test_optimisation(self):
+        points = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.0]]
+        true_values = [0.0, 0.0]
+        controls = [self.k]
+        Jr = Point_wise_lsq_objective(points, self.u, controls, true_values)
+        adjoint = AdjointDerivative(Jr, controls, self.F, self.forward, self.u, self.bcs)
+
+        # find zero
+        k_value = np.array([1.0, 1.0])
+        alpha = 0.5
+        # Vanila gradient descent
+        for i in range(150):
+            g, l = adjoint.compute_gradient()
+            self.k.value += -alpha*g
+            #if MPI.COMM_WORLD.rank == 0:
+            #    print(l, self.k.value)
+
+        self.assertTrue(np.allclose(self.k.value, 0.0, atol=1e-6), f"k_value should be [0.0, 0.0] not {self.k.value}")
 
     def tearDown(self) -> None:
         pass
