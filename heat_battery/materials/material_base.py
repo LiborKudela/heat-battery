@@ -105,7 +105,7 @@ class Lagrange_property(Material_property):
         self.order = len(x)-1
         self.multiplier = multiplier
 
-        self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*(self.order+1)))
+        self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*self.n_values))
         self.transform_jac = self.langrange_transform_matrix(self.x_values)
         self.update_fem_const()
 
@@ -140,7 +140,7 @@ class Lagrange_property(Material_property):
         self.fem_const.value[:] = self.transform_jac.dot(self.y_values)
 
     def to_polynomial_property(self):
-        return Polynomial_property(self.domain, c=self.fem_const.value.copy(), unit=self.unit)
+        return Polynomial_property(self.domain, c=self.fem_const.value.copy(), unit=self.unit, multiplier=self.multiplier)
         
     def get_figure(self, T_lim=None):
         fig = go.Figure()
