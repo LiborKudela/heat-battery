@@ -15,7 +15,7 @@ class TestDerivative(unittest.TestCase):
     def setUp(self) -> None:
         # mesh and function spaces
         mesh = dolfinx.mesh.create_rectangle(MPI.COMM_WORLD, [[0, 0], [1, 1]], [64, 64], dolfinx.mesh.CellType.triangle)
-        V = dolfinx.fem.FunctionSpace(mesh, ("CG", 1)) # solution space
+        V = dolfinx.fem.FunctionSpace(mesh, ("P", 1)) # solution space
         self.u = dolfinx.fem.Function(V)  # solution trial
         v = ufl.TestFunction(V)  # solution test
 
@@ -72,6 +72,7 @@ class TestDerivative(unittest.TestCase):
 
         k0 = np.array([1, 1])
         r = taylor_test(loss, grad, k0)
+        print(r)
         self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"Seccond taylor test failed - Convergenge rate: {r[2]}")
 
     def test_lsq_objective(self):
