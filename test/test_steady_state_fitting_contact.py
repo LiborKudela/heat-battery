@@ -11,7 +11,7 @@ class TestOptimization(unittest.TestCase):
                 geometry_dir='meshes/experiment_contact', 
                 result_dir='results/experiment_contact_test')
         self.exp = PseudoExperimentalData()
-        self.m = 5
+        self.m = 6
         self.adam_max_iter = 300
         Qc = 100
         T_amb = 20

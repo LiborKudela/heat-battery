@@ -13,7 +13,7 @@ class TestOptimization(unittest.TestCase):
         res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
         self.exp.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
-        self.m = 4
+        self.m = 5
         self.true_k = self.fitter.get_k(self.m)
         self.grad = self.fitter.generate_gradient_for_material(m=self.m)
 

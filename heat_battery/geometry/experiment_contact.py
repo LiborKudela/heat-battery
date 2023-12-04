@@ -40,9 +40,9 @@ def build_geometry(
         h_t=0.2485,          # vyska horni casti (m)
         h_d=0.067,           # vyska nasunuti (m)
         h_c=0.217,           # delka stopky patrony (m)
-        h_c_heated=0.198,    # delka ohrivane casti patrony (m)
+        h_c_heated=0.191,    # delka ohrivane casti patrony (m)
         h_e=0.075,           # vyska spodni casti po dno (m)
-        h_unfill=0.021,    # vyska nezaplnena piskem (m)
+        h_unfill=0.019,      # vyska nezaplnena piskem (m)
         d_c=0.014,           # prumer partony (m)
         d_cG=0.021,          # prumer zavitu partony (m)
         d_c_bolt=0.024,      # prumer matice partony (m)
@@ -156,20 +156,22 @@ def build_geometry(
 
         # mark subdomains
         gmsh.model.addPhysicalGroup(dim, [f_tags[0][1], f_tags[5][1]], 1, 'steel')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1], f_tags[2][1]], 2, 'insulation')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 3, 'cartridge_unheated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 4, 'cartridge_heated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[7][1]], 5, 'sand')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[6][1]], 6, 'cartridge_contact')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1]], 2, 'insulation')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[2][1]], 3, 'insulation bottom')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 4, 'cartridge_unheated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 5, 'cartridge_heated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[7][1]], 6, 'sand')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[6][1]], 7, 'cartridge_contact')
         
-        mats = {
-            materials.Steel04: 'Steel parts', 
-            materials.Standard_insulation: 'Insulation',
-            materials.Cartridge_unheated: 'Unheated part of cartridge',  
-            materials.Cartridge_heated: 'Heated part of cartridge', 
-            materials.SandTheory: 'Sand',
-            materials.Contact_sand: 'Contact_sand',
-        }
+        mats = [
+            (materials.Steel04, 'Steel parts'),                           #1
+            (materials.Standard_insulation, 'Insulation'),                #2
+            (materials.Standard_insulation, 'Insulation bottom'),         #3
+            (materials.Cartridge_unheated, 'Unheated part of cartridge'), #4 
+            (materials.Cartridge_heated, 'Heated part of cartridge'),     #5
+            (materials.SandTheory, 'Sand'),                               #6
+            (materials.Contact_sand, 'Contact_sand'),                     #7
+        ]
 
         # mark surfaces
         if dim == 3:
@@ -212,7 +214,7 @@ def build_geometry(
             [r_c+0.022, 0.0, h_ref-2*0.06],[r_c+2*0.022, 0.0, h_ref-2*0.06],[r_c+3*0.022, 0.0, h_ref-2*0.06], # radial mid sensors
             [r_c+0.022, 0.0, h_ref-3*0.06],[r_c+2*0.022, 0.0, h_ref-3*0.06],[r_c+3*0.022, 0.0, h_ref-3*0.06], # radial bottom sensors
             [r_c, 0.0, h_ref-0.054],[r_c, 0.0, h_ref-2*0.054],[r_c, 0.0, h_ref-3*0.054], # cartridge surface
-            [r_outer_t, 0.0, h_ref-0.1],[r_outer_t, 0.0, h_ref-2*0.06],[r_outer_t, 0.0, h_ref-3*0.06], # outer surface sensors
+            [r_outer_t, 0.0, 0.065],[r_outer_t, 0.0, 0.065],[r_outer_t, 0.0, 0.065], # outer surface sensors
         ]
 
         probes_names = [
@@ -234,7 +236,7 @@ def build_geometry(
             'materials':mats,
             'jac_f':jac_f,
             'outer_surface_index':1,
-            'cartridge_heated_index':4}
+            'cartridge_heated_index':5}
             
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)

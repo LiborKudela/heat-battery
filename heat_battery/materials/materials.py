@@ -15,7 +15,7 @@ class Steel04(Material):
 class Cartridge_heated(Material):
     def __init__(self, domain, name="Cartridge_heated"):
         super().__init__(h0_T_ref = 20, 
-                         k = Lagrange_property(domain, [20], [2.0], PropertyUnits.k),
+                         k = Lagrange_property(domain, [20, 1000], [2.0, 2.0], PropertyUnits.k),
                          rho = Lagrange_property(domain, [20, 1000], [7850, 7850], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [20, 1000], [450, 450], PropertyUnits.cp), 
                          name=name)
@@ -29,6 +29,14 @@ class Cartridge_unheated(Material):
                          name=name)
 
 class Standard_insulation(Material):
+    def __init__(self, domain, name="Standard_insulation"):
+        super().__init__(h0_T_ref = 20,  
+                         k = Lagrange_property(domain, [20, 1000], [0.04, 0.06], PropertyUnits.k), 
+                         rho = Lagrange_property(domain, [20, 1000], [40.0, 40.0], PropertyUnits.rho),
+                         cp = Lagrange_property(domain, [20, 1000], [1200, 1200], PropertyUnits.cp), 
+                         name=name)
+        
+class Standard_insulation_2(Material):
     def __init__(self, domain, name="Standard_insulation"):
         super().__init__(h0_T_ref = 20,  
                          k = Lagrange_property(domain, [20, 1000], [0.04, 0.06], PropertyUnits.k), 

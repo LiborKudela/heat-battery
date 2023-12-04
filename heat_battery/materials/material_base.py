@@ -176,12 +176,12 @@ class Material():
         return e*self.cp.multiplier
 
 class MaterialsSet():
-    def __init__(self, domain, mat_dict):
-        self.mat_dict = mat_dict
-        self.mats = self.construct_materials(domain, mat_dict)
+    def __init__(self, domain, mat_list):
+        self.mat_dict = mat_list
+        self.mats = self.construct_materials(domain, mat_list)
 
     def construct_materials(self, domain, mat_dict) -> List[Material]:
-        return [constructor(domain, name=name) for constructor, name in mat_dict.items()]
+        return [constructor(domain, name=name) for constructor, name in mat_dict]
 
     def __getitem__(self, i):
         return self.mats[i]

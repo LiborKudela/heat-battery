@@ -151,18 +151,20 @@ def build_geometry(
 
         # mark subdomains
         gmsh.model.addPhysicalGroup(dim, [f_tags[0][1], f_tags[6][1]], 1, 'steel')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1], f_tags[2][1]], 2, 'insulation')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 3, 'cartridge_unheated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[5][1]], 4, 'cartridge_heated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 5, 'sand')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1]], 2, 'insulation')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[2][1]], 3, 'insulation bottom')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 4, 'cartridge_unheated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[5][1]], 5, 'cartridge_heated')
+        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 6, 'sand')
 
-        mats = {
-            materials.Steel04: 'Steel parts', 
-            materials.Standard_insulation: 'Insulation',
-            materials.Cartridge_unheated: 'Unheated part of cartridge',  
-            materials.Cartridge_heated: 'Heated part of cartridge', 
-            materials.SandTheory: 'Sand',
-        }
+        mats = [
+            (materials.Steel04, 'Steel parts'), 
+            (materials.Standard_insulation, 'Insulation'),
+            (materials.Standard_insulation, 'Insulation bottom'),
+            (materials.Cartridge_unheated, 'Unheated part of cartridge'),  
+            (materials.Cartridge_heated, 'Heated part of cartridge'), 
+            (materials.SandTheory, 'Sand'),
+        ]
 
         # mark surfaces
         if dim == 3:
@@ -226,7 +228,7 @@ def build_geometry(
             'materials':mats,
             'jac_f':jac_f,
             'outer_surface_index':1,
-            'cartridge_heated_index':4}
+            'cartridge_heated_index':5}
             
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)
