@@ -344,7 +344,8 @@ class Experiment():
         T_min = self.domain.comm.allreduce((T_min), op=MPI.MIN)
         return T_min, T_max
     
-    def get_temperature_density(self, T=None, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+    def get_temperature_spectrum(self, T=None, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+        #TODO: find more efficient method for calculationg this
         'This method must run on all rank to work properly'
         assert isinstance(cell_tag, int), "cell_tag must be integer"
         if T is not None:
@@ -361,7 +362,7 @@ class Experiment():
         for i in range(len(T_hat)):
             self.T_hat.value = T_hat[i]
             c_value = fem.assemble_scalar(psi)
-            c_value = self.domain.comm.allreduce(c_value, op=MPI.SUM)
+            c_value = self.domain.comm.allreduce(c_value, op=MPI.SUM) # ouch
             c[i] = c_value
         if T is not None:
             self.T.x.array[:] = T_original
@@ -381,25 +382,25 @@ class Experiment():
                 figs[-1].update_layout(title=dict(text=self.mats[_m].name, x=0.5))
 
             if include_density:
-                self.add_temperature_density_trace(figs[i], m=_m, T=T)
+                self.add_temperature_spectrum_trace(figs[i], m=_m, T=T)
 
         return figs
 
-    def add_temperature_density_trace(self, fig, m=None, T=None):
+    def add_temperature_spectrum_trace(self, fig, m=None, T=None):
         '''This runs on all ranks, but mutates the fig only at rank=0'''
         T = T or [self.T]
         T = T if isinstance(T, list) else [T]
         for i, _T in enumerate(T):
-            density_res = self.get_temperature_density(T=_T, cell_tag=m+1)
+            density_res = self.get_temperature_spectrum(T=_T, cell_tag=m+1)
             if MPI.COMM_WORLD.rank == 0:
                 fig.add_trace(go.Scatter(x=density_res[0],
                                         y=density_res[1], 
                                         mode='lines', 
-                                        name=f"T density ({i})", 
+                                        name=f"T spectrum ({i})", 
                                         yaxis='y2'))
                 fig.update_layout(     
                     yaxis2=dict(
-                        title="Temperature density [-]",
+                        title="Temperature spectrum [-]",
                         overlaying="y",
                         side="right"))
 

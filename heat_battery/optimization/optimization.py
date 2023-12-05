@@ -43,7 +43,7 @@ class SteadyStateComparer:
             self.sim.mats[i].k.set_values(k[start_idx:end_idx])
             start_idx = end_idx
 
-    def generate_gradient_for_material(self, m=None):
+    def generate_gradient_for_material(self, m=None, batch_size=None):
         if m is None:
             m = np.arange(len(self.sim.mats))
         m = np.atleast_1d(m)
@@ -63,16 +63,27 @@ class SteadyStateComparer:
             self.set_k(k, m=m)
             g = np.zeros_like(original_k)
             l = 0.0
-            for exp_data in self.exp_data:
+
+            # select batch
+            if batch_size is not None:
+                idx_batch = np.random.choice(len(self.exp_data), size=batch_size, replace=False)
+                idx_batch = MPI.COMM_WORLD.bcast(idx_batch)
+            else:
+                idx_batch = np.arange(len(self.exp_data))
+            #idx_batch.sort()
+            #idx_batch = np.flip(idx_batch)
+
+            for i in idx_batch:
+                exp_data = self.exp_data[i]
                 T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
                 Qc = exp_data.steady_state_mean['Power [W]']
                 J.true_values = exp_data.steady_state_mean[self.sim.T_probes_names].to_numpy()
                 data = None, dict(Qc=Qc, T_amb=T_amb, save_xdmf=False)
                 res = self.adjoint_derivative.compute_gradient(Qc=Qc, T_amb=T_amb, save_xdmf=False)
-                g += res[0]
+                g += res[0].dot(transform_jac)
                 l += res[1]
 
-            g = g.dot(transform_jac)
+            g = g
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
             return g, l
