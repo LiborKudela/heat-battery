@@ -38,6 +38,9 @@ class Visualizer():
         #server
         self.update_data_status = 1
 
+        #TODO: add reference counter of opened client pages 
+        # so we can avoid unnecessary server data updates
+
     @on_master
     def build_app(self):
         '''Dash app needs to exist only on rank 0'''
@@ -200,4 +203,4 @@ class Visualizer():
             dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'breathing'},'n_intervals'),  
         )
         def send_icon(n_intervals):
-            return self.breathing_icon
+            return self.breathing_icon#

@@ -55,7 +55,7 @@ def build_geometry(
         t_w_in_t = 0.0006,   # tloustka horni vnitrni steny (m)
         t_w_out_t = 0.0005,  # tloustka horni vnejsi steny (m)
         t_i_b=0.029,         # tloustka izolace na spodni casti (m)
-        t_i_t=0.01,          # tloustka izolace na horni casti (m)
+        t_i_t=0.005,          # tloustka izolace na horni casti (m)
         t_tp = 0.003,        # tloustka horni desky (m)
         mesh_size_max = 0.01,    # priblizna max velikost elemenu (m)
         mesh_size_min = 0.001,   # priblizna min velikost elemenu (m)

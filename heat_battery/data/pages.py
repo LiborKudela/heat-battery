@@ -167,7 +167,7 @@ class VtkMeshPage(GridLayoutPage):
         grid_items = []
         for i, grid_data in enumerate(self.data):
             mesh_state = to_mesh_state(grid_data, 'T')
-            color_range = [20, 600]
+            color_range = [20, 800]
             vtk_content = dash_vtk.View(
                 [
                     dash_vtk.GeometryRepresentation(

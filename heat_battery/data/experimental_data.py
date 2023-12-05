@@ -58,13 +58,17 @@ class Experiment_data():
         for item in self.io_stats.items():
             print(item)
 
-    def detect_steady_state(self, start='2023-10-13 15:00', end='2023-10-13 17:00'):
+    def detect_steady_state(self, start='2023-10-13 03:00', end='2023-10-13 06:00'):
         #TODO: make this automatic
         self.steady_state_start = start
         self.steady_state_end = end
         self.steady_state_data = self.df[(self.df.index > start) & (self.df.index < end)]
         self.steady_state_mean = self.steady_state_data.mean().rename("Experiment Mean")
         self.steady_state_std = self.steady_state_data.std().rename("Experiment Std")
+
+    def auto_dectect_steady_state(self):
+        data = self.df - self.df.iloc[0]
+        return data
 
     @functools.cache
     def data_series_plot(self):
@@ -76,6 +80,11 @@ class Experiment_data():
         fig.add_bar(x=self.steady_state_mean.index, y=self.steady_state_mean.values, name='Experiment')
         return fig
     
+    @functools.cache
+    def plot_steady_series(self):
+        fig = go.Figure()
+        fig.add_trace(px.Scatter(self.steady_state_data))
+        return fig
 
 class PseudoExperimentalData():
     def __init__(self) -> None:

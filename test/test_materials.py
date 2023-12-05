@@ -27,3 +27,6 @@ class TestMaterialAPI(unittest.TestCase):
         #assert it did change correctly
         self.assertTrue(np.allclose(k0, k - 1.0, atol=1e-6))
         self.assertTrue(np.allclose(k0_femconst, k_femconst - 1.0, atol=1e-6))
+
+    #TODO add test for material conversion lagrange to polynomial
+    #TODO add test for material conversion polynomial to lagrange

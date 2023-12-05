@@ -188,7 +188,6 @@ class AdjointDerivative:
             # add dFdk*lmbda
             dJdk[i] += self.dFdk[i].dot(self.lmbda.vector)
             
-
         J_value = self.J.evaluate()
 
         return dJdk, J_value

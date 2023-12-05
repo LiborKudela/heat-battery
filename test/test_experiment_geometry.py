@@ -10,13 +10,13 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "Dummy failed")
 
     def test_2d_experiment(self):
-        _max=0.01
+        _max=0.005
         _min=0.001
         build_without_contact(mesh_size_max=_max, mesh_size_min=_min, dim=2)
         self.assertTrue(True, "2D Geometry Experiment 1 Failed to generate")
 
     def test_2d_experiment_contact(self):
-        _max=0.01
+        _max=0.005
         _min=0.001
         build_with_contact(mesh_size_max=_max, mesh_size_min=_min, dim=2)
         self.assertTrue(True, "2D Geometry Experiment 1 Failed to generate")

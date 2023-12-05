@@ -31,7 +31,7 @@ class Cartridge_unheated(Material):
 class Standard_insulation(Material):
     def __init__(self, domain, name="Standard_insulation"):
         super().__init__(h0_T_ref = 20,  
-                         k = Lagrange_property(domain, [20, 1000], [0.04, 0.06], PropertyUnits.k), 
+                         k = Lagrange_property(domain, [20, 1000], [0.04, 0.04], PropertyUnits.k), 
                          rho = Lagrange_property(domain, [20, 1000], [40.0, 40.0], PropertyUnits.rho),
                          cp = Lagrange_property(domain, [20, 1000], [1200, 1200], PropertyUnits.cp), 
                          name=name)
