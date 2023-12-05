@@ -31,6 +31,8 @@ class Experiment_data():
 
         self.reduce : int = 1
         self.figure = px.line(self.df, y=self.T_names)
+
+    #TODO: create cache for this so it does not have to load and process every time
     
     def detect_steady_state(self, start='2023-10-13 15:00', end='2023-10-13 17:00'):
         #TODO: make this automatic

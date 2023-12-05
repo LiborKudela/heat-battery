@@ -15,6 +15,8 @@ class Optimizer:
         if k0 is not None:
             self.k = k0.copy()
 
+        #TODO: add state tracker for visualization
+
     def get_k(self):
         return self.k.copy()
 
