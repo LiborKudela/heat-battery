@@ -31,14 +31,3 @@ def convert_to_legacy_fenics(msh_path):
     meshio.write(meshio_boundaries_path, triangle_data)
 
     print("legacy fenics mesh written")
-
-def save_data(filepath, data, only_root=True):
-    if not only_root or MPI.COMM_WORLD.rank == 0:
-        with open(filepath, 'wb') as fp:
-            cloudpickle.dump(data, fp)
-    return None
-
-def load_data(filepath):
-    with open(filepath, 'rb') as fp:
-        data = cloudpickle.load(fp)
-    return data

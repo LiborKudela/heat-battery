@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 
 from .utilities import Probe_writer, probe_function
 from ..materials import MaterialsSet
-from ..geometry.utilities import load_data
+from ..utilities import load_data
 
 class Experiment():
     def __init__(self, geometry_dir='meshes/experiment', 

@@ -1,25 +1,50 @@
+from mpi4py import MPI
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
+import os
+import time
+import functools
 
 class Experiment_data():
-    def __init__(self, csv_path, decimal=',', delimiter=';') -> None:
-        self.path = csv_path
-        
-        self.df = pd.read_csv(
-            self.path, 
-            delimiter=delimiter, 
-            encoding='unicode_escape', 
-            decimal=decimal)
-    
-        self.df['Time']=pd.to_datetime(self.df['Time'], format='%d.%m.%y %H:%M:%S,%f')
-        self.df.set_index('Time', inplace=True)
-        self.df.sort_index(inplace=True)
-        self.df['total_seconds'] = (self.df.index - self.df.index[0]).total_seconds()
-        self.df['dt'] = self.df['total_seconds'].diff()
-        self.df['Power [W]'] = self.df['Power [W]'].clip(0, np.inf)
+    def __init__(self, csv_path, decimal=',', delimiter=';', cache=False) -> None:
+        self.full_path = csv_path
+        self.dir_path, self.file_name = os.path.split(self.full_path)
+        self.cache_dir = os.path.join(self.dir_path + "/.cache")
+        self.cache_full_path = os.path.join(self.cache_dir, self.file_name + ".feather")
+
+        self.io_stats = {'file': self.file_name}
+
+        # load csv and measur load time
+        if os.path.exists(self.cache_full_path):
+            _start = time.time()
+            self.df = pd.read_feather(self.cache_full_path)
+            self.io_stats["Series load/processing"] = time.time() - _start
+            self.io_stats["Series load method"] = "Cached feather"
+        else:
+            _start = time.time()
+            self.df = pd.read_csv(
+                self.full_path, 
+                delimiter=delimiter, 
+                encoding='unicode_escape', 
+                decimal=decimal)
+            self.df['Time']=pd.to_datetime(self.df['Time'], format='%d.%m.%y %H:%M:%S,%f')
+            self.df.set_index('Time', inplace=True)
+            self.df.sort_index(inplace=True)
+            self.df['total_seconds'] = (self.df.index - self.df.index[0]).total_seconds()
+            self.df['dt'] = self.df['total_seconds'].diff()
+            self.df['Power [W]'] = self.df['Power [W]'].clip(0, np.inf)
+            self.io_stats["Series load/processing"] = time.time() - _start
+            self.io_stats["Series load method"] = "csv processing"
+            if MPI.COMM_WORLD.rank == 0:
+                os.makedirs(self.cache_dir, exist_ok=True)
+                self.df.to_feather(self.cache_full_path)
+
+        # detect steady states in the data series
+        _start = time.time()
         self.detect_steady_state()
+        self.io_stats["Steady state processing"] = time.time() - _start
 
         self.T_names = [
             '1 - Top [°C]', '2 - Top [°C]', '3 - Top [°C]', '4 - Middle [°C]',
@@ -29,11 +54,10 @@ class Experiment_data():
             '14 - II. Cover [°C]', '15 - III. Cover [°C]', '16 - Ambient [°C]',
         ]
 
-        self.reduce : int = 1
-        self.figure = px.line(self.df, y=self.T_names)
+    def print_io_stats(self):
+        for item in self.io_stats.items():
+            print(item)
 
-    #TODO: create cache for this so it does not have to load and process every time
-    
     def detect_steady_state(self, start='2023-10-13 15:00', end='2023-10-13 17:00'):
         #TODO: make this automatic
         self.steady_state_start = start
@@ -42,9 +66,11 @@ class Experiment_data():
         self.steady_state_mean = self.steady_state_data.mean().rename("Experiment Mean")
         self.steady_state_std = self.steady_state_data.std().rename("Experiment Std")
 
+    @functools.cache
     def data_series_plot(self):
-        return self.figure
+        return px.line(self.df, y=self.T_names)
 
+    @functools.cache
     def plot_steady_data(self):
         fig = go.Figure()
         fig.add_bar(x=self.steady_state_mean.index, y=self.steady_state_mean.values, name='Experiment')

@@ -3,7 +3,8 @@ from math import pi
 import gmsh
 import os
 from .. import materials
-from .utilities import convert_to_legacy_fenics, save_data
+from .utilities import convert_to_legacy_fenics
+from ..utilities import save_data
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
