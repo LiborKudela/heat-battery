@@ -12,7 +12,7 @@ import dolfinx.fem.petsc
 import dolfinx.nls.petsc
 import plotly.graph_objects as go
 
-from .utilities import Probe_writer, probe_function
+from .utilities import Probe_writer, FunctionSampler
 from ..materials import MaterialsSet
 from ..utilities import load_data
 
@@ -321,9 +321,10 @@ class Experiment():
             q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
             return q_flow
         
+        sampler = FunctionSampler(self.T_probes_coords, self.domain)
         @probes.register_probe('T', '°C')
         def Tc_probe():
-            return probe_function(self.T_probes_coords, self.T)
+            return sampler.eval(self.T)
         
         @probes.register_probe('power', 'W')
         def power():

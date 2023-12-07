@@ -4,33 +4,36 @@ from mpi4py import MPI
 from dolfinx import geometry
 import numpy as np
 
-def probe_function(p_coords, f):
-    domain = f.function_space.mesh
-    points = np.array(p_coords)
-    bb_tree = geometry.bb_tree(domain, domain.topology.dim)
-    cell_candidates = geometry.compute_collisions_points(bb_tree, points)
-    colliding_cells = geometry.compute_colliding_cells(domain, cell_candidates, points)
-    cells = []
-    points_on_proc = []
-    idx = []
-    for i, point in enumerate(points):
-        if len(colliding_cells.links(i)) > 0:
-            points_on_proc.append(point)
-            cells.append(colliding_cells.links(i)[0])
-            idx.append(i)
-    points_on_proc = np.array(points_on_proc, dtype=np.float64)
-    idx = np.array(idx, dtype=int)
-    fv = f.eval(points_on_proc, cells)
-    fv = domain.comm.allgather(fv)
-    idx = domain.comm.allgather(idx)
-    fv = np.vstack(fv)
-    idx = np.concatenate(idx)
-    sorted_idx_arg = np.argsort(idx) # sort ascending (might contain duplicates)
-    fv = fv[sorted_idx_arg]    # reorder values to original order of the p_coords
-    idx = idx[sorted_idx_arg]  # indexes to original order (duplicates still in)
-    _, u_idx = np.unique(idx, return_index=True) # create idexing for unique values
-    fv = fv[u_idx] # remove duplicates from values
-    return fv.flatten()
+class FunctionSampler:
+    def __init__(self, p_coords, domain):
+        self.domain = domain
+        points = np.array(p_coords)
+        bb_tree = geometry.bb_tree(self.domain, self.domain.topology.dim)
+        cell_candidates = geometry.compute_collisions_points(bb_tree, points)
+        colliding_cells = geometry.compute_colliding_cells(self.domain, cell_candidates, points)
+        self.cells = []
+        self.points_on_proc = []
+        self.idx_on_proc = []
+        for i, point in enumerate(points):
+            if len(colliding_cells.links(i)) > 0:
+                self.points_on_proc.append(point)
+                self.cells.append(colliding_cells.links(i)[0])
+                self.idx_on_proc.append(i)
+        self.points_on_proc = np.array(self.points_on_proc, dtype=np.float64)
+        self.idx_on_proc = np.array(self.idx_on_proc, dtype=int)
+
+    def eval(self, f):
+        fv = f.eval(self.points_on_proc, self.cells)
+        fv = self.domain.comm.allgather(fv)
+        idx = self.domain.comm.allgather(self.idx_on_proc)
+        fv = np.vstack(fv)
+        idx = np.concatenate(idx)
+        sorted_idx_arg = np.argsort(idx) # sort ascending (might contain duplicates)
+        fv = fv[sorted_idx_arg]    # reorder values to original order of the p_coords
+        idx = idx[sorted_idx_arg]  # indexes to original order (duplicates still in)
+        _, u_idx = np.unique(idx, return_index=True) # create idexing for unique values
+        fv = fv[u_idx] # remove duplicates from values
+        return fv.flatten()
 
 class Probe_writer:
     def __init__(self, file_path, flush=True):

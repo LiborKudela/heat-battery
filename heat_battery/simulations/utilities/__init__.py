@@ -1,1 +1,1 @@
-from .probing import Probe_writer, probe_function
+from .probing import Probe_writer, FunctionSampler
