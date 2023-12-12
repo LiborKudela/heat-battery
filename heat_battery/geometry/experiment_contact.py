@@ -146,6 +146,8 @@ def build_geometry(
         cartridge_bolt = add_cylinder(h0_bolt, h_c_bolt, r_c_bolt, dim=dim, angle=angle)
         cartridge_unheated = gmsh.model.occ.fuse([(dim, cartridge_unheated)], [(dim, cartridge_thread), (dim, cartridge_bolt)])
 
+        #TODO: find a way to use surface normal extrusions so it is more automatic
+        #      and can be made for other surfacece easily
         dr = 0.0001
         contact_enlarged = add_cylinder(h0_heater-dr, h_c_heated+dr, r_c+dr, dim=dim, angle=angle)
         contact_hole = add_cylinder(h0_heater, h_c_heated, r_c, dim=dim, angle=angle)

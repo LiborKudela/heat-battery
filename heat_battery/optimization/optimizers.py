@@ -99,5 +99,8 @@ class ADAM(Optimizer):
                   f"g_norm: {self.g_norm}",
                   f"alpha: {self.alpha}",
                   )
-
+            
+# TODO: Provide Newton solver
+# TODO: Provide Broyden–Fletcher–Goldfarb–Shanno algorithm
+# TODO: Provide L-BFGS
 

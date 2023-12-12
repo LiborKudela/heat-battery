@@ -31,13 +31,15 @@ class Visualizer():
         homepage = HomePage()
         self.register_page(homepage)
      
-        # trigers
-        self.figure_interval = 1000
-        self.breathing_interval = 5000
+        # trigers at client side
+        self.figure_interval = 1000    # checks for data updates
+        self.breathing_interval = 5000 # checks for server connection
 
         #server
         self.update_data_status = 1
 
+        #TODO: add client counter
+        
         #TODO: add reference counter of opened client pages 
         # so we can avoid unnecessary server data updates
 
