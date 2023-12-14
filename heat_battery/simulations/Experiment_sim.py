@@ -19,7 +19,7 @@ from ..utilities import load_data
 class Experiment():
     def __init__(self, geometry_dir='meshes/experiment', 
                 result_dir='results/experiment_test', 
-                dim=3, 
+                dim=2, 
                 T0=20,
                 T_guess=None, 
                 Qc=100,
@@ -210,16 +210,20 @@ class Experiment():
 
         return pd.Series(data=self.probes.get_value('T'), index=self.T_probes_names, name="Simulation")
 
-    def solve_unsteady(self, Qc_t=None, T_amb_t=None, t_max=100):
+    def solve_unsteady(self, Qc_t=None, T_amb_t=None, T0=None, t_max=100, verbose=False, save_xdmf=True, call_back=None, call_back_each=100):
         self.t = 0
+        prev_callback_t = 0.0
         self.t_n = self.t
         self.T_amb.value = T_amb_t(self.t)
         self.q.value = Qc_t(self.t)/self.Vc
+        if T0 is not None:
+            self.T.x.array[:] = T0
+            self.T_n.x.array[:] = T0
         t_start = time.time()
         next_xdmf_t = 0.0
         self.probes.evaluate_probes()
-        self.probes.write_probes()
-        self.probes.print()
+        if verbose:
+            self.probes.print()
         self.t_max = t_max
         while self.t < self.t_max:
             i_start = time.time()
@@ -251,7 +255,7 @@ class Experiment():
                 self.probes.evaluate_probes()
                 success = True  
 
-            while next_xdmf_t <= self.t:
+            while next_xdmf_t <= self.t and save_xdmf:
                 denom_dt = self.t - self.t_n
                 enum_dt = next_xdmf_t - self.t_n
                 self.T_xdmf.x.array[:] = self.T.x.array
@@ -262,14 +266,19 @@ class Experiment():
                 next_xdmf_t += self.dt_xdmf
             MPI.COMM_WORLD.Barrier()
 
+            if self.t > prev_callback_t + call_back_each:
+                call_back()
+                prev_callback_t += call_back_each
+
             self.T_n.x.array[:] = self.T.x.array
             self.t_n = self.t
 
             if MPI.COMM_WORLD.rank == 0:
                 self.elapsed = time.time() - t_start
                 self.ielapsed = time.time() - i_start
-            self.probes.print()
             self.probes.write_probes()
+            if verbose:
+                self.probes.print()
 
     def create_probes(self, probes):
 
