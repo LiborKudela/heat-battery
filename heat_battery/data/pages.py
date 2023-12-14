@@ -160,8 +160,9 @@ class ResampingFigurePage(GridLayoutPage):
             self.data = [self.resampler_wrapper(data)]
 
 class VtkMeshPage(GridLayoutPage):
-    def __init__(self, name, f, *args, **kwargs):
+    def __init__(self, name, f, edges=False, *args, **kwargs):
         super().__init__(name, f, *args, **kwargs)
+        self.edges = edges
 
     def get_grid_items(self):
         grid_items = []
@@ -176,6 +177,7 @@ class VtkMeshPage(GridLayoutPage):
                         ],
                         colorMapPreset="jet",
                         colorDataRange=color_range,
+                        property={"edgeVisibility": self.edges},
                         #showScalarBar=True,
                     ),
                 ],

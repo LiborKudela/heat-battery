@@ -56,7 +56,7 @@ class Optimizer:
 
 class ADAM(Optimizer):
     def __init__(self, loss=None, grad=None, grad_returns_loss=False, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-1):
-        assert loss is not None, "loss function must be given"
+        assert loss is not None or grad_returns_loss, "loss function must be given unless gradient also returns loss"
         
         # hyper parameters
         self.alpha = alpha
@@ -99,6 +99,10 @@ class ADAM(Optimizer):
                   f"g_norm: {self.g_norm}",
                   f"alpha: {self.alpha}",
                   )
+            
+    def print_k(self):
+        if MPI.COMM_WORLD.rank == 0:
+            print(self.k)
             
 # TODO: Provide Newton solver
 # TODO: Provide Broyden–Fletcher–Goldfarb–Shanno algorithm

@@ -22,13 +22,13 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Experiment 1 Failed to generate")
 
     def test_3d_experiment(self):
-        _max=0.01
+        _max=0.005
         _min=0.001
         build_without_contact(mesh_size_max=_max, mesh_size_min=_min, dim=3, symetry_3d="quarter")
         self.assertTrue(True, "3D Geometry Experiment 1 Failed to generate")
 
     def test_3d_experiment_contact(self):
-        _max=0.01
+        _max=0.005
         _min=0.001
         build_with_contact(mesh_size_max=_max, mesh_size_min=_min, dim=3, symetry_3d="quarter")
         self.assertTrue(True, "3D Geometry Experiment 1 Failed to generate")
