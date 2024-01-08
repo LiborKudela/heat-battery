@@ -63,10 +63,10 @@ class Visualizer():
         self.set_callbacks()
 
     @on_master
-    def start_app(self, host='127.0.0.1'):
+    def start_app(self, host='127.0.0.1', port=8050):
         '''The dash server need to run in separate thread so it does not block other stuff'''
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
-        thread = threading.Thread(target = self.app.run_server, daemon=True, kwargs={'host': host})
+        thread = threading.Thread(target = self.app.run_server, daemon=True, kwargs={'host': host, 'port':port})
         thread.start()
 
     def debug_mode(self):
