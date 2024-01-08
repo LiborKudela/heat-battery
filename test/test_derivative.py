@@ -54,8 +54,8 @@ class TestDerivative(unittest.TestCase):
 
         def grad(value):
             self.k.value[:] = value
-            g, l = adjoint.compute_gradient()
-            return g
+            adjoint.forward()
+            return adjoint.compute_gradient()
 
         def loss(value):
             self.k.value[:] = value
@@ -77,8 +77,8 @@ class TestDerivative(unittest.TestCase):
 
         def grad(value):
             self.k.value[:] = value
-            g, l = adjoint.compute_gradient()
-            return g
+            adjoint.forward()
+            return adjoint.compute_gradient()
 
         def loss(value):
             self.k.value[:] = value
@@ -102,7 +102,8 @@ class TestDerivative(unittest.TestCase):
         alpha = 0.5
         # Vanila gradient descent
         for i in range(150):
-            g, l = adjoint.compute_gradient()
+            adjoint.forward()
+            g = adjoint.compute_gradient()
             self.k.value += -alpha*g
             #if MPI.COMM_WORLD.rank == 0:
             #    print(l, self.k.value)

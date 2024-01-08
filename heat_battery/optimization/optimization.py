@@ -54,15 +54,14 @@ class SteadyStateComparer:
         true_vals = None
        
         J = Point_wise_lsq_objective(points, self.sim.T, controls, true_vals)
-        self.adjoint_derivative = AdjointDerivative(J, controls, self.sim.Fss, self.sim.solve_steady, self.sim.T)
+        adjoint_derivative = AdjointDerivative(J, controls, self.sim.Fss, self.sim.solve_steady, self.sim.T)
 
-        def objective(k):
+        def gradient(k):
             original_k = self.get_k(m=m)
             original_T = self.sim.T.x.array.copy()
 
             self.set_k(k, m=m)
             g = np.zeros_like(original_k)
-            l = 0.0
 
             # select batch
             if batch_size is not None:
@@ -70,25 +69,21 @@ class SteadyStateComparer:
                 idx_batch = MPI.COMM_WORLD.bcast(idx_batch)
             else:
                 idx_batch = np.arange(len(self.exp_data))
-            #idx_batch.sort()
-            #idx_batch = np.flip(idx_batch)
 
             for i in idx_batch:
                 exp_data = self.exp_data[i]
                 T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
                 Qc = exp_data.steady_state_mean['Power [W]']
                 J.true_values = exp_data.steady_state_mean[self.sim.T_probes_names].to_numpy()
-                data = None, dict(Qc=Qc, T_amb=T_amb, save_xdmf=False)
-                res = self.adjoint_derivative.compute_gradient(Qc=Qc, T_amb=T_amb, save_xdmf=False)
-                g += res[0].dot(transform_jac)
-                l += res[1]
+                adjoint_derivative.forward(Qc=Qc, T_amb=T_amb, save_xdmf=False)
+                _g = adjoint_derivative.compute_gradient()
+                g += _g.dot(transform_jac)
 
-            g = g
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
-            return g, l
+            return g
 
-        return objective
+        return gradient
 
     def loss_function(self, k, m=None):
         # save original state

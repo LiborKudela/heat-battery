@@ -2,10 +2,9 @@ import numpy as np
 from mpi4py import MPI
 
 class Optimizer:
-    def __init__(self, loss=None, grad=None, grad_returns_loss=False, k0=None) -> None:
+    def __init__(self, loss=None, grad=None, k0=None) -> None:
         self.loss = loss
         self.grad = grad
-        self.grad_returns_loss = grad_returns_loss
 
         # optimizer state
         self.future_update = None
@@ -23,7 +22,7 @@ class Optimizer:
     def set_k(self, k):
         self.k = np.array(k)
 
-    def gradient_finite_differences(self, k, perturbation=1e-8, return_loss=True):
+    def gradient_finite_differences(self, k, perturbation=1e-6):
         org_loss_value = self.loss(k)
         k_pert = k.copy()
         g = []
@@ -33,18 +32,19 @@ class Optimizer:
             k_pert[i] -= perturbation
             g_err = (pert_loss_value-org_loss_value)/perturbation
             g.append(g_err)
-        if return_loss:
-            return np.array(g), org_loss_value
-        else:
-            return np.array(g)
+        return np.array(g), org_loss_value
         
     def objective(self, k):
         if self.grad is None:
-            return self.gradient_finite_differences(k, return_loss=True)
+            # use forward finite differences to obtain grad estimation
+            assert self.loss is not None, "grad, loss or both must be given"
+            return self.gradient_finite_differences(k)
         else:
-            if self.grad_returns_loss:
-                return self.grad(k)
+            if self.loss is None:
+                # if gradient is defined it is enough to run optimisation
+                return self.grad(k), None
             else:
+                # if both grad and loss are given compute both
                 return self.grad(k), self.loss(k)
 
     def print_state(self):
@@ -55,15 +55,13 @@ class Optimizer:
                   )
 
 class ADAM(Optimizer):
-    def __init__(self, loss=None, grad=None, grad_returns_loss=False, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-1):
-        assert loss is not None or grad_returns_loss, "loss function must be given unless gradient also returns loss"
+    def __init__(self, loss=None, grad=None, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-1):
         
         # hyper parameters
         self.alpha = alpha
         self.beta_1 = beta_1
         self.beta_2 = beta_2
         self.eps = eps 
-
 
         self.a_min = k_min or -np.inf
         self.a_max = k_max or np.inf
@@ -73,7 +71,7 @@ class ADAM(Optimizer):
         self.g_s = 0.0
         self.j = 0
 
-        super().__init__(loss=loss, grad=grad, grad_returns_loss=grad_returns_loss, k0=k0)
+        super().__init__(loss=loss, grad=grad, k0=k0)
 
     def step(self):
         self.j += 1

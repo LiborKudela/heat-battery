@@ -36,7 +36,7 @@ class TestOptimization(unittest.TestCase):
         k0 = self.true_k.copy()
         k0 *= 1.5
         loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, grad=self.grad, grad_returns_loss=True, k0=k0, alpha=1e-2)
+        opt = optimizers.ADAM(loss=loss, grad=self.grad, k0=k0, alpha=1e-2)
 
         for i in range(300):
             opt.step()

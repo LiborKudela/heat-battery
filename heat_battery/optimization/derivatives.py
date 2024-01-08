@@ -167,10 +167,13 @@ class AdjointDerivative:
         self.lmbda.x.scatter_forward()
         return self.lmbda
 
-    def compute_gradient(self, *args, **kwargs):
-    
-        # run forward solve
+    def forward(self, *args, **kwargs):
         self.forward_solver(*args, **kwargs)
+    
+    def compute_loss(self):
+        return self.J.evaluate()
+
+    def compute_gradient(self):
 
         # solve adjoint vector
         self.solve_adjoint_problem()
@@ -188,9 +191,7 @@ class AdjointDerivative:
             # add dFdk*lmbda
             dJdk[i] += self.dFdk[i].dot(self.lmbda.vector)
             
-        J_value = self.J.evaluate()
-
-        return dJdk, J_value
+        return dJdk
     
 def taylor_test(loss, grad, k0, p=1e-3, n=5):
         g0 = grad(k0)
