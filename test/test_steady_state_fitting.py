@@ -1,6 +1,7 @@
 from heat_battery.simulations import Experiment
 from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer, optimizers
+from heat_battery.optimization.derivatives import finite_diferences
 import numpy as np
 import unittest
 
@@ -15,35 +16,39 @@ class TestOptimization(unittest.TestCase):
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
         self.m = 5
         self.true_k = self.fitter.get_k(self.m)
-        self.grad = self.fitter.generate_gradient_for_material(m=self.m)
 
     def test_material_identification_fd(self):
 
-        k0 = self.true_k.copy()
-        k0 *= 1.5
+        k = self.true_k.copy()
+        k *= 1.5
         loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, k0=k0, alpha=1e-2)
+        grad = finite_diferences(loss)
+        opt = optimizers.ADAM(alpha=1e-2)
 
         for i in range(300):
-            opt.step()
+            g, l = grad(k)
+            update = opt.step(g)
+            k += update
             opt.alpha *= 0.99
-            opt.print_state()
+            print(l)
 
-        self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-02), "Values do not agree")
+        self.assertTrue(np.allclose(self.true_k, k, atol=1e-02), "Values do not agree")
 
     def test_material_identification_adjoint(self):
 
-        k0 = self.true_k.copy()
-        k0 *= 1.5
-        loss = self.fitter.generate_loss_for_material(self.m)
-        opt = optimizers.ADAM(loss=loss, grad=self.grad, k0=k0, alpha=1e-2)
+        k = self.true_k.copy()
+        k *= 1.5
+        grad = self.fitter.generate_gradient_for_material(self.m)
+        opt = optimizers.ADAM(alpha=1e-2)
 
         for i in range(300):
-            opt.step()
+            g, l = grad(k)
+            update = opt.step(g)
+            k += update
             opt.alpha *= 0.99
-            opt.print_state()
+            print(l)
         
-        self.assertTrue(np.allclose(self.true_k, opt.get_k(), atol=1e-02), "Values do not agree")
+        self.assertTrue(np.allclose(self.true_k, k, atol=1e-02), "Values do not agree")
 
     def tearDown(self) -> None:
         self.sim.close_results()

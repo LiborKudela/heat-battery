@@ -33,7 +33,7 @@ class Experiment():
                 regulation_step=0.01,
                 T_cartridge_max = np.inf,
                 atol=1e-10,
-                rtol=1e-10):
+                rtol=1e-12):
  
         self.geometry_dir=geometry_dir
         self.result_dir = result_dir
@@ -67,7 +67,7 @@ class Experiment():
 
         self.mats = MaterialsSet(self.domain, geometry_ad_data['materials'])
         bc_idx = geometry_ad_data['outer_surface_index']
-        cartridge_index = geometry_ad_data['cartridge_heated_index']
+        cartridge_index = geometry_ad_data['source_term_index']
         self.T_probes_coords = geometry_ad_data['probes_coords']
         self.T_probes_names = geometry_ad_data['probes_names'] 
         x = ufl.SpatialCoordinate(self.domain)

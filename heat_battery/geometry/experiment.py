@@ -229,7 +229,7 @@ def build_geometry(
             'materials':mats,
             'jac_f':jac_f,
             'outer_surface_index':1,
-            'cartridge_heated_index':5}
+            'source_term_index':5}
             
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)

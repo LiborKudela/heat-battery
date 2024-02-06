@@ -8,12 +8,30 @@ from petsc4py import PETSc
 import dolfinx.nls.petsc
 import dolfinx.fem.petsc
 
+from ..simulations.utilities.probing import FunctionSampler
+
 def wrap_constant_controls(controls):
     vars = {}
     for control in controls:
         for i in range(len(control)):
             vars[control[i]] = ufl.variable(control[i])
     return vars
+
+def finite_diferences(f, perturbation=1e-6):
+
+    def compute_gradient(k, perturbation=perturbation):
+        org_loss_value = f(k)
+        k_pert = k.copy()
+        g = []
+        for i in range(len(k)):
+            k_pert[i] += perturbation
+            pert_loss_value = f(k_pert)
+            k_pert[i] -= perturbation
+            g_err = (pert_loss_value-org_loss_value)/perturbation
+            g.append(g_err)
+        return np.array(g), org_loss_value
+
+    return compute_gradient
 
 class UflObjective:
     def __init__(self, J, u, controls):
@@ -102,7 +120,7 @@ class Point_wise_lsq_objective:
             b_loc.set(0)
         for i in range(len(self.points)):
             # contribution to dJdu of single point
-            value = -2*(self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])
+            value = -(self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])
             self.b.x.array[self.dofs[i]] += self.sensitivities[i]*value
         return self.b.vector
 
@@ -117,9 +135,10 @@ class Point_wise_lsq_objective:
         return dJdk
     
     def evaluate(self):
+        ## this might count some points multiple times if point found on multiple ranks
         J_value = 0.0
         for i in range(len(self.points)):
-            J_value += (self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])**2
+            J_value += 0.5*(self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])**2
         J_value = MPI.COMM_WORLD.allreduce(J_value, op=MPI.SUM)
         return J_value
 
@@ -192,6 +211,70 @@ class AdjointDerivative:
             dJdk[i] += self.dFdk[i].dot(self.lmbda.vector)
             
         return dJdk
+
+class ForwardDerivative_dudk:
+    def __init__(self, controls, form, forward_solver, u, bcs=None, p_coords=None):
+        self.form = form
+        self.controls = controls
+        self.forward_solver = forward_solver
+        self.u = u
+        self.bcs = bcs or []
+        self.dudki = u.copy()
+        self.p_coords = p_coords
+
+        self.vars = wrap_constant_controls(self.controls)
+        self.var_form = ufl.replace(self.form, self.vars)
+
+        self.dFdk_form = [fem.form(ufl.diff(self.var_form, var)) for var in self.vars.values()]
+        self.dFdk = [fem.petsc.create_vector(form) for form in self.dFdk_form]
+
+        # adjoint problem solver definition
+        self.lhs = ufl.derivative(self.form, u)
+        self.lhs_form = fem.form(self.lhs)
+        self.A = dolfinx.fem.petsc.create_matrix(self.lhs_form)
+
+        self.grad_solver = PETSc.KSP().create(u.function_space.mesh.comm)
+        self.grad_solver.setOperators(self.A)
+        self.grad_solver.setType(PETSc.KSP.Type.PREONLY)
+        self.grad_solver.setTolerances(atol=1e-16)
+        self.grad_solver.getPC().setType(PETSc.PC.Type.LU)
+
+        if self.p_coords is not None:
+            self.sampler = FunctionSampler(self.p_coords, self.u.function_space.mesh)
+
+    def forward(self, *args, **kwargs):
+        self.forward_solver(*args, **kwargs)
+
+    def compute_jacobian(self):
+
+        # lhs assembly
+        self.A.zeroEntries()
+        dolfinx.fem.petsc.assemble_matrix_mat(self.A, self.lhs_form, bcs=self.bcs)
+        self.A.assemble()
+
+        jac = []
+        for i in range(len(self.dFdk)):
+
+            # assemble rhs vectors
+            with self.dFdk[i].localForm() as dfdk_loc:
+                dfdk_loc.set(0)
+                dolfinx.fem.petsc.assemble_vector(self.dFdk[i], self.dFdk_form[i])
+
+            # dudki solve
+            dolfinx.fem.petsc.apply_lifting(self.dFdk[i], [self.lhs_form], bcs=[self.bcs])
+            self.dFdk[i].ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+            dolfinx.fem.petsc.set_bc(self.dFdk[i], self.bcs)
+
+            self.grad_solver.solve(-self.dFdk[i], self.dudki.vector)
+            self.dudki.x.scatter_forward()
+
+            if self.p_coords is not None:
+                _j = self.sampler.eval(self.dudki)
+                jac.append(_j)
+            else:
+                jac.append(self.dudki.copy())
+
+        return np.vstack(jac)
     
 def taylor_test(loss, grad, k0, p=1e-3, n=5):
         g0 = grad(k0)

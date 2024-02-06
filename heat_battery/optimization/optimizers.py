@@ -2,17 +2,12 @@ import numpy as np
 from mpi4py import MPI
 
 class Optimizer:
-    def __init__(self, loss=None, grad=None, k0=None) -> None:
-        self.loss = loss
-        self.grad = grad
+    def __init__(self) -> None:
 
         # optimizer state
-        self.future_update = None
         self.g_value = None
         self.g_norm = None
         self.loss_value = None
-        if k0 is not None:
-            self.k = k0.copy()
 
         #TODO: add state tracker for visualization
 
@@ -22,40 +17,8 @@ class Optimizer:
     def set_k(self, k):
         self.k = np.array(k)
 
-    def gradient_finite_differences(self, k, perturbation=1e-6):
-        org_loss_value = self.loss(k)
-        k_pert = k.copy()
-        g = []
-        for i in range(len(k)):
-            k_pert[i] += perturbation
-            pert_loss_value = self.loss(k_pert)
-            k_pert[i] -= perturbation
-            g_err = (pert_loss_value-org_loss_value)/perturbation
-            g.append(g_err)
-        return np.array(g), org_loss_value
-        
-    def objective(self, k):
-        if self.grad is None:
-            # use forward finite differences to obtain grad estimation
-            assert self.loss is not None, "grad, loss or both must be given"
-            return self.gradient_finite_differences(k)
-        else:
-            if self.loss is None:
-                # if gradient is defined it is enough to run optimisation
-                return self.grad(k), None
-            else:
-                # if both grad and loss are given compute both
-                return self.grad(k), self.loss(k)
-
-    def print_state(self):
-        if MPI.COMM_WORLD.rank == 0:
-            print(f"step: {self.j}" , 
-                  f"loss: {self.loss_value}", 
-                  f"g_norm: {self.g_norm}",
-                  )
-
 class ADAM(Optimizer):
-    def __init__(self, loss=None, grad=None, k0=None, k_min=None, k_max=None, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-1):
+    def __init__(self, alpha=1e-3, beta_1=0.8, beta_2=0.8, eps=1e-1):
         
         # hyper parameters
         self.alpha = alpha
@@ -63,44 +26,40 @@ class ADAM(Optimizer):
         self.beta_2 = beta_2
         self.eps = eps 
 
-        self.a_min = k_min or -np.inf
-        self.a_max = k_max or np.inf
-
         # optimizer state
         self.g_w = 0.0
         self.g_s = 0.0
         self.j = 0
 
-        super().__init__(loss=loss, grad=grad, k0=k0)
+        super().__init__()
 
-    def step(self):
-        self.j += 1
-        if self.j > 1:
-            self.k -= self.future_update
-            np.clip(self.k, self.a_min, self.a_max, self.k)
-        g, l = self.objective(self.k)
+    def step(self, g):
 
         # update optimizer state
+        self.j += 1
         self.g_norm = np.linalg.norm(g)
-        self.g_value = g
-        self.loss_value = l
         self.g_w = self.beta_1*self.g_w + (1-self.beta_1)*g
         self.g_s = self.beta_2*self.g_s + (1-self.beta_2)*g**2
         self.g_w_hat = self.g_w/(1-self.beta_1**(self.j))
         self.g_s_hat = self.g_s/(1-self.beta_2**(self.j))
-        self.future_update = self.alpha * self.g_w_hat/(np.sqrt(self.g_s_hat)+self.eps)
+        update = self.alpha * self.g_w_hat/(np.sqrt(self.g_s_hat)+self.eps)
+        return -update
 
-    def print_state(self):
-        if MPI.COMM_WORLD.rank == 0:
-            print(f"step: {self.j}" , 
-                  f"loss: {self.loss_value}", 
-                  f"g_norm: {self.g_norm}",
-                  f"alpha: {self.alpha}",
-                  )
-            
-    def print_k(self):
-        if MPI.COMM_WORLD.rank == 0:
-            print(self.k)
+# class Newton(Optimizer):
+#     def __init__(self, alpha=None):
+ 
+#         # hyper parameters
+#         self.alpha = alpha
+#         self.j = 0
+
+#         super().__init__()
+
+#     def step(self, g, l):
+#         self.j += 1
+#         self.g_norm = np.linalg.norm(g)
+#         print(self.g_norm)
+#         update = -self.alpha*(l/g)
+#         return update
             
 # TODO: Provide Newton solver
 # TODO: Provide Broyden–Fletcher–Goldfarb–Shanno algorithm

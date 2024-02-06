@@ -6,7 +6,7 @@ import os
 import numpy as np
 from ..simulations import Experiment
 from ..data import Experiment_data
-from .derivatives import AdjointDerivative, Point_wise_lsq_objective
+from .derivatives import AdjointDerivative, Point_wise_lsq_objective, ForwardDerivative_dudk
 from scipy.linalg import block_diag
 
 class SteadyStateComparer:
@@ -62,6 +62,7 @@ class SteadyStateComparer:
 
             self.set_k(k, m=m)
             g = np.zeros_like(original_k)
+            l = 0.0
 
             # select batch
             if batch_size is not None:
@@ -78,12 +79,46 @@ class SteadyStateComparer:
                 adjoint_derivative.forward(Qc=Qc, T_amb=T_amb, save_xdmf=False)
                 _g = adjoint_derivative.compute_gradient()
                 g += _g.dot(transform_jac)
+                l += adjoint_derivative.compute_loss()
 
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
-            return g
+            return g, l
 
         return gradient
+    
+    def generate_system_jacobian(self, m=None, batch_size=None):
+        if m is None:
+            m = np.arange(len(self.sim.mats))
+        m = np.atleast_1d(m)
+
+        controls = [self.sim.mats[i].k.fem_const for i in m]
+        transform_jac = block_diag(*[self.sim.mats[i].k.transform_jac for i in m])
+        points = self.sim.T_probes_coords
+
+        forward_jacobian = ForwardDerivative_dudk(controls, self.sim.Fss, self.sim.solve_steady, self.sim.T, p_coords=points)
+        
+        def jacobian(k):
+            original_k = self.get_k(m=m)
+            original_T = self.sim.T.x.array.copy()
+
+            self.set_k(k, m=m)
+            g = np.zeros_like(original_k)
+
+            for i in range(len(self.exp_data)):
+                exp_data = self.exp_data[i]
+                T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
+                Qc = exp_data.steady_state_mean['Power [W]']
+                forward_jacobian.forward(Qc=Qc, T_amb=T_amb, save_xdmf=False)
+                j = forward_jacobian.compute_jacobian()
+                for i in range(j.shape[1]):
+                    j[:, i] = transform_jac.T.dot(j[:, i])
+
+            self.set_k(original_k, m=m)
+            self.sim.T.x.array[:] = original_T
+
+            return j
+        return jacobian
 
     def loss_function(self, k, m=None):
         # save original state
