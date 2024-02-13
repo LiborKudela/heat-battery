@@ -17,7 +17,8 @@ from ..materials import MaterialsSet
 from ..utilities import load_data
 
 class Experiment():
-    def __init__(self, geometry_dir='meshes/experiment', 
+    def __init__(self,
+                geometry_dir='meshes/experiment', 
                 result_dir='results/experiment_test', 
                 dim=2, 
                 T0=20,
@@ -28,6 +29,7 @@ class Experiment():
                 dt_start=0.1,
                 dt_min=0.1,
                 dt_max=60.0,
+                dt_ctrl_interval=(0.1, 0.25),
                 dt_xdmf=10,
                 T_amb=20,
                 regulation_step=0.01,
@@ -46,6 +48,7 @@ class Experiment():
         self.dt_start=dt_start
         self.dt_min=dt_min
         self.dt_max=dt_max
+        self.dt_ctrl_interval=dt_ctrl_interval
         self.dt_xdmf=dt_xdmf
         self.T_amb=T_amb
         self.regulation_step=regulation_step
@@ -146,7 +149,7 @@ class Experiment():
 
         # greek-Psi forms for calculating cumulative temperature density of subdomains
         self.T_hat = fem.Constant(self.domain, PETSc.ScalarType((1.0)))
-        self.b = fem.Constant(self.domain, PETSc.ScalarType((10.0)))
+        self.b = fem.Constant(self.domain, PETSc.ScalarType((1.0)))
         self.psi_forms = []
         self.psi_prime_forms = []
         for i, mat in enumerate(self.mats, 1):
@@ -210,7 +213,7 @@ class Experiment():
 
         return pd.Series(data=self.probes.get_value('T'), index=self.T_probes_names, name="Simulation")
 
-    def solve_unsteady(self, Qc_t=None, T_amb_t=None, T0=None, t_max=100, verbose=False, save_xdmf=True, call_back=None, call_back_each=100):
+    def solve_unsteady(self, Qc_t=None, T_amb_t=None, T0=None, t_max=100, verbose=False, save_xdmf=True, call_back=lambda: None, call_back_each=100):
         self.t = 0
         prev_callback_t = 0.0
         self.t_n = self.t
@@ -244,11 +247,11 @@ class Experiment():
                 diff = self.T.vector - self.T_n.vector
                 max_T_diff = np.abs(diff.array).max()
                 max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
-                if max_T_diff > 0.25:
+                if max_T_diff > self.dt_ctrl_interval[1]:
                     self.dt.value *= 0.9
                     self.dt.value = max(self.dt_min, self.dt.value)
                     continue
-                elif max_T_diff < 0.1:
+                elif max_T_diff < self.dt_ctrl_interval[0]:
                     self.dt.value /= 0.95
                     self.dt.value = min(self.dt_max, self.dt.value)
 
