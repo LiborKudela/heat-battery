@@ -6,6 +6,7 @@ import numpy as np
 import os
 import time
 import functools
+import json
 
 class Experiment_data():
     def __init__(self, csv_path, decimal=',', delimiter=';', cache=False) -> None:
@@ -13,6 +14,13 @@ class Experiment_data():
         self.dir_path, self.file_name = os.path.split(self.full_path)
         self.cache_dir = os.path.join(self.dir_path + "/.cache")
         self.cache_full_path = os.path.join(self.cache_dir, self.file_name + ".feather")
+        self.metadata_path = os.path.join(self.dir_path, self.file_name + '.json')
+
+
+        with open(self.metadata_path) as f:
+            metadata = json.load(f)
+        meta_steady_state_start = metadata['steady_state']['start']
+        meta_steady_state_end = metadata['steady_state']['end']
 
         self.io_stats = {'file': self.file_name}
 
@@ -43,7 +51,7 @@ class Experiment_data():
 
         # detect steady states in the data series
         _start = time.time()
-        self.detect_steady_state()
+        self.detect_steady_state(meta_steady_state_start, meta_steady_state_end)
         self.io_stats["Steady state processing"] = time.time() - _start
 
         self.T_names = [
@@ -58,7 +66,7 @@ class Experiment_data():
         for item in self.io_stats.items():
             print(item)
 
-    def detect_steady_state(self, start='2023-10-13 03:00', end='2023-10-13 06:00'):
+    def detect_steady_state(self, start, end):
         #TODO: make this automatic
         self.steady_state_start = start
         self.steady_state_end = end
@@ -83,7 +91,7 @@ class Experiment_data():
     @functools.cache
     def plot_steady_series(self):
         fig = go.Figure()
-        fig.add_trace(px.Scatter(self.steady_state_data))
+        fig.add_trace(px.scatter(self.steady_state_data))
         return fig
 
 class PseudoExperimentalData():
