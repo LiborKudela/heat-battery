@@ -3,6 +3,7 @@ import pandas as pd
 from mpi4py import MPI
 from dolfinx import geometry
 import numpy as np
+import pandas as pd
 
 class FunctionSampler:
     def __init__(self, p_coords, domain):
@@ -95,13 +96,17 @@ class Probe_writer:
             self.writer = csv.writer(self.file)
             self.writer.writerow(header_names)
 
+    def initialize(self):
+        if MPI.COMM_WORLD.rank == 0:
+            header_names = self.chain_names()
+            self.write_header(header_names)
+            self.df = pd.DataFrame(columns=header_names)
+        self.initialized = True
+
     def write_probes(self):
         # initialise header in serial before first entry
         if not self.initialized:
-            if MPI.COMM_WORLD.rank == 0:
-                header_names = self.chain_names()
-                self.write_header(header_names)
-            self.initialized = True
+            self.initialize()
 
         # append row to file
         if MPI.COMM_WORLD.rank == 0:
@@ -109,6 +114,7 @@ class Probe_writer:
             self.writer.writerow(values_chain)
             if self.flush:
                 self.file.flush()
+            self.df.loc[len(self.df)] = values_chain
 
     def get_value(self, name):
         '''Get current lat evaluated value of a probe'''
