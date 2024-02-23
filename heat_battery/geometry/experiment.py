@@ -5,6 +5,7 @@ import os
 from .. import materials
 from .utilities import convert_to_legacy_fenics
 from ..utilities import save_data
+from inspect import getargspec
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
@@ -207,7 +208,7 @@ def build_geometry(
             [r_c+0.022, 0.0, h_ref-2*0.06],[r_c+2*0.022, 0.0, h_ref-2*0.06],[r_c+3*0.022, 0.0, h_ref-2*0.06], # radial mid sensors
             [r_c+0.022, 0.0, h_ref-3*0.06],[r_c+2*0.022, 0.0, h_ref-3*0.06],[r_c+3*0.022, 0.0, h_ref-3*0.06], # radial bottom sensors
             [r_c, 0.0, h_ref-0.054],[r_c, 0.0, h_ref-2*0.054],[r_c, 0.0, h_ref-3*0.054], # cartridge surface
-            [r_outer_t, 0.0, h_ref-0.1],[r_outer_t, 0.0, h_ref-2*0.06],[r_outer_t, 0.0, h_ref-3*0.06], # outer surface sensors
+            [r_outer_t, 0.0, h_ref-0.06],[r_outer_t, 0.0, h_ref-2*0.06],[r_outer_t, 0.0, h_ref-3*0.06], # outer surface sensors
         ]
 
         probes_names = [
@@ -222,7 +223,12 @@ def build_geometry(
             for i, item in enumerate(probes_coords):
                 probes_coords[i] = [item[0], item[2], 0.0]
 
+        spec = getargspec(build_geometry).args
+        local_scope = locals()
+        call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
+
         add_data = {
+            'call_data':call_data,
             'symmetry':symetry_3d, 
             'probes_coords':probes_coords,
             'probes_names':probes_names,

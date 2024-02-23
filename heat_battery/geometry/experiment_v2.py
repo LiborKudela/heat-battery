@@ -5,6 +5,7 @@ import os
 from heat_battery import materials
 from heat_battery.geometry.utilities import convert_to_legacy_fenics
 from heat_battery.utilities import save_data
+from inspect import getargspec
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
@@ -37,13 +38,14 @@ def build_geometry(
         dim=3,
         dir='meshes/experiment_v2',
         legacy_fenics=False,
-        d_wire = 0.003,          # diameter of the heating wire (m)
+        d_wire = 0.0005,         # diameter of the heating wire (m)
+        l_wire = 0.12,           # length of the heating wire (m)
         wire_gap = 0.0001,       # gap bwtween wire and container (m)
-        h_medium = 0.07,
+        h_medium = 0.15,
         d_medium = 0.05,         # diameter 
         t_c_side=0.001,
         t_c_caps=0.001,
-        mesh_size_max = 0.001,   # priblizna max velikost elemenu (m)
+        mesh_size_max = 0.0005,   # priblizna max velikost elemenu (m)
         mesh_size_min = 0.001,   # priblizna min velikost elemenu (m)
         mesh_growth = 0.5,       # priblizna min velikost elemenu (-)
         fltk=False,
@@ -52,7 +54,7 @@ def build_geometry(
     ):
 
     if MPI.COMM_WORLD.rank == 0:
-    
+        
         file_path = dir + f'/mesh_{dim}d'
         gmsh_file = file_path + '.msh'
         add_data_file = file_path + '.ad'
@@ -73,7 +75,7 @@ def build_geometry(
             angle = pi/2
 
         # medium
-        wire = add_cylinder(-t_c_caps, h_medium+2*t_c_caps, d_wire/2, dim=dim, angle=angle)
+        wire = add_cylinder(h_medium/2-l_wire/2, l_wire, d_wire/2, dim=dim, angle=angle)
 
         h_c = h_medium+2*t_c_caps
         d_c = d_medium+2*t_c_side
@@ -83,7 +85,7 @@ def build_geometry(
         container = gmsh.model.occ.cut([(dim, _container)], [(dim, _medium), (dim, _wire)])
 
         _medium = add_cylinder(0, h_medium, d_medium/2, dim=dim, angle=angle)
-        _wire = add_cylinder(-t_c_caps, h_medium+2*t_c_caps, d_wire/2, dim=dim, angle=angle)
+        _wire = add_cylinder(h_medium/2-l_wire/2, l_wire, d_wire/2, dim=dim, angle=angle)
         medium = gmsh.model.occ.cut([(dim, _medium)], [(dim, _wire)])
 
 
@@ -98,8 +100,8 @@ def build_geometry(
         gmsh.model.addPhysicalGroup(dim, [f_tags[2][1]], 3, 'container')
 
         mats = [
-            (materials.Steel04, 'Wire'), 
-            (materials.SandTheory, 'Medium'),
+            (materials.TantalumWire, 'Wire'), 
+            (materials.Constant_sand, 'Medium'),
             (materials.Steel04, 'Container'),
         ]
 
@@ -133,13 +135,14 @@ def build_geometry(
         h_mid = h_medium/2
         wire_r = d_wire/2
         medium_r = d_medium/2
+        r_mid = wire_r+(medium_r-wire_r)/2
         probes_coords = [
-            [0.0, 0.0, h_medium/2], [wire_r-1e-6, 0.0, h_medium/2], [wire_r+1e-6, 0.0, h_medium/2],
-            [medium_r-1e-6, 0.0, h_mid], [medium_r+1e-6, 0.0, h_mid], [medium_r+t_c_side, 0.0, h_mid], 
+            [0.0, 0.0, h_mid], [wire_r-1e-6, 0.0, h_mid], [wire_r+1e-6, 0.0, h_mid], [wire_r+0.001, 0.0, h_mid],
+            [medium_r-1e-6, 0.0, h_mid], [medium_r+1e-6, 0.0, h_mid], #[medium_r+t_c_side, 0.0, h_mid], 
         ]
 
         probes_names = [
-            'T - wire mid', 'T - wire surf', 'T - medium surf',
+            'T - wire mid', 'T - wire surf', 'T - medium surf', 'T - medium mid',
             'T - medium outer surf', 'T - container inner surf', 'T - container outer surf'
         ]
 
@@ -147,7 +150,14 @@ def build_geometry(
             for i, item in enumerate(probes_coords):
                 probes_coords[i] = [item[0], item[2], 0.0]
 
+        
+        
+        spec = getargspec(build_geometry).args
+        local_scope = locals()
+        call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
+
         add_data = {
+            'call_data':call_data,
             'symmetry':symetry_3d, 
             'probes_coords':probes_coords,
             'probes_names':probes_names,
