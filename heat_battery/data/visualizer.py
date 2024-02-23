@@ -75,7 +75,7 @@ class Visualizer():
             self.app.run(debug=True)
         MPI.COMM_WORLD.Barrier()
 
-    def stay_alive(self, timeout=60):
+    def stay_alive(self, timeout=365*3600):
         MPI.COMM_WORLD.Barrier()
         time.sleep(timeout)
 
