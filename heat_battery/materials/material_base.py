@@ -17,6 +17,7 @@ class PropertyUnits:
     R = {'name':'Thermal contact resistance', 'unit': '[m2K/kW]'}
     T = {'name':'Temperature', 'unit': '[C]'}
     T_amb = {'name':'Absolute temperature', 'unit': '[K]'}
+    sigma = {'name':'Resistivity', 'unit':'Ωm'}
 
 class Material_property:
 
@@ -73,6 +74,13 @@ class Polynomial_property(Material_property):
 
     def get_value(self, i):
         return self.fem_const.value[i]
+    
+    def evaluate(self, T):
+        return np.polyval(np.flip(self.fem_const.value), T)*self.multiplier
+    
+    def evaluate_roots(self, y0):
+        p = np.poly1d(np.flip(self.fem_const.value))
+        return (p - y0/self.multiplier).roots
 
     def __call__(self, T):
         e = 0
@@ -130,6 +138,12 @@ class Lagrange_property(Material_property):
     def get_value(self, i):
         return self.y_values[i]
     
+    def evaluate(self, T):
+        return np.polyval(np.flip(self.fem_const.value), T)*self.multiplier
+    
+    def evaluate_roots(self, y0):
+        return np.roots(np.flip(self.fem_const.value), y0/self.multiplier)
+    
     def __call__(self, T):
         e = 0
         for i in range(len(self.fem_const)):
@@ -156,6 +170,7 @@ class Material():
                  k : Material_property, 
                  rho : Material_property, 
                  cp : Material_property,
+                 sigma=None,
                  h0_T_ref = 20, 
                  name="Unspecified"):
         
@@ -163,6 +178,7 @@ class Material():
         self.k = k
         self.rho = rho
         self.cp = cp
+        self.sigma = sigma
         self.name = name
 
     def h(self, T):
@@ -177,17 +193,24 @@ class Material():
 
 class MaterialsSet():
     def __init__(self, domain, mat_list):
-        self.mat_dict = mat_list
+        self.mat_list = mat_list
+        self.name_map = {mat[1]: i for i, mat in enumerate(mat_list)}
         self.mats = self.construct_materials(domain, mat_list)
 
-    def construct_materials(self, domain, mat_dict) -> List[Material]:
-        return [constructor(domain, name=name) for constructor, name in mat_dict]
+    def construct_materials(self, domain, mat_list) -> List[Material]:
+        return [constructor(domain, name=name) for constructor, name in mat_list]
 
     def __getitem__(self, i):
-        return self.mats[i]
+        if isinstance(i, int):
+            return self.mats[i]
+        elif isinstance(i, str):
+            return self.mats[self.name_map[i]]
     
     def __setitem__(self, i, value):
-        self.mats[i] = value
+        if isinstance(i, int):
+            self.mats[i] = value
+        elif isinstance(i, str):
+            self.mats[self.name_map[i]] = value
 
     def __len__(self):
         return len(self.mats)
