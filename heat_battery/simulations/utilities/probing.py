@@ -57,6 +57,7 @@ class Probe_writer:
             self.names.append(name)
             self.units.append(unit)
             self.probes.append(f)
+            self.values.append(0.0)
         return decorator
     
     def evaluate_probes(self):
@@ -67,8 +68,7 @@ class Probe_writer:
                 value = probe()
             except Exception as e:
                 value = 0
-            values.append(value)
-        self.values = values
+            self.values[i] = value
 
     def chain_names(self):
         names_chain = []
@@ -125,7 +125,7 @@ class Probe_writer:
         texts = []
         for i in range(len(self.probes)):
             name = self.pretty_names[i] if self.pretty_names[i] is not None else self.names[i]
-            format = self.formats[i] if self.formats[i] is not None else '.3f'
+            format = self.formats[i] if self.formats[i] is not None else '.4f'
             if hasattr(self.values[i], '__iter__'):
                 value_string = [f"{item:{format}}" for item in self.values[i]]
             else:
