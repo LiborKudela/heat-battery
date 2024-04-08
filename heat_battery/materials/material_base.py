@@ -201,13 +201,13 @@ class MaterialsSet():
         return [constructor(domain, name=name) for constructor, name in mat_list]
 
     def __getitem__(self, i):
-        if isinstance(i, int):
+        if np.issubdtype(int, np.integer):
             return self.mats[i]
         elif isinstance(i, str):
             return self.mats[self.name_map[i]]
     
     def __setitem__(self, i, value):
-        if isinstance(i, int):
+        if np.issubdtype(int, np.integer):
             self.mats[i] = value
         elif isinstance(i, str):
             self.mats[self.name_map[i]] = value
