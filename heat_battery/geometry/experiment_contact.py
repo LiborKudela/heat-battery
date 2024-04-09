@@ -174,7 +174,7 @@ def build_geometry(
             (materials.Cartridge_unheated, 'Unheated part of cartridge'), #4 
             (materials.Cartridge_heated, 'Heated part of cartridge'),     #5
             (materials.SandTheory, 'Sand'),                               #6
-            (materials.Contact_sand, 'Contact_sand'),                     #7
+            (materials.new_contact_class(0.0001), 'Contact_sand'),        #7
         ]
 
         # mark surfaces
@@ -194,6 +194,10 @@ def build_geometry(
             volume_symm_coeff, surface_symm_coeff = 1, 1
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
+
+        bcs = [
+            ('outer_surface'),
+        ]
 
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.field.add('Distance', 1)
@@ -239,13 +243,14 @@ def build_geometry(
 
         add_data = {
             'call_data':call_data,
+            'dim':dim,
             'symmetry':symetry_3d, 
             'probes_coords':probes_coords,
             'probes_names':probes_names,
             'materials':mats,
+            'boundaries':bcs,
             'jac_f':jac_f,
-            'outer_surface_index':1,
-            'source_term_index':5}
+            }
             
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)

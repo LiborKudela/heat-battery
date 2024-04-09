@@ -36,15 +36,10 @@ def add_bottom_plate(a, t, dim=3, angle=2*pi):
 
 def build_geometry(
         dim=3,
-        dir='meshes/experiment_v2',
+        dir='meshes/experiment_tanralum_wire',
         legacy_fenics=False,
         d_wire = 0.0002,         # diameter of the heating wire (m)
         l_wire = 0.10,           # length of the heating wire (m)
-        wire_gap = 0.0001,       # gap bwtween wire and container (m)
-        h_medium = 0.15,
-        d_medium = 0.08,         # diameter 
-        t_c_side=0.001,
-        t_c_caps=0.001,
         mesh_size_max = 0.0005,   # priblizna max velikost elemenu (m)
         mesh_size_min = 0.001,   # priblizna min velikost elemenu (m)
         mesh_growth = 0.5,       # priblizna min velikost elemenu (-)
@@ -75,57 +70,40 @@ def build_geometry(
             angle = pi/2
 
         # medium
-        wire = add_cylinder(h_medium/2-l_wire/2, l_wire, d_wire/2, dim=dim, angle=angle)
+        wire = add_cylinder(0, l_wire, d_wire/2, dim=dim, angle=angle)
 
-        h_c = h_medium+2*t_c_caps
-        d_c = d_medium+2*t_c_side
-        _container = add_cylinder(-t_c_caps, h_c, d_c/2, dim=dim, angle=angle)
-        _medium = add_cylinder(0, h_medium, d_medium/2, dim=dim, angle=angle)
-        _wire = add_cylinder(-t_c_caps, h_medium+2*t_c_caps, d_wire/2+wire_gap, dim=dim, angle=angle)
-        container = gmsh.model.occ.cut([(dim, _container)], [(dim, _medium), (dim, _wire)])
-
-        _medium = add_cylinder(0, h_medium, d_medium/2, dim=dim, angle=angle)
-        _wire = add_cylinder(h_medium/2-l_wire/2, l_wire, d_wire/2, dim=dim, angle=angle)
-        medium = gmsh.model.occ.cut([(dim, _medium)], [(dim, _wire)])
-
-
-        f_tags, f_dim_tags = gmsh.model.occ.fragment([(dim, wire)], medium[0]+container[0])
+        #f_tags, f_dim_tags = gmsh.model.occ.fragment([(dim, wire)])
 
         gmsh.model.occ.synchronize()
 
         # mark subdomains
-        gmsh.model.addPhysicalGroup(dim, [f_tags[0][1]], 1, 'wire')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1]], 2, 'medium')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[2][1]], 3, 'container')
+        gmsh.model.addPhysicalGroup(dim, [wire], 1, 'wire')
 
         mats = [
             (materials.TantalumWire, 'Wire'), 
-            (materials.Constant_sand, 'Medium'),
-            (materials.Steel04, 'Container'),
         ]
 
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                gmsh.model.addPhysicalGroup(dim-1, [25, 26, 27], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                gmsh.model.addPhysicalGroup(dim-1, [28, 29, 32], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                gmsh.model.addPhysicalGroup(dim-1, [35, 36, 38], 1, 'outer_surface')
+                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            gmsh.model.addPhysicalGroup(dim-1, [26, 27, 28], 1, 'outer_surface')
-            volume_symm_coeff, surface_symm_coeff = 1, 1
+            gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
             jac_f = lambda x: 2*pi*x[0]
-            #boundary_list_type = 'CurvesList'
+            boundary_list_type = 'CurvesList'
 
         bcs = [
             ('outer_surface'),
         ]
-
+       
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.generate(dim)
         gmsh.write(gmsh_file)
@@ -134,18 +112,14 @@ def build_geometry(
             gmsh.fltk.run()
         gmsh.finalize()
 
-        h_mid = h_medium/2
+        h_mid = l_wire/2
         wire_r = d_wire/2
-        medium_r = d_medium/2
-        r_mid = wire_r+(medium_r-wire_r)/2
         probes_coords = [
-            [0.0, 0.0, h_mid], [wire_r-1e-6, 0.0, h_mid], [wire_r+1e-6, 0.0, h_mid], [wire_r+0.001, 0.0, h_mid],
-            [medium_r-1e-6, 0.0, h_mid], [medium_r+1e-6, 0.0, h_mid], #[medium_r+t_c_side, 0.0, h_mid], 
+            [0.0, 0.0, h_mid], [wire_r-1e-6, 0.0, h_mid]
         ]
 
         probes_names = [
-            'T - wire mid', 'T - wire surf', 'T - medium surf', 'T - medium mid',
-            'T - medium outer surf', 'T - container inner surf', 'T - container outer surf'
+            'T - wire mid', 'T - wire surf'
         ]
 
         if dim == 2:

@@ -1,4 +1,4 @@
-from heat_battery.simulations import Experiment
+from heat_battery.simulations import Experiment_v1
 from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer, optimizers
 from heat_battery.optimization.derivatives import finite_diferences
@@ -7,8 +7,8 @@ import unittest
 
 class TestOptimization(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment(
-                dim = 2,
+        self.sim = Experiment_v1(
+                model_name="mesh_2d",
                 geometry_dir='meshes/experiment_contact', 
                 result_dir='results/experiment_contact_test')
         self.exp = PseudoExperimentalData()
@@ -16,7 +16,7 @@ class TestOptimization(unittest.TestCase):
         self.adam_max_iter = 300
         Qc = 100
         T_amb = 20
-        res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb,save_xdmf=False)
+        res = self.sim.solve_steady(Qc=Qc, T_amb=T_amb, save_xdmf=False)
         self.exp.feed_steady_state(res, Qc=Qc, T_amb=T_amb)
         self.fitter = SteadyStateComparer(self.sim, [self.exp])
         self.true_k = self.fitter.get_k(m=self.m)
@@ -52,6 +52,7 @@ class TestOptimization(unittest.TestCase):
             opt.alpha *= 0.999
             print(f'loss: {l}')
 
+        print(self.true_k, k)
         self.assertTrue(np.isclose(self.true_k, k, atol=1e-4).all(), "ADJOINT - Values do not agree")
         
     def tearDown(self) -> None:

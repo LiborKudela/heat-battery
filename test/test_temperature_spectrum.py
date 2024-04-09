@@ -1,4 +1,4 @@
-from heat_battery.simulations import Experiment
+from heat_battery.simulations import Experiment_v1
 from heat_battery.optimization import SteadyStateComparer, optimizers
 import numpy as np
 import unittest
@@ -6,8 +6,8 @@ import plotly.graph_objects as go
 
 class TestTemperatureSpectrum(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment(
-            dim = 2,
+        self.sim = Experiment_v1(
+            model_name="mesh_2d",
             geometry_dir='meshes/experiment_contact', 
             result_dir='results/experiment_contact_test',
             )

@@ -1,4 +1,4 @@
-from heat_battery.simulations import Experiment
+from heat_battery.simulations import Experiment_v1
 from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer
 import numpy as np
@@ -6,7 +6,7 @@ import unittest
 
 class TestSteadyStateComparerAPI(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment(dim = 2)
+        self.sim = Experiment_v1(model_name="mesh_2d")
         self.exp = PseudoExperimentalData()
         Qc = 100
         T_amb = 20

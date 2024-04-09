@@ -1,12 +1,10 @@
-from heat_battery.simulations import Experiment
-from heat_battery.data import PseudoExperimentalData
-from heat_battery.optimization import SteadyStateComparer
+from heat_battery.simulations import Experiment_v1
 import numpy as np
 import unittest
 
 class TestMaterialAPI(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment(dim = 2)
+        self.sim = Experiment_v1(model_name="mesh_2d")
 
     def tearDown(self) -> None:
         self.sim.close_results()
@@ -26,7 +24,7 @@ class TestMaterialAPI(unittest.TestCase):
 
         #assert it did change correctly
         self.assertTrue(np.allclose(k0, k - 1.0, atol=1e-6))
-        self.assertTrue(np.allclose(k0_femconst, k_femconst - 1.0, atol=1e-6))
+        self.assertTrue(np.allclose(k0_femconst[0], k_femconst[0] - 1.0, atol=1e-6))
 
     #TODO add test for material conversion lagrange to polynomial
     #TODO add test for material conversion polynomial to lagrange

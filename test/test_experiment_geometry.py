@@ -99,7 +99,7 @@ class TestGeometryBuilders(unittest.TestCase):
             (materials.Standard_insulation, 'Insulation top'),
             (materials.SandTheory, 'Sand'),
             (materials.Cartridge_unheated, 'Unheated part of cartridge'),
-            (materials.Contact_sand, 'Cartridge contact'), 
+            (materials.new_contact_class(0.0001), 'Cartridge contact'), 
             (materials.Cartridge_heated, 'Heated part of cartridge'),
             (materials.Steel04, 'Top plate'), 
             (materials.Standard_insulation, 'Insulation'),
@@ -162,7 +162,7 @@ class TestGeometryBuilders(unittest.TestCase):
         mats = [
             (materials.TantalumWire, 'wire'),
             (materials.Steel04, 'electrodes'),
-            (materials.Contact_sand, 'contact'),
+            (materials.new_contact_class(0.000001), 'contact'),
             (materials.Constant_sand, 'sand'),
             (materials.Standard_insulation, 'th'),
             (materials.Steel04, 'case'),

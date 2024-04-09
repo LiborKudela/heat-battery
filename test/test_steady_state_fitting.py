@@ -1,4 +1,4 @@
-from heat_battery.simulations import Experiment
+from heat_battery.simulations import Experiment_v1
 from heat_battery.data import PseudoExperimentalData
 from heat_battery.optimization import SteadyStateComparer, optimizers
 from heat_battery.optimization.derivatives import finite_diferences
@@ -7,7 +7,7 @@ import unittest
 
 class TestOptimization(unittest.TestCase):
     def setUp(self):
-        self.sim = Experiment(dim = 2)
+        self.sim = Experiment_v1(model_name="mesh_2d")
         self.exp = PseudoExperimentalData()
         Qc = 80
         T_amb = 20

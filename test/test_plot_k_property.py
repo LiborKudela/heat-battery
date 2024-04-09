@@ -1,12 +1,10 @@
-from heat_battery.simulations import Experiment
-from heat_battery.optimization import SteadyStateComparer, optimizers
-import numpy as np
+from heat_battery.simulations import Experiment_v1
 import unittest
 
 class TestPlotProperty(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment(
-                dim = 2,
+        self.sim = Experiment_v1(
+                model_name="mesh_2d",
                 geometry_dir='meshes/experiment', 
                 result_dir='results/experiment_test')
     

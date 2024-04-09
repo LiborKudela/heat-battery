@@ -186,6 +186,10 @@ def build_geometry(
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
 
+        bcs = [
+            ('outer_surface'),
+        ]
+
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.field.add('Distance', 1)
         surface_list = [dimtag[1] for dimtag in gmsh.model.getBoundary([(dim, cartridge_heated)], oriented=False)]
@@ -229,13 +233,14 @@ def build_geometry(
 
         add_data = {
             'call_data':call_data,
+            'dim':dim,
             'symmetry':symetry_3d, 
             'probes_coords':probes_coords,
             'probes_names':probes_names,
             'materials':mats,
+            'boundaries':bcs,
             'jac_f':jac_f,
-            'outer_surface_index':1,
-            'source_term_index':5}
+            }
             
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)
