@@ -9,23 +9,24 @@ import functools
 import json
 
 class Experiment_data():
-    def __init__(self, csv_path, decimal=',', delimiter=';', cache=False) -> None:
+    def __init__(self, csv_path, decimal=',', delimiter=';', cache=True) -> None:
         self.full_path = csv_path
         self.dir_path, self.file_name = os.path.split(self.full_path)
         self.cache_dir = os.path.join(self.dir_path + "/.cache")
         self.cache_full_path = os.path.join(self.cache_dir, self.file_name + ".feather")
         self.metadata_path = os.path.join(self.dir_path, self.file_name + '.json')
-
+        self.ln_path = os.path.join(self.dir_path, self.file_name + '.ln.csv')
 
         with open(self.metadata_path) as f:
             metadata = json.load(f)
         meta_steady_state_start = metadata['steady_state']['start']
         meta_steady_state_end = metadata['steady_state']['end']
+        self.meta_power_start = metadata['unsteady']['power_start']
 
         self.io_stats = {'file': self.file_name}
 
         # load csv and measur load time
-        if os.path.exists(self.cache_full_path):
+        if os.path.exists(self.cache_full_path) and cache:
             _start = time.time()
             self.df = pd.read_feather(self.cache_full_path)
             self.io_stats["Series load/processing"] = time.time() - _start
@@ -77,6 +78,20 @@ class Experiment_data():
     def auto_dectect_steady_state(self):
         data = self.df - self.df.iloc[0]
         return data
+    
+    def get_thw_data(self, l=0.19):
+        if MPI.COMM_WORLD.rank == 0:
+            df = self.df[self.df.index > self.meta_power_start]
+            df['total_seconds'] = df['total_seconds'] - df['total_seconds'][0]
+            df['ln_total_seconds'] = np.log(df['total_seconds'])
+            lmbd_names = []
+            for T_name in self.T_names:
+                lmbd_names.append(f'{T_name}_lmbd')
+                df[f'{T_name}_der'] = df[T_name].diff()/df['ln_total_seconds'].diff()
+                df[f'{T_name}_der_rolling'] = df[f'{T_name}_der'].rolling(120, center=True).mean()
+                df['Power avg'] = df['Power [W]'].rolling(120, center=True).mean()
+                df[lmbd_names[-1]] = (df['Power avg']/l)/(4*np.pi*df[f'{T_name}_der_rolling'])
+            return df
 
     @functools.cache
     def data_series_plot(self):
