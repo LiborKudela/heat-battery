@@ -104,8 +104,17 @@ class Constant_sand(Material):
         super().__init__(
             h0_T_ref = 20, 
             k = Lagrange_property(domain, [20], [0.3], PropertyUnits.k), 
-            rho = Lagrange_property(domain, [20], [1500], PropertyUnits.rho),
+            rho = Lagrange_property(domain, [20], [1600], PropertyUnits.rho),
             cp = Lagrange_property(domain, [20], [830], PropertyUnits.cp), 
+            name=name)
+        
+class Linear_sand(Material):
+    def __init__(self, domain, name="Linear_sand"):
+        super().__init__(
+            h0_T_ref = 20, 
+            k = Lagrange_property(domain, [20, 1000], [0.3, 0.3], PropertyUnits.k), 
+            rho = Lagrange_property(domain, [20, 1000], [1600, 1600], PropertyUnits.rho),
+            cp = Lagrange_property(domain, [20, 1000], [830, 830], PropertyUnits.cp), 
             name=name)
 
 class Sand(Material):
