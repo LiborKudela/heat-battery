@@ -130,75 +130,57 @@ class Simulation():
         self.t = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
 
-    def get_measure_dx(self, domain):
-        if isinstance(domain, int):
-            return self.dx(domain+1)
+    def eval_subdomain_index(self, domain):
+        if np.issubdtype(type(domain), np.integer):
+            return domain
         elif isinstance(domain, str):
-            i = self.subdomain_map[domain]
-            return self.dx(i+1)
+            return self.subdomain_map[domain]
+        
+    def eval_boundary_index(self, boundary):
+        if np.issubdtype(type(boundary), np.integer):
+            return boundary
+        elif isinstance(boundary, str):
+            return self.bcs_map[boundary]
+
+    def get_measure_dx(self, domain):
+        i = self.eval_subdomain_index(domain)
+        return self.dx(i+1)
         
     def get_measure_ds(self, boundary):
-        if isinstance(boundary, int):
-            return self.ds(boundary+1)
-        elif isinstance(boundary, str):
-            i = self.bcs_map[boundary]
-            return self.ds(i+1)
+        i = self.eval_boundary_index(boundary)
+        return self.ds(i+1)
 
     def set_unsteady_source_term(self, object, domain):
-        if isinstance(domain, int):
-            self.q_source_unsteady[domain] = object(self)
-        elif isinstance(domain, str):
-            i = self.subdomain_map[domain]
-            self.q_source_unsteady[i] = object(self)
-
+        i = self.eval_subdomain_index(domain)
+        self.q_source_unsteady[i] = object(self)
+        
     def get_unsteady_source_term(self, domain):
-        if isinstance(domain, int):
-            return self.q_source_unsteady[domain]
-        elif isinstance(domain, str):
-            i = self.subdomain_map[domain]
-            return self.q_source_unsteady[i]
-
+        i = self.eval_subdomain_index(domain)
+        return self.q_source_unsteady[i]
+        
     def set_steady_state_source_term(self, object, domain):
-        if isinstance(domain, int):
-            self.q_source_steady[domain] = object(self)
-        elif isinstance(domain, str):
-            i = self.subdomain_map[domain]
-            self.q_source_steady[i] = object(self)
+        i = self.eval_subdomain_index(domain)
+        self.q_source_steady[i] = object(self)
         
     def get_steady_steady_source_term(self, domain):
-        if isinstance(domain, int):
-            return self.q_source_steady[domain]
-        elif isinstance(domain, str):
-            i = self.subdomain_map[domain]
-            return self.q_source_steady[i]
+        i = self.eval_subdomain_index(domain)
+        return self.q_source_steady[i]
         
     def set_unsteady_bc_term(self, object, boundary):
-        if isinstance(boundary, int):
-            self.bcs_unsteady[boundary] = object(self)
-        elif isinstance(boundary, str):
-            i = self.bcs_map [boundary]
-            self.bcs_unsteady[i] = object(self)
+        i = self.eval_boundary_index(boundary)
+        self.bcs_unsteady[i] = object(self)
         
     def get_unsteady_bc_term(self, boundary):
-        if isinstance(boundary, int):
-            return self.bcs_unsteady[boundary]
-        elif isinstance(boundary, str):
-            i = self.bcs_map [boundary]
-            return self.bcs_unsteady[i]
+        i = self.eval_boundary_index(boundary)
+        return self.bcs_unsteady[i]
         
     def set_steady_state_bc_term(self, object, boundary):
-        if isinstance(boundary, int):
-            self.bcs_steady[boundary] = object(self)
-        elif isinstance(boundary, str):
-            i = self.bcs_map [boundary]
-            self.bcs_steady[i] = object(self)
+        i = self.eval_boundary_index(boundary)
+        self.bcs_steady[i] = object(self)
         
     def get_steady_state_bc_term(self, boundary):
-        if isinstance(boundary, int):
-            return self.bcs_steady[boundary]
-        elif isinstance(boundary, str):
-            i = self.bcs_map[boundary]
-            return self.bcs_steady[i]
+        i = self.eval_boundary_index(boundary)
+        return self.bcs_steady[i]
         
     def create_form_terms_presized_lists(self):
         self.q_source_unsteady = [None]*len(self.mats)
@@ -223,7 +205,6 @@ class Simulation():
         for obj in self.bcs_unsteady:
             if obj is not None:
                 obj.next_step()
-
 
     def define_form_subdomain_terms(self):
         pass

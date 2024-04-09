@@ -199,18 +199,20 @@ class MaterialsSet():
 
     def construct_materials(self, domain, mat_list) -> List[Material]:
         return [constructor(domain, name=name) for constructor, name in mat_list]
+    
+    def compute_item_index(self, index):
+        if np.issubdtype(type(index), np.integer):
+            return index
+        elif isinstance(index, str):
+            return self.name_map[index]
 
     def __getitem__(self, i):
-        if np.issubdtype(type(i), np.integer):
-            return self.mats[i]
-        elif isinstance(i, str):
-            return self.mats[self.name_map[i]]
+        i = self.compute_item_index(i)
+        return self.mats[i]
     
     def __setitem__(self, i, value):
-        if np.issubdtype(type(i), np.integer):
-            self.mats[i] = value
-        elif isinstance(i, str):
-            self.mats[self.name_map[i]] = value
+        i = self.compute_item_index(i)
+        self.mats[i] = value
 
     def __len__(self):
         return len(self.mats)
