@@ -4,13 +4,13 @@ import plotly.graph_objects as go
 from mpi4py import MPI
 import os
 import numpy as np
-from ..simulations import Experiment
+from ..simulations import Experiment_v1
 from ..data import Experiment_data
 from .derivatives import AdjointDerivative, Point_wise_lsq_objective, ForwardDerivative_dudk
 from scipy.linalg import block_diag
 
 class SteadyStateComparer:
-    def __init__(self, sim: Experiment, exp_data: List[Experiment_data]):
+    def __init__(self, sim: Experiment_v1, exp_data: List[Experiment_data]):
         self.sim = sim
         if isinstance(exp_data, Experiment_data):
             exp_data = [exp_data]
