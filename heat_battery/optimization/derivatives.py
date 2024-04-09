@@ -8,7 +8,7 @@ from petsc4py import PETSc
 import dolfinx.nls.petsc
 import dolfinx.fem.petsc
 
-from ..simulations.utilities.probing import FunctionSampler
+from ..simulations.probing import FunctionSampler
 
 def wrap_constant_controls(controls):
     vars = {}

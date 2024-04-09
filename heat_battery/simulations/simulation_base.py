@@ -12,7 +12,7 @@ import dolfinx.nls.petsc
 import plotly.graph_objects as go
 import plotly.express as px
 
-from .utilities import Probe_writer, FunctionSampler
+from .probing import Probe_writer, FunctionSampler
 from ..materials import MaterialsSet
 from ..utilities import load_data
 
