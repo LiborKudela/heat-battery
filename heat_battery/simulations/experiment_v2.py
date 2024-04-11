@@ -1,4 +1,4 @@
-from .simulation_base import Simulation, fem, PETSc, np, MPI
+from .simulation_base import Simulation, fem, PETSc, np, MPI, FunctionSampler
 import plotly.graph_objects as go
 import plotly.express as px
 
@@ -132,6 +132,23 @@ class Experiment_v2(Simulation):
 
     def create_probes(self, probes):
         super().create_probes(probes)
+
+        self.T_probes_coords = list(self.geo_meta['probes']['T'].values())
+        self.T_probes_names = list(self.geo_meta['probes']['T'].keys())
+        sampler = FunctionSampler(self.T_probes_coords, self.domain)
+        @probes.register_probe('T', '°C')
+        def Tc_probe():
+            return sampler.eval(self.T)
+        
+        h_form = 0
+        for i, mat in enumerate(self.mats, 1):
+            h_form += mat.h(self.T)*mat.rho(self.T)*self.jac*self.dx(i)
+        H_form = fem.form(h_form)
+        @probes.register_probe('heat', 'J')
+        def H_probe():
+            H = fem.assemble_scalar(H_form)
+            H = self.domain.comm.allreduce((H), op=MPI.SUM)
+            return H
 
         obj = self.get_unsteady_source_term('wire')
         i = self.subdomain_map['wire']

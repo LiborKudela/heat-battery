@@ -64,7 +64,6 @@ class Simulation():
         self.define_form_subdomain_terms()
         self.create_steady_state_form_solver()
         self.create_unsteady_form_solver()
-        self.create_form_for_calculating_heat_in_domain()
         self.create_forms_for_calculating_temperature_spectrum()
         self.create_probe_writer()
         self.create_static_vtk_data()
@@ -100,10 +99,6 @@ class Simulation():
         # define spatial coordinate for weak form evaluation and jacobian expression
         self.x = ufl.SpatialCoordinate(self.domain)
         self.jac = self.geo_meta['jac_f'](self.x)
-
-        # get probes location defined in geometry data
-        self.T_probes_coords = self.geo_meta['probes_coords']
-        self.T_probes_names = self.geo_meta['probes_names'] 
 
     def define_measures(self):
         self.dx = ufl.Measure("dx", domain=self.domain, subdomain_data=self.cell_tags)
@@ -231,18 +226,6 @@ class Simulation():
     def define_form_subdomain_terms(self):
         pass
 
-    def create_unsteady_heat_sources(self):
-        self.q_source_unsteady = [None]*len(self.mats)
-
-    def create_steady_state_heat_sources(self):
-        self.q_source_steady = [None]*len(self.mats)
-
-    def create_unsteady_form_bcs(self):
-        self.bcs_unsteady = [None]*len(self.bcs)
-
-    def create_steady_state_form_bcs(self):
-        self.bcs_steady = [None]*len(self.mats)
-
     def create_steady_state_form_solver(self):
         # steady state form: 0 = 0
         self.Fss = 0
@@ -284,13 +267,6 @@ class Simulation():
                 self.F += (1-self.theta)*self.dt*self.bcs_unsteady[i-1](self.T_n, self.t_n, self.x)*self.T_v*self.jac*self.ds(i)
         
         self.unsteady_solver = self.create_solver(self.F, self.T)
-
-    def create_form_for_calculating_heat_in_domain(self):
-        # form for calculating heat in the whole domain
-        h_form = 0
-        for i, mat in enumerate(self.mats, 1):
-            h_form += mat.h(self.T)*mat.rho(self.T)*self.jac*self.dx(i)
-        self.H_form = fem.form(h_form)
 
     def create_forms_for_calculating_temperature_spectrum(self):
         # greek-Psi forms for calculating cumulative temperature spectrum of subdomains
@@ -356,8 +332,6 @@ class Simulation():
         #self.probes.print()
         if save_xdmf:
             self.xdmf_steady.write_function(self.T)
-
-        return pd.Series(data=self.probes.get_value('T'), index=self.T_probes_names, name="Simulation")
 
     def solve_unsteady(self, 
             T0=None, T_guess=None, t_max=100, 
@@ -491,17 +465,6 @@ class Simulation():
         @probes.register_probe('ksp_norm', '-')
         def KSP_norm():
             return self.unsteady_solver.krylov_solver.norm
-        
-        @probes.register_probe('heat', 'J')
-        def H_probe():
-            H = fem.assemble_scalar(self.H_form)
-            H = self.domain.comm.allreduce((H), op=MPI.SUM)
-            return H
-        
-        sampler = FunctionSampler(self.T_probes_coords, self.domain)
-        @probes.register_probe('T', '°C')
-        def Tc_probe():
-            return sampler.eval(self.T)
 
     def get_temperature_range(self, cell_tag=None):
         'This method must run on all rank to work properly'

@@ -14,8 +14,7 @@ def build_geometry_from_stepfile(
         mesh_size_max = 0.1,
         fltk=False,
         extract_axisymetry=True,
-        probes_coords=[],
-        probes_names=[],
+        probes={},
         mats=[],
         bcs=[],
         step_scalling=0.001,
@@ -53,8 +52,14 @@ def build_geometry_from_stepfile(
             r = gmsh.model.occ.intersect(xz_plane, v)
             dim = 2
             jac_f = lambda x: 2*pi*x[0]
-            for i, item in enumerate(probes_coords):
-                probes_coords[i] = [item[0], item[2], 0.0]
+
+            for probe_set in probes.values():
+                # keep z but calculate radius from x and y
+                for probe_name in probe_set.keys():
+                    coords = probe_set[probe_name]
+                    r = (coords[0]**2 + coords[1]**2)**(1/2)
+                    y = coords[2]
+                    probe_set[probe_name] = [r, y, 0.0]
         else:
             dim = 3
             jac_f = lambda x: 1
@@ -86,8 +91,7 @@ def build_geometry_from_stepfile(
         add_data = {
             'call_data':call_data,
             'dim':dim,
-            'probes_coords':probes_coords,
-            'probes_names':probes_names,
+            'probes':probes,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

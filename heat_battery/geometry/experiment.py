@@ -206,25 +206,38 @@ def build_geometry(
         gmsh.finalize()
 
         h_ref = h_b-h_d+h_t-h_unfill
-        probes_coords = [
-            [r_c+0.022, 0.0, h_ref-0.06],[r_c+2*0.022, 0.0, h_ref-0.06],[r_c+3*0.022, 0.0, h_ref-0.06], # radial top sensors
-            [r_c+0.022, 0.0, h_ref-2*0.06],[r_c+2*0.022, 0.0, h_ref-2*0.06],[r_c+3*0.022, 0.0, h_ref-2*0.06], # radial mid sensors
-            [r_c+0.022, 0.0, h_ref-3*0.06],[r_c+2*0.022, 0.0, h_ref-3*0.06],[r_c+3*0.022, 0.0, h_ref-3*0.06], # radial bottom sensors
-            [r_c, 0.0, h_ref-0.054],[r_c, 0.0, h_ref-2*0.054],[r_c, 0.0, h_ref-3*0.054], # cartridge surface
-            [r_outer_t, 0.0, h_ref-0.06],[r_outer_t, 0.0, h_ref-2*0.06],[r_outer_t, 0.0, h_ref-3*0.06], # outer surface sensors
-        ]
+        r_1 = r_c+0.022
+        r_2 = r_c+2*0.022
+        r_3 = r_c+3*0.022
 
-        probes_names = [
-            '1 - Top [°C]', '2 - Top [°C]', '3 - Top [°C]',
-            '4 - Middle [°C]', '5 - Middle [°C]', '6 - Middle [°C]',
-            '7 - Bottom [°C]', '8 - Bottom [°C]', '9 - Bottom [°C]',
-            '10 - A - Surface [°C]', '11 - B - Surface [°C]', '12 - C - Surface [°C]',
-            '13 - I. Cover [°C]', '14 - II. Cover [°C]', '15 - III. Cover [°C]'
-        ]
+        probes = {
+            'T':{
+                '1 - Top [°C]': [r_1, 0.0, h_ref-0.06], 
+                '2 - Top [°C]': [r_2, 0.0, h_ref-0.06],
+                '3 - Top [°C]': [r_3, 0.0, h_ref-0.06],
+                '4 - Middle [°C]':[r_1, 0.0, h_ref-2*0.06], 
+                '5 - Middle [°C]':[r_2, 0.0, h_ref-2*0.06], 
+                '6 - Middle [°C]':[r_3, 0.0, h_ref-2*0.06],
+                '7 - Bottom [°C]':[r_1, 0.0, h_ref-3*0.06],
+                '8 - Bottom [°C]':[r_2, 0.0, h_ref-3*0.06],
+                '9 - Bottom [°C]':[r_3, 0.0, h_ref-3*0.06],
+                '10 - A - Surface [°C]':[r_c, 0.0, h_ref-0.064],
+                '11 - B - Surface [°C]':[r_c, 0.0, h_ref-2*0.064],
+                '12 - C - Surface [°C]':[r_c, 0.0, h_ref-3*0.064],
+                '13 - I. Cover [°C]':[r_outer_t, 0.0, h_ref-0.06],
+                '14 - II. Cover [°C]':[r_outer_t, 0.0, h_ref-2*0.06],
+                '15 - III. Cover [°C]':[r_outer_t, 0.0, h_ref-3*0.06],
+            },
+        }
 
         if dim == 2:
-            for i, item in enumerate(probes_coords):
-                probes_coords[i] = [item[0], item[2], 0.0]
+            for probe_set in probes.values():
+                # keep z but calculate radius from x and y
+                for probe_name in probe_set.keys():
+                    coords = probe_set[probe_name]
+                    r = (coords[0]**2 + coords[1]**2)**(1/2)
+                    y = coords[2]
+                    probe_set[probe_name] = [r, y, 0.0]
 
         spec = getargspec(build_geometry).args
         local_scope = locals()
@@ -234,8 +247,7 @@ def build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes_coords':probes_coords,
-            'probes_names':probes_names,
+            'probes':probes,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

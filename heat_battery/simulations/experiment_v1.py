@@ -1,4 +1,4 @@
-from .simulation_base import Simulation, fem, PETSc
+from .simulation_base import Simulation, fem, PETSc, pd, FunctionSampler, MPI
 
 class Expression_Qc_unsteady:
     def __init__(self, sim):
@@ -107,6 +107,27 @@ class Experiment_v1(Simulation):
         self.set_unsteady_bc_term(Expression_Tamb_unsteady, 'outer_surface')
         self.set_steady_state_bc_term(Expression_Tamb_steady_state, 'outer_surface')
 
+    def create_probes(self, probes):
+        super().create_probes(probes)
+
+        self.T_probes_coords = list(self.geo_meta['probes']['T'].values())
+        self.T_probes_names = list(self.geo_meta['probes']['T'].keys())
+        sampler = FunctionSampler(self.T_probes_coords, self.domain)
+        @probes.register_probe('T', '°C')
+        def Tc_probe():
+            return sampler.eval(self.T)
+        
+        # form for calculating heat in the whole domain
+        h_form = 0
+        for i, mat in enumerate(self.mats, 1):
+            h_form += mat.h(self.T)*mat.rho(self.T)*self.jac*self.dx(i)
+        H_form = fem.form(h_form)
+        @probes.register_probe('heat', 'J')
+        def H_probe():
+            H = fem.assemble_scalar(H_form)
+            H = self.domain.comm.allreduce((H), op=MPI.SUM)
+            return H
+
     def solve_steady(self, Qc=10, T_amb=20, save_xdmf=False, alpha=6.3):
         obj = self.get_steady_steady_source_term('heated cartridge')
         obj.Qc.value = Qc
@@ -114,7 +135,9 @@ class Experiment_v1(Simulation):
         obj = self.get_steady_state_bc_term('outer_surface')
         obj.T_amb.value = T_amb
         obj.alpha.value = alpha
-        return super().solve_steady(save_xdmf=save_xdmf)
+        super().solve_steady(save_xdmf=save_xdmf)
+
+        return pd.Series(data=self.probes.get_value('T'), index=self.T_probes_names, name="Simulation")
     
     def solve_unsteady(self, Qc_t=None, T_amb_t=None, alpha_t=None, **kwargs):
         if Qc_t is not None:

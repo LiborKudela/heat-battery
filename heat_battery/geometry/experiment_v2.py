@@ -137,20 +137,27 @@ def build_geometry(
         h_mid = h_medium/2
         wire_r = d_wire/2
         medium_r = d_medium/2
-        r_mid = wire_r+(medium_r-wire_r)/2
-        probes_coords = [
-            [0.0, 0.0, h_mid], [wire_r-1e-6, 0.0, h_mid], [wire_r+1e-6, 0.0, h_mid], [wire_r+0.001, 0.0, h_mid],
-            [medium_r-1e-6, 0.0, h_mid], [medium_r+1e-6, 0.0, h_mid], #[medium_r+t_c_side, 0.0, h_mid], 
-        ]
-
-        probes_names = [
-            'T - wire mid', 'T - wire surf', 'T - medium surf', 'T - medium mid',
-            'T - medium outer surf', 'T - container inner surf', 'T - container outer surf'
-        ]
+     
+        probes = {
+            'T':{
+                'T - wire mid': [0.0, 0.0, h_mid], 
+                'T - wire surf': [wire_r-1e-6, 0.0, h_mid],
+                'T - medium surf': [wire_r+1e-6, 0.0, h_mid],
+                'T - medium mid':[wire_r+0.001, 0.0, h_mid],
+                'T - medium outer surf':[medium_r-1e-6, 0.0, h_mid], 
+                'T - container inner surf':[medium_r+1e-6, 0.0, h_mid], 
+                'T - container outer surf':[medium_r+t_c_side, 0.0, h_mid],
+            },
+        }
 
         if dim == 2:
-            for i, item in enumerate(probes_coords):
-                probes_coords[i] = [item[0], item[2], 0.0]
+            for probe_set in probes.values():
+                # keep z but calculate radius from x and y
+                for probe_name in probe_set.keys():
+                    coords = probe_set[probe_name]
+                    r = (coords[0]**2 + coords[1]**2)**(1/2)
+                    y = coords[2]
+                    probe_set[probe_name] = [r, y, 0.0]
 
         spec = getargspec(build_geometry).args
         local_scope = locals()
@@ -160,8 +167,7 @@ def build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes_coords':probes_coords,
-            'probes_names':probes_names,
+            'probes':probes,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

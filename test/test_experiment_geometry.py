@@ -75,21 +75,26 @@ class TestGeometryBuilders(unittest.TestCase):
         r_1 = r_c + 0.027
         r_2 = r_1 + 0.029
         r_3 = r_2 + 0.029
-        probes_coords = [
-            [r_1, 0.0, h_ref-0.06],[r_2, 0.0, h_ref-0.06],[r_3, 0.0, h_ref-0.06], # radial top sensors
-            [r_1, 0.0, h_ref-2*0.06],[r_2, 0.0, h_ref-2*0.06],[r_3, 0.0, h_ref-2*0.06], # radial mid sensors
-            [r_1, 0.0, h_ref-3*0.06],[r_2, 0.0, h_ref-3*0.06],[r_3, 0.0, h_ref-3*0.06], # radial bottom sensors
-            [r_c, 0.0, h_ref-0.064],[r_c, 0.0, h_ref-2*0.064],[r_c, 0.0, h_ref-3*0.064], # cartridge surface
-            [r_outer_t, 0.0, h_ref-0.06],[r_outer_t, 0.0, h_ref-2*0.06],[r_outer_t, 0.0, h_ref-3*0.06], # outer surface sensors
-        ]
 
-        probes_names = [
-            '1 - Top [°C]', '2 - Top [°C]', '3 - Top [°C]',
-            '4 - Middle [°C]', '5 - Middle [°C]', '6 - Middle [°C]',
-            '7 - Bottom [°C]', '8 - Bottom [°C]', '9 - Bottom [°C]',
-            '10 - A - Surface [°C]', '11 - B - Surface [°C]', '12 - C - Surface [°C]',
-            '13 - I. Cover [°C]', '14 - II. Cover [°C]', '15 - III. Cover [°C]'
-        ]
+        probes = {
+            'T':{
+                '1 - Top [°C]': [r_1, 0.0, h_ref-0.06], 
+                '2 - Top [°C]': [r_2, 0.0, h_ref-0.06],
+                '3 - Top [°C]': [r_3, 0.0, h_ref-0.06],
+                '4 - Middle [°C]':[r_1, 0.0, h_ref-2*0.06], 
+                '5 - Middle [°C]':[r_2, 0.0, h_ref-2*0.06], 
+                '6 - Middle [°C]':[r_3, 0.0, h_ref-2*0.06],
+                '7 - Bottom [°C]':[r_1, 0.0, h_ref-3*0.06],
+                '8 - Bottom [°C]':[r_2, 0.0, h_ref-3*0.06],
+                '9 - Bottom [°C]':[r_3, 0.0, h_ref-3*0.06],
+                '10 - A - Surface [°C]':[r_c, 0.0, h_ref-0.064],
+                '11 - B - Surface [°C]':[r_c, 0.0, h_ref-2*0.064],
+                '12 - C - Surface [°C]':[r_c, 0.0, h_ref-3*0.064],
+                '13 - I. Cover [°C]':[r_outer_t, 0.0, h_ref-0.06],
+                '14 - II. Cover [°C]':[r_outer_t, 0.0, h_ref-2*0.06],
+                '15 - III. Cover [°C]':[r_outer_t, 0.0, h_ref-3*0.06],
+            },
+        }
 
         bcs = {
             'outer_surface': [12, 20, 21, 22, 23, 24, 25, 26, 28, 29, 64],
@@ -98,8 +103,7 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir = 'meshes/experiment_v1_inventor',
             mesh_size_max=0.001,
-            probes_coords=probes_coords,
-            probes_names=probes_names,
+            probes=probes,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -108,8 +112,16 @@ class TestGeometryBuilders(unittest.TestCase):
 
     def test_experiment_v21_inventor_axisymetry(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.1.stp"
-        probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.042/2, 0.0, 0.0]]
-        probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
+     
+        probes = {
+            'T':{
+                'T - wire mid': [0.0, 0.0, 0.0], 
+                'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
+                'T - sand': [0.001, 0.0, 0.0],
+                'T - surf can':[0.042/2, 0.0, 0.0], 
+            },
+        }
+
         mats = {
             'wire':(materials.TantalumWire, [2]), 
             'electrodes':(materials.Steel04, [1, 3]), 
@@ -123,9 +135,8 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
-            probes_coords=probes_coords,
-            probes_names=probes_names,
             mats=mats,
+            probes=probes,
             bcs=bcs,
             fltk=False,
             extract_axisymetry=True,
@@ -135,8 +146,16 @@ class TestGeometryBuilders(unittest.TestCase):
 
     def test_experiment_v22_inventor_axisymetry(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.2.stp"
-        probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.032/2, 0.0, 0.0]]
-        probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
+       
+        probes = {
+            'T':{
+                'T - wire mid': [0.0, 0.0, 0.0], 
+                'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
+                'T - sand': [0.001, 0.0, 0.0],
+                'T - surf can':[0.032/2, 0.0, 0.0], 
+            },
+        }
+
         mats = {
             'wire':(materials.TantalumWire, [2]), 
             'electrodes':(materials.Steel04, [1, 3]), 
@@ -152,8 +171,7 @@ class TestGeometryBuilders(unittest.TestCase):
             name='mesh_contact',
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
-            probes_coords=probes_coords,
-            probes_names=probes_names,
+            probes=probes,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -164,8 +182,16 @@ class TestGeometryBuilders(unittest.TestCase):
 
     def test_twowire_stp(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TwoWire.stp"
-        probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.032/2, 0.0, 0.0]]
-        probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
+ 
+        probes = {
+            'T':{
+                'T - wire mid': [0.0, 0.0, 0.0], 
+                'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
+                'T - sand': [0.001, 0.0, 0.0],
+                'T - surf can':[0.032/2, 0.0, 0.0], 
+            },
+        }
+
         mats = {
             'short_wire': (materials.TantalumWire, [2]),
             'long_wire': (materials.TantalumWire, [7]),
@@ -181,8 +207,7 @@ class TestGeometryBuilders(unittest.TestCase):
             name='mesh_contact',
             dir='meshes/two_wire',  
             mesh_size_max=0.0001,  
-            probes_coords=probes_coords,
-            probes_names=probes_names,
+            probes=probes,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -197,15 +222,13 @@ class TestGeometryBuilders(unittest.TestCase):
             'heated':(materials.Steel04, [1]), 
             'unheated':(materials.Steel04, [2, 3])
             }
-        probes_coords = []
-        probes_names = []
+        probes={}
         bcs = {'outer_surface': [2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]}  
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46',
             mesh_size_max=0.001, 
-            probes_coords=probes_coords,
-            probes_names=probes_names,
+            probes=probes,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -218,16 +241,13 @@ class TestGeometryBuilders(unittest.TestCase):
         mats = {
             'heated':(materials.Steel04, [2]), 
             'unheated':(materials.Steel04, [1, 3])}
-        probes_coords = []
-        probes_names = []
+        probes={}
         bcs = {'outer_surface': [3,4,5,6,7,10,12,13,14,15,16,17,18,19,20,21]}  
-        
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46_axisymetry',
             mesh_size_max=0.001,
-            probes_coords=probes_coords,
-            probes_names=probes_names,
+            probes=probes,
             mats=mats,
             bcs=bcs,
             fltk=False,

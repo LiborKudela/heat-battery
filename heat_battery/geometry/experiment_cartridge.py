@@ -146,17 +146,23 @@ def     build_geometry(
         gmsh.finalize()
 
         h_ref = h_b-h_d+h_t-h_unfill
-        probes_coords = [
-            [r_c, 0.0, h_ref-0.054],[r_c, 0.0, h_ref-2*0.054],[r_c, 0.0, h_ref-3*0.054], # cartridge surface
-        ]
 
-        probes_names = [
-            '10 - A - Surface [°C]', '11 - B - Surface [°C]', '12 - C - Surface [°C]',
-        ]
+        probes = {
+            'T':{
+                '10 - A - Surface [°C]': [r_c, 0.0, h_ref-0.054], 
+                '11 - B - Surface [°C]': [r_c, 0.0, h_ref-2*0.054],
+                '12 - C - Surface [°C]': [r_c, 0.0, h_ref-3*0.054],
+            },
+        }
 
         if dim == 2:
-            for i, item in enumerate(probes_coords):
-                probes_coords[i] = [item[0], item[2], 0.0]
+            for probe_set in probes.values():
+                # keep z but calculate radius from x and y
+                for probe_name in probe_set.keys():
+                    coords = probe_set[probe_name]
+                    r = (coords[0]**2 + coords[1]**2)**(1/2)
+                    y = coords[2]
+                    probe_set[probe_name] = [r, y, 0.0]
 
         spec = getargspec(build_geometry).args
         local_scope = locals()
@@ -166,8 +172,7 @@ def     build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes_coords':probes_coords,
-            'probes_names':probes_names,
+            'probes':probes,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,
