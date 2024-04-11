@@ -57,19 +57,17 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Cartridge Failed to generate")
         
     def test_experiment_v1_inventor_axisymetry(self):
-        _max=0.00001
-        _min=0.00001
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v1.stp"
-        groups = {
-            'walls':[1], 
-            'insulation bottom':[2],    
-            'insulation top':[3],
-            'sand':[4], 
-            'unheated cartridge':[5,8],
-            'cartridge contact':[6], 
-            'heated cartridge':[7], 
-            'top plate':[9],    
-            'insulation':[10], 
+        mats = {
+            'walls':(materials.Steel04, [1]), 
+            'insulation bottom':(materials.Standard_insulation, [2]),    
+            'insulation top':(materials.Standard_insulation, [3]),
+            'sand':(materials.SandTheory, [4]), 
+            'unheated cartridge':(materials.Cartridge_unheated, [5,8]),
+            'cartridge contact':(materials.new_contact_class(0.0001), [6]), 
+            'heated cartridge':(materials.Cartridge_heated, [7]), 
+            'top plate':(materials.Steel04, [9]),    
+            'insulation':(materials.Standard_insulation, [10]), 
         }
         h_ref = 0.235
         r_c = 0.007
@@ -93,18 +91,6 @@ class TestGeometryBuilders(unittest.TestCase):
             '13 - I. Cover [°C]', '14 - II. Cover [°C]', '15 - III. Cover [°C]'
         ]
 
-        mats = [
-            (materials.Steel04, 'Steel parts'), 
-            (materials.Standard_insulation, 'Insulation bottom'),
-            (materials.Standard_insulation, 'Insulation top'),
-            (materials.SandTheory, 'Sand'),
-            (materials.Cartridge_unheated, 'Unheated part of cartridge'),
-            (materials.new_contact_class(0.0001), 'Cartridge contact'), 
-            (materials.Cartridge_heated, 'Heated part of cartridge'),
-            (materials.Steel04, 'Top plate'), 
-            (materials.Standard_insulation, 'Insulation'),
-        ]
-
         bcs = {
             'outer_surface': [12, 20, 21, 22, 23, 24, 25, 26, 28, 29, 64],
             }
@@ -112,7 +98,6 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir = 'meshes/experiment_v1_inventor',
             mesh_size_max=0.001,
-            groups=groups, 
             probes_coords=probes_coords,
             probes_names=probes_names,
             mats=mats,
@@ -122,26 +107,22 @@ class TestGeometryBuilders(unittest.TestCase):
             )
 
     def test_experiment_v21_inventor_axisymetry(self):
-        _max=0.00001
-        _min=0.00001
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.1.stp"
-        groups = {'wire':[2], 'electrodes':[1, 3], 'sand':[4], 'case':[7], 'th':[5, 6], 'lid':[8]}
         probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.042/2, 0.0, 0.0]]
         probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
-        mats = [
-            (materials.TantalumWire, 'wire'),
-            (materials.Steel04, 'electrodes'),
-            (materials.Constant_sand, 'sand'),
-            (materials.Steel04, 'case'),
-            (materials.Standard_insulation, 'th'),
-            (materials.Steel04, 'lid'),
-        ]
+        mats = {
+            'wire':(materials.TantalumWire, [2]), 
+            'electrodes':(materials.Steel04, [1, 3]), 
+            'sand':(materials.Linear_sand, [4]), 
+            'case':(materials.Steel04, [7]), 
+            'th':(materials.Standard_insulation, [5, 6]), 
+            'lid':(materials.Steel04, [8])
+            }
         bcs = {'outer_surface': [7,8,9,14,15,16,30,31,32,33,34,35,36,37,41,42,43,44,45]}
         build_geometry_from_stepfile(
             path = path,
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
-            groups=groups, 
             probes_coords=probes_coords,
             probes_names=probes_names,
             mats=mats,
@@ -153,28 +134,24 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Experiment 2 Failed to generate")
 
     def test_experiment_v22_inventor_axisymetry(self):
-        _max=0.00001
-        _min=0.00001
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.2.stp"
-        groups = {'wire':[2], 'electrodes':[1, 3], 'contact':[4], 'sand':[5], 'th':[6, 7], 'case':[8], 'lid':[9]}
         probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.032/2, 0.0, 0.0]]
         probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
-        mats = [
-            (materials.TantalumWire, 'wire'),
-            (materials.Steel04, 'electrodes'),
-            (materials.new_contact_class(0.000001), 'contact'),
-            (materials.Constant_sand, 'sand'),
-            (materials.Standard_insulation, 'th'),
-            (materials.Steel04, 'case'),
-            (materials.Steel04, 'lid'),
-        ]
+        mats = {
+            'wire':(materials.TantalumWire, [2]), 
+            'electrodes':(materials.Steel04, [1, 3]), 
+            'contact':(materials.new_contact_class(0.000001), [4]), 
+            'sand':(materials.Linear_sand, [5]), 
+            'th':(materials.Standard_insulation, [6, 7]), 
+            'case':(materials.Steel04, [8]), 
+            'lid':(materials.Steel04, [9])
+            }
         bcs = {'outer_surface': [8,9,10,15,16,17,33,34,35,36,37,38,39,40,44,45,46,47,48]}
         build_geometry_from_stepfile(
             path = path,
             name='mesh_contact',
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
-            groups=groups, 
             probes_coords=probes_coords,
             probes_names=probes_names,
             mats=mats,
@@ -185,21 +162,48 @@ class TestGeometryBuilders(unittest.TestCase):
             )
         self.assertTrue(True, "2D Geometry Experiment 2 Failed to generate")
 
+    def test_twowire_stp(self):
+        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TwoWire.stp"
+        probes_coords = [[0.0, 0.0, 0.0], [0.0001-1e-6, 0.0, 0.0], [0.001, 0.0, 0.0], [0.032/2, 0.0, 0.0]]
+        probes_names = ["T - wire mid", "T - wire surf", "T - sand", "T - surf can"]
+        mats = {
+            'short_wire': (materials.TantalumWire, [2]),
+            'long_wire': (materials.TantalumWire, [7]),
+            'electrodes': (materials.Steel04, [1, 3, 5, 8]),
+            'sand': (materials.Linear_sand, [4, 9]),
+            'th': (materials.Standard_insulation, [6, 10, 11, 13]),
+            'case': (materials.Steel04, [12, 16]),
+            'lid': (materials.Steel04, [14, 15]),
+        }
+        bcs = {'outer_surface': [7,8,9,14,15,16,28,29,30,39,40,41,42,51,52,53,61,62,63,64,67,68,69,70,74,75,76,77,80,81,82,83,84,85,87,88,89,90]}
+        build_geometry_from_stepfile(
+            path = path,
+            name='mesh_contact',
+            dir='meshes/two_wire',  
+            mesh_size_max=0.0001,  
+            probes_coords=probes_coords,
+            probes_names=probes_names,
+            mats=mats,
+            bcs=bcs,
+            fltk=False,
+            extract_axisymetry=True,
+            custom_data = dict(d_wire=0.0002, short_wire=0.07, long_wire=0.15),
+            )
+        self.assertTrue(True, "Two wire method experiment")
+
     def test_TF46(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TF46.stp"
-        groups = {'heated':[1], 'unheated':[2, 3]}
+        mats = {
+            'heated':(materials.Steel04, [1]), 
+            'unheated':(materials.Steel04, [2, 3])
+            }
         probes_coords = []
         probes_names = []
-        mats = [
-            (materials.Steel04, 'Heated part of cartridge'),
-            (materials.Steel04, 'Unheated part of cartridge'),
-        ]
         bcs = {'outer_surface': [2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]}  
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46',
-            mesh_size_max=0.001,
-            groups=groups, 
+            mesh_size_max=0.001, 
             probes_coords=probes_coords,
             probes_names=probes_names,
             mats=mats,
@@ -211,20 +215,17 @@ class TestGeometryBuilders(unittest.TestCase):
 
     def test_TF46_axisymetric(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TF46.stp"
-        groups = {'heated':[2], 'unheated':[1, 3]}
+        mats = {
+            'heated':(materials.Steel04, [2]), 
+            'unheated':(materials.Steel04, [1, 3])}
         probes_coords = []
         probes_names = []
-        mats = [
-            (materials.Steel04, 'Heated part of cartridge'),
-            (materials.Steel04, 'Unheated part of cartridge'),
-        ]
         bcs = {'outer_surface': [3,4,5,6,7,10,12,13,14,15,16,17,18,19,20,21]}  
         
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46_axisymetry',
             mesh_size_max=0.001,
-            groups=groups, 
             probes_coords=probes_coords,
             probes_names=probes_names,
             mats=mats,

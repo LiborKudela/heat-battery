@@ -76,33 +76,37 @@ def build_geometry(
 
         gmsh.model.occ.synchronize()
 
-        # mark subdomains
-        gmsh.model.addPhysicalGroup(dim, [wire], 1, 'wire')
-
-        mats = [
-            (materials.TantalumWire, 'Wire'), 
-        ]
-
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
+                bcs = {'outer_surface': [1, 2, 3]}
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
+                bcs = {'outer_surface': [1, 2, 3]}
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
+                bcs = {'outer_surface': [1, 2, 3]}
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3], 1, 'outer_surface')
+            bcs = {'outer_surface': [1, 2, 3]}
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
 
-        bcs = [
-            ('outer_surface'),
-        ]
+        i = 1
+        for bc_name, ents in bcs.items():
+            gmsh.model.addPhysicalGroup(dim-1, ents, i, bc_name)
+            i += 1
+
+        mats = {
+            'wire': (materials.TantalumWire, [wire]), 
+        }
+
+        i = 1
+        for name, tuple_data in mats.items():
+            entities = tuple_data[1]
+            gmsh.model.addPhysicalGroup(dim, entities, i, name)
+            i += 1
        
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.generate(dim)

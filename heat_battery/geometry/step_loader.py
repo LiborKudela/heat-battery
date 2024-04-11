@@ -11,7 +11,6 @@ def build_geometry_from_stepfile(
         name='mesh',
         dir='meshes/experiment_inventor',   
         verbosity=0,
-        groups={},
         mesh_size_max = 0.1,
         fltk=False,
         extract_axisymetry=True,
@@ -62,15 +61,14 @@ def build_geometry_from_stepfile(
 
         gmsh.model.occ.synchronize()
         i = 1
-        bc_names = []
         for bc_name, ents in bcs.items():
             gmsh.model.addPhysicalGroup(dim-1, ents, i, bc_name)
             i += 1
-            bc_names.append(bc_name)
 
         # create selected p-groups
         i = 1
-        for name, entities in groups.items():
+        for name, tuple_data in mats.items():
+            entities = tuple_data[1]
             gmsh.model.addPhysicalGroup(dim, entities, i, name)
             i += 1
 
@@ -91,7 +89,7 @@ def build_geometry_from_stepfile(
             'probes_coords':probes_coords,
             'probes_names':probes_names,
             'materials':mats,
-            'boundaries':bc_names,
+            'boundaries':bcs,
             'jac_f':jac_f,
             }
         

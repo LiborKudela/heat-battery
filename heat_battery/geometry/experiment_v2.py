@@ -107,24 +107,24 @@ def build_geometry(
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                gmsh.model.addPhysicalGroup(dim-1, [25, 26, 27], 1, 'outer_surface')
+                bcs = {'outer_surface': [25, 26, 27]}
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                gmsh.model.addPhysicalGroup(dim-1, [28, 29, 32], 1, 'outer_surface')
+                bcs = {'outer_surface': [28, 29, 32]}
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                gmsh.model.addPhysicalGroup(dim-1, [35, 36, 38], 1, 'outer_surface')
+                bcs = {'outer_surface': [35, 36, 38]}
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            gmsh.model.addPhysicalGroup(dim-1, [26, 27, 28], 1, 'outer_surface')
-            volume_symm_coeff, surface_symm_coeff = 1, 1
+            bcs = {'outer_surface': [26, 27, 28]}
             jac_f = lambda x: 2*pi*x[0]
-            #boundary_list_type = 'CurvesList'
+            boundary_list_type = 'CurvesList'
 
-        bcs = [
-            ('outer_surface'),
-        ]
+        i = 1
+        for bc_name, ents in bcs.items():
+            gmsh.model.addPhysicalGroup(dim-1, ents, i, bc_name)
+            i += 1
 
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.generate(dim)

@@ -70,16 +70,38 @@ class Simulation():
         self.create_static_vtk_data()
 
     def load_geometry(self):
+        # """Fills attributes of the class with geometry data:
+        #    dim: topological dimension of the mesh (1D, 2D, 3D)
+        #    domain: mesh data
+        #    cell_tags: integer tags of element-cell subdomain corespondence
+        #    facet_tags: integer tags of element-boundary corespondance 
+        #    mats: Material expresion set of named subdomains
+        #    subdomain_map: dict for maping names to integer indices
+        #    bcs: list of named boundaries
+        #    bcs_map: 
+        # """
         self.geo_path = os.path.join(self.geometry_dir, self.model_name)
+
+        # load metadata
         self.geo_meta = load_data(f'{self.geo_path}.ad')
+
+        # load domain
         self.dim = self.geo_meta['dim']
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
+
+        # instantiate materials expresions and get key-domain map
+        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
+        self.subdomain_map = self.mats.key_map
+
+        # boundary surface names defined in geometry metadata
+        self.bcs = self.geo_meta['boundaries']
+        self.bcs_map = {name: i for i, name in enumerate(self.bcs.keys())}
+
+        # define spatial coordinate for weak form evaluation and jacobian expression
         self.x = ufl.SpatialCoordinate(self.domain)
         self.jac = self.geo_meta['jac_f'](self.x)
-        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
-        self.subdomain_map = self.mats.name_map
-        self.bcs = self.geo_meta['boundaries']
-        self.bcs_map = {name:i for i, name in enumerate(self.bcs)}
+
+        # get probes location defined in geometry data
         self.T_probes_coords = self.geo_meta['probes_coords']
         self.T_probes_names = self.geo_meta['probes_names'] 
 
@@ -130,56 +152,56 @@ class Simulation():
         self.t = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
 
-    def eval_subdomain_index(self, domain):
+    def compute_subdomain_index(self, domain):
         if np.issubdtype(type(domain), np.integer):
             return domain
         elif isinstance(domain, str):
             return self.subdomain_map[domain]
         
-    def eval_boundary_index(self, boundary):
+    def compute_boundary_index(self, boundary):
         if np.issubdtype(type(boundary), np.integer):
             return boundary
         elif isinstance(boundary, str):
             return self.bcs_map[boundary]
 
     def get_measure_dx(self, domain):
-        i = self.eval_subdomain_index(domain)
+        i = self.compute_subdomain_index(domain)
         return self.dx(i+1)
         
     def get_measure_ds(self, boundary):
-        i = self.eval_boundary_index(boundary)
+        i = self.compute_boundary_index(boundary)
         return self.ds(i+1)
 
     def set_unsteady_source_term(self, object, domain):
-        i = self.eval_subdomain_index(domain)
+        i = self.compute_subdomain_index(domain)
         self.q_source_unsteady[i] = object(self)
         
     def get_unsteady_source_term(self, domain):
-        i = self.eval_subdomain_index(domain)
+        i = self.compute_subdomain_index(domain)
         return self.q_source_unsteady[i]
         
     def set_steady_state_source_term(self, object, domain):
-        i = self.eval_subdomain_index(domain)
+        i = self.compute_subdomain_index(domain)
         self.q_source_steady[i] = object(self)
         
     def get_steady_steady_source_term(self, domain):
-        i = self.eval_subdomain_index(domain)
+        i = self.compute_subdomain_index(domain)
         return self.q_source_steady[i]
         
     def set_unsteady_bc_term(self, object, boundary):
-        i = self.eval_boundary_index(boundary)
+        i = self.compute_boundary_index(boundary)
         self.bcs_unsteady[i] = object(self)
         
     def get_unsteady_bc_term(self, boundary):
-        i = self.eval_boundary_index(boundary)
+        i = self.compute_boundary_index(boundary)
         return self.bcs_unsteady[i]
         
     def set_steady_state_bc_term(self, object, boundary):
-        i = self.eval_boundary_index(boundary)
+        i = self.compute_boundary_index(boundary)
         self.bcs_steady[i] = object(self)
         
     def get_steady_state_bc_term(self, boundary):
-        i = self.eval_boundary_index(boundary)
+        i = self.compute_boundary_index(boundary)
         return self.bcs_steady[i]
         
     def create_form_terms_presized_lists(self):

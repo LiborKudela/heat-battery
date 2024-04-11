@@ -192,27 +192,31 @@ class Material():
         return e*self.cp.multiplier
 
 class MaterialsSet():
-    def __init__(self, domain, mat_list):
-        self.mat_list = mat_list
-        self.name_map = {mat[1]: i for i, mat in enumerate(mat_list)}
-        self.mats = self.construct_materials(domain, mat_list)
+    def __init__(self, domain, mat_dict):
+        self.mat_dict = mat_dict
+        self.mats = self.instantiate_materials(domain, self.mat_dict)
+        self.key_map = {name:i for i, name in enumerate(mat_dict.keys())}
 
-    def construct_materials(self, domain, mat_list) -> List[Material]:
-        return [constructor(domain, name=name) for constructor, name in mat_list]
+    def instantiate_materials(self, domain, mat_dict) -> List[Material]:
+        return [tuple_data[0](domain, name=name) for name, tuple_data in mat_dict.items()]
     
-    def compute_item_index(self, index):
+    def convert_to_integer_index(self, index):
         if np.issubdtype(type(index), np.integer):
             return index
         elif isinstance(index, str):
-            return self.name_map[index]
+            return self.key_map[index]
 
     def __getitem__(self, i):
-        i = self.compute_item_index(i)
+        i = self.convert_to_integer_index(i)
         return self.mats[i]
     
     def __setitem__(self, i, value):
-        i = self.compute_item_index(i)
+        i = self.convert_to_integer_index(i)
         self.mats[i] = value
+
+    def get_entities(self, index):
+        i = self.convert_to_integer_index(index)
+        return self.mat_list[i][1]
 
     def __len__(self):
         return len(self.mats)

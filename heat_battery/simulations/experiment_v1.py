@@ -4,7 +4,7 @@ class Expression_Qc_unsteady:
     def __init__(self, sim):
         self.sim = sim
         self.Qc = fem.Constant(self.sim.domain, PETSc.ScalarType((1.0, 1.0)))
-        i = self.sim.subdomain_map['Heated part of cartridge']
+        i = self.sim.subdomain_map['heated cartridge']
         self.Vc = self.sim.V_subdomain[i]
         self.Qc_t = None
         self.alpha_t = None
@@ -72,7 +72,7 @@ class Expression_Qc_steady_state:
     def __init__(self, sim):
         self.sim = sim
         self.Qc = fem.Constant(self.sim.domain, PETSc.ScalarType((10.0)))
-        i = self.sim.subdomain_map['Heated part of cartridge']
+        i = self.sim.subdomain_map['heated cartridge']
         self.Vc = self.sim.V_subdomain[i]
 
     def q_vol(self):
@@ -102,13 +102,13 @@ class Expression_Tamb_steady_state:
 
 class Experiment_v1(Simulation):
     def define_form_subdomain_terms(self):
-        self.set_unsteady_source_term(Expression_Qc_unsteady, 'Heated part of cartridge')
-        self.set_steady_state_source_term(Expression_Qc_steady_state, 'Heated part of cartridge')
+        self.set_unsteady_source_term(Expression_Qc_unsteady, 'heated cartridge')
+        self.set_steady_state_source_term(Expression_Qc_steady_state, 'heated cartridge')
         self.set_unsteady_bc_term(Expression_Tamb_unsteady, 'outer_surface')
         self.set_steady_state_bc_term(Expression_Tamb_steady_state, 'outer_surface')
 
     def solve_steady(self, Qc=10, T_amb=20, save_xdmf=False, alpha=6.3):
-        obj = self.get_steady_steady_source_term('Heated part of cartridge')
+        obj = self.get_steady_steady_source_term('heated cartridge')
         obj.Qc.value = Qc
 
         obj = self.get_steady_state_bc_term('outer_surface')
@@ -118,7 +118,7 @@ class Experiment_v1(Simulation):
     
     def solve_unsteady(self, Qc_t=None, T_amb_t=None, alpha_t=None, **kwargs):
         if Qc_t is not None:
-            obj = self.get_unsteady_source_term('Heated part of cartridge')
+            obj = self.get_unsteady_source_term('heated cartridge')
             obj.Qc_t = Qc_t
         if T_amb_t is not None:
             obj = self.get_unsteady_bc_term('outer_surface')

@@ -151,44 +151,43 @@ def build_geometry(
 
         gmsh.model.occ.synchronize()
 
-        # mark subdomains
-        gmsh.model.addPhysicalGroup(dim, [f_tags[0][1], f_tags[6][1]], 1, 'steel')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[1][1]], 2, 'insulation')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[2][1]], 3, 'insulation bottom')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[4][1]], 4, 'cartridge_unheated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[5][1]], 5, 'cartridge_heated')
-        gmsh.model.addPhysicalGroup(dim, [f_tags[3][1]], 6, 'sand')
+        mats = {
+            'steel': (materials.Steel04, [f_tags[0][1], f_tags[6][1]]),
+            'insulation': (materials.Standard_insulation, [f_tags[1][1]]),
+            'insulation bottom': (materials.Standard_insulation, [f_tags[2][1]]),
+            'unheated cartridge': (materials.Cartridge_unheated, [f_tags[4][1]]),
+            'heated cartridge': (materials.Cartridge_heated, [f_tags[5][1]]),
+            'sand': (materials.SandTheory, [f_tags[3][1]])
+        }
 
-        mats = [
-            (materials.Steel04, 'Steel parts'), 
-            (materials.Standard_insulation, 'Insulation'),
-            (materials.Standard_insulation, 'Insulation bottom'),
-            (materials.Cartridge_unheated, 'Unheated part of cartridge'),  
-            (materials.Cartridge_heated, 'Heated part of cartridge'), 
-            (materials.SandTheory, 'Sand'),
-        ]
+        # create selected p-groups
+        i = 1
+        for name, tuple_data in mats.items():
+            entities = tuple_data[1]
+            gmsh.model.addPhysicalGroup(dim, entities, i, name)
+            i += 1
 
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 27, 28], 1, 'outer_surface')
+                bcs = {'outer_surface': [1, 2, 3, 4, 5, 6, 7, 8, 9, 27, 28]}
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                gmsh.model.addPhysicalGroup(dim-1, [1, 3, 4, 5, 6, 9, 14, 15, 29, 30], 1, 'outer_surface')
+                bcs = {'outer_surface': [1, 3, 4, 5, 6, 9, 14, 15, 29, 30]}
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                gmsh.model.addPhysicalGroup(dim-1, [5, 6, 7, 8, 23, 24, 25, 31, 32], 1, 'outer_surface')
+                bcs = {'outer_surface': [5, 6, 7, 8, 23, 24, 25, 31, 32]}
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            gmsh.model.addPhysicalGroup(dim-1, [1, 2, 3, 4, 5, 6, 24, 25], 1, 'outer_surface')
-            volume_symm_coeff, surface_symm_coeff = 1, 1
+            bcs = {'outer_surface': [1, 2, 3, 4, 5, 6, 24, 25]}
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
 
-        bcs = [
-            ('outer_surface'),
-        ]
+        i = 1
+        for bc_name, ents in bcs.items():
+            gmsh.model.addPhysicalGroup(dim-1, ents, i, bc_name)
+            i += 1
 
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
         gmsh.model.mesh.field.add('Distance', 1)
