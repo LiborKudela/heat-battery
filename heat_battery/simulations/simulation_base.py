@@ -326,7 +326,9 @@ class Simulation():
         self.xdmf.close()
         self.xdmf_steady.close()
     
-    def solve_steady(self, save_xdmf=False):
+    def solve_steady(self, T_guess=None, save_xdmf=False):
+        if T_guess is not None:
+            self.T.x.array[:] = T_guess
         r = self.steady_solver.solve(self.T)
         self.probes.evaluate_probes()
         #self.probes.print()
