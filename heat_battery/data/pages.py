@@ -187,13 +187,4 @@ class VtkMeshPage(GridLayoutPage):
         return grid_items
     
     def update_data(self):
-        data = self.figure_constructor(*self.args, **self.kwargs)
-        if isinstance(data, list):
-            self.data = []
-            for data_item in data:
-                self.data.append(self.resampler_wrapper(data_item))
-        else:
-            self.data = [self.resampler_wrapper(data)]
-    
-    def update_data(self):
         self.data = self.figure_constructor(*self.args, **self.kwargs)

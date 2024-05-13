@@ -117,10 +117,16 @@ class Probe_writer:
             self.df.loc[len(self.df)] = values_chain
 
     def get_value(self, name):
-        '''Get current lat evaluated value of a probe'''
+        '''Get current evaluated value of a probe'''
         i = self.name_map[name]
         return self.values[i]
     
+    def get_values(self, names):
+        if isinstance(names, list):
+            return [self.get_value(name) for name in names]
+        else:
+            return self.get_values(names)
+
     def pretty_string(self):
         texts = []
         for i in range(len(self.probes)):

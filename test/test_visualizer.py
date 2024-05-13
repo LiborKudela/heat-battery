@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-import webbrowser
 import plotly.graph_objects as go
 from heat_battery.data import Visualizer, pages
 import time

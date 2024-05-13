@@ -15,7 +15,7 @@ class TestDerivative(unittest.TestCase):
     def setUp(self) -> None:
         # mesh and function spaces
         mesh = dolfinx.mesh.create_rectangle(MPI.COMM_WORLD, [[0, 0], [1, 1]], [64, 64], dolfinx.mesh.CellType.triangle)
-        V = dolfinx.fem.FunctionSpace(mesh, ("P", 1)) # solution space
+        V = dolfinx.fem.functionspace(mesh, ("P", 1)) # solution space
         self.u = dolfinx.fem.Function(V)  # solution trial
         v = ufl.TestFunction(V)  # solution test
 

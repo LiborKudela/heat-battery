@@ -12,7 +12,7 @@ import dolfinx.nls.petsc
 import plotly.graph_objects as go
 import plotly.express as px
 
-from .probing import Probe_writer, FunctionSampler
+from .probing import Probe_writer
 from ..materials import MaterialsSet
 from ..utilities import load_data
 
@@ -29,8 +29,6 @@ class Simulation():
                 dt_max=60.0,
                 dt_ctrl_interval=(0.1, 0.25),
                 dt_xdmf=10,
-                regulation_step=0.01,
-                T_cartridge_max = np.inf,
                 atol=1e-10,
                 rtol=1e-12):
  
@@ -45,14 +43,11 @@ class Simulation():
         self.dt_max=dt_max
         self.dt_ctrl_interval=dt_ctrl_interval
         self.dt_xdmf=dt_xdmf
-        self.regulation_step=regulation_step
-        self.T_cartridge_max = T_cartridge_max
         self.atol=atol
         self.rtol=rtol
 
-        if MPI.COMM_WORLD.rank == 0:
-            print(f"Dolfinx version: {__version__}")
-
+        
+        self.print_r0(f"Dolfinx version: {__version__}")
         self.load_geometry()
         self.define_measures()
         self.create_xdmf_files()
@@ -62,11 +57,17 @@ class Simulation():
         self.create_form_constants()
         self.create_form_terms_presized_lists()
         self.define_form_subdomain_terms()
+        self.resolve_form_terms_update_callbacks()
+        self.resolve_form_terms_next_step_callbacks()
         self.create_steady_state_form_solver()
         self.create_unsteady_form_solver()
         self.create_forms_for_calculating_temperature_spectrum()
         self.create_probe_writer()
         self.create_static_vtk_data()
+
+    def print_r0(self, *args, **kwargs):
+        if MPI.COMM_WORLD.rank == 0:
+            print(*args, **kwargs)
 
     def load_geometry(self):
         # """Fills attributes of the class with geometry data:
@@ -88,7 +89,7 @@ class Simulation():
         self.dim = self.geo_meta['dim']
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
 
-        # instantiate materials expresions and get key-domain map
+        # instantiate material*args, **kwargssSet(self.domain, self.geo_meta['materials'])
         self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
         self.subdomain_map = self.mats.key_map
 
@@ -114,7 +115,7 @@ class Simulation():
 
     def create_function_spaces(self):
         #self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
-        self.V = fem.FunctionSpace(self.domain, ("Lagrange", 1))
+        self.V = fem.functionspace(self.domain, ("Lagrange", 1))
 
     def create_functions(self):
         # temperature in current time step
@@ -169,31 +170,31 @@ class Simulation():
 
     def set_unsteady_source_term(self, object, domain):
         i = self.compute_subdomain_index(domain)
-        self.q_source_unsteady[i] = object(self)
+        self.q_source_unsteady[i] = object
         
     def get_unsteady_source_term(self, domain):
         i = self.compute_subdomain_index(domain)
         return self.q_source_unsteady[i]
         
+    def set_unsteady_bc_term(self, object, boundary):
+        i = self.compute_boundary_index(boundary)
+        self.bcs_unsteady[i] = object
+        
+    def get_unsteady_bc_term(self, boundary):
+        i = self.compute_boundary_index(boundary)
+        return self.bcs_unsteady[i]
+    
     def set_steady_state_source_term(self, object, domain):
         i = self.compute_subdomain_index(domain)
-        self.q_source_steady[i] = object(self)
+        self.q_source_steady[i] = object
         
     def get_steady_steady_source_term(self, domain):
         i = self.compute_subdomain_index(domain)
         return self.q_source_steady[i]
         
-    def set_unsteady_bc_term(self, object, boundary):
-        i = self.compute_boundary_index(boundary)
-        self.bcs_unsteady[i] = object(self)
-        
-    def get_unsteady_bc_term(self, boundary):
-        i = self.compute_boundary_index(boundary)
-        return self.bcs_unsteady[i]
-        
     def set_steady_state_bc_term(self, object, boundary):
         i = self.compute_boundary_index(boundary)
-        self.bcs_steady[i] = object(self)
+        self.bcs_steady[i] = object
         
     def get_steady_state_bc_term(self, boundary):
         i = self.compute_boundary_index(boundary)
@@ -204,42 +205,58 @@ class Simulation():
         self.q_source_steady = [None]*len(self.mats)
         self.bcs_unsteady = [None]*len(self.bcs)
         self.bcs_steady = [None]*len(self.mats)
+        self.unsteady_term_update_callbacks = []
+        self.unsteady_term_next_step_callbacks = []
 
     def update_unsteady_form_terms(self, t):
-        for obj in self.q_source_unsteady:
-            if obj is not None:
-                obj.update(t)
-
-        for obj in self.bcs_unsteady:
-            if obj is not None:
-                obj.update(t)
+        for update_function in self.unsteady_term_update_callbacks:
+            update_function(t)
 
     def next_step_unsteady_form_terms(self):
-        for obj in self.q_source_unsteady:
-            if obj is not None:
-                obj.next_step()
-
-        for obj in self.bcs_unsteady:
-            if obj is not None:
-                obj.next_step()
+        for next_step_function in self.unsteady_term_next_step_callbacks:
+            next_step_function()
 
     def define_form_subdomain_terms(self):
         pass
+
+    def resolve_form_terms_update_callbacks(self):
+        # collect all updaters for unsteady volumetric terms
+        for obj in self.q_source_unsteady:
+            if obj is not None and not obj.update in self.unsteady_term_update_callbacks:
+                self.unsteady_term_update_callbacks.append(obj.update)
+
+        # collect all updaters for unsteady boundary terms
+        for obj in self.bcs_unsteady:
+            if obj is not None and not obj.update in self.unsteady_term_update_callbacks:
+                self.unsteady_term_update_callbacks.append(obj.update)
+
+    def resolve_form_terms_next_step_callbacks(self):
+        # collect all next_steps for unsteady volumetric terms
+        for obj in self.q_source_unsteady:
+            if obj is not None and not obj.next_step in self.unsteady_term_next_step_callbacks:
+                self.unsteady_term_next_step_callbacks.append(obj.next_step)
+
+        # collect all updaters for unsteady boundary terms
+        for obj in self.bcs_unsteady:
+            if obj is not None and not obj.next_step in self.unsteady_term_next_step_callbacks:
+                self.unsteady_term_next_step_callbacks.append(obj.next_step)
 
     def create_steady_state_form_solver(self):
         # steady state form: 0 = 0
         self.Fss = 0
         for i, mat in enumerate(self.mats, 1):
+            domain_name = mat.name
             # steady state heat conduction term: 0 = λ*∇(∇(T))
             self.Fss += ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(self.T_v))*self.jac*self.dx(i)
 
             # stedy state source term: 0 = q(T)
             if self.q_source_steady[i-1] is not None:
-                self.Fss += -self.q_source_steady[i-1](self.T, self.x)*self.T_v*self.jac*self.dx(i)
+                self.Fss += -self.q_source_steady[i-1](self.T, self.x, domain_name)*self.T_v*self.jac*self.dx(i)
 
         for i, bc in enumerate(self.bcs, 1):
+            bc_name = bc
             if self.bcs_steady[i-1] is not None:
-                self.Fss += self.bcs_steady[i-1](self.T, self.x)*self.T_v*self.jac*self.ds(i)
+                self.Fss += self.bcs_steady[i-1](self.T, self.x, bc_name)*self.T_v*self.jac*self.ds(i)
 
         self.steady_solver = self.create_solver(self.Fss, self.T)
 
@@ -247,6 +264,7 @@ class Simulation():
         #unsteady state form: 0 = 0
         self.F = 0
         for i, mat in enumerate(self.mats, 1): # i == subdomain index / measure index
+            domain_name = mat.name
             # unsteady state form heat capacity term: 0 = dT/dt*rho*cp
             self.F += mat.rho(self.T)*mat.cp(self.T)*self.T*self.T_v*self.jac*self.dx(i) 
             self.F += -mat.rho(self.T_n)*mat.cp(self.T_n)*self.T_n*self.T_v*self.jac*self.dx(i)
@@ -257,14 +275,14 @@ class Simulation():
 
             # unstedy state source term: 0 = q(T)
             if self.q_source_unsteady[i-1] is not None: # if defined for a subdomain
-                self.F += -self.theta*self.dt*self.q_source_unsteady[i-1](self.T, self.t, self.x)*self.T_v*self.jac*self.dx(i) 
-                self.F += -(1-self.theta)*self.dt*self.q_source_unsteady[i-1](self.T_n, self.t_n, self.x)*self.T_v*self.jac*self.dx(i)
+                self.F += -self.theta*self.dt*self.q_source_unsteady[i-1](self.T, self.t, self.x, domain_name)*self.T_v*self.jac*self.dx(i) 
+                self.F += -(1-self.theta)*self.dt*self.q_source_unsteady[i-1](self.T_n, self.t_n, self.x, domain_name)*self.T_v*self.jac*self.dx(i)
 
         for i, bc in enumerate(self.bcs, 1): # i == subdomain index / measure index
-            # outer surface bcs
+            bc_name = bc
             if self.bcs_unsteady[i-1] is not None: # if defined for a surface
-                self.F += self.theta*self.dt*self.bcs_unsteady[i-1](self.T, self.t, self.x)*self.T_v*self.jac*self.ds(i) 
-                self.F += (1-self.theta)*self.dt*self.bcs_unsteady[i-1](self.T_n, self.t_n, self.x)*self.T_v*self.jac*self.ds(i)
+                self.F += self.theta*self.dt*self.bcs_unsteady[i-1](self.T, self.t, self.x, bc_name)*self.T_v*self.jac*self.ds(i) 
+                self.F += (1-self.theta)*self.dt*self.bcs_unsteady[i-1](self.T_n, self.t_n, self.x, bc_name)*self.T_v*self.jac*self.ds(i)
         
         self.unsteady_solver = self.create_solver(self.F, self.T)
 
