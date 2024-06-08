@@ -5,8 +5,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.interpolate import lagrange
-from typing import List
-import math
+from typing import List, Optional, Union
+
 
 class PropertyUnits:
     default = {'name':'', 'unit': '[]'}
@@ -27,8 +27,14 @@ class Material_property:
     def set_value(self, i, y) -> None:
         pass
 
+    def get_values(self) -> np.ndarray:
+        pass
+
     def get_value(self, i) -> float:
-        return 0.0
+        pass
+
+    def get_form_constant(self) -> fem.Constant:
+        pass
 
     def __call__(self, T):
         pass
@@ -60,11 +66,16 @@ class Polynomial_property(Material_property):
         self.n_values = len(c)
         self.order = len(c)-1
         self.multiplier = multiplier
-
         self.transform_jac = np.identity(self.n_values)
 
+    def transform_values_to_form_coeficients(self, y_values):
+        return self.transform_jac.dot(y_values)
+    
+    def transform_form_coefficients_to_values(self, c):
+        return self.transform_jac.dot(c)
+
     def set_values(self, c_values):
-        self.fem_const.value[:] = np.array(c_values)
+        self.fem_const.value[:] = self.transform_values_to_form_coeficients(np.array(c_values))
 
     def set_value(self, i, c):
         self.fem_const.value[i] = c
@@ -115,7 +126,14 @@ class Lagrange_property(Material_property):
 
         self.fem_const = fem.Constant(domain, PETSc.ScalarType([0.0]*self.n_values))
         self.transform_jac = self.langrange_transform_matrix(self.x_values)
+        self.transform_jac_inv = np.linalg.inv(self.transform_jac)
         self.update_fem_const()
+
+    def transform_values_to_form_coeficients(self, y_values):
+        return self.transform_jac.dot(y_values)
+    
+    def transform_form_coefficients_to_values(self, c):
+        return self.transform_jac_inv.dot(c)
 
     def langrange_transform_matrix(self, x_vec):
         n = len(x_vec)
@@ -126,11 +144,11 @@ class Lagrange_property(Material_property):
 
     def set_values(self, y_values):
         self.y_values[:] = np.array(y_values)
-        self.update_fem_const()
+        self.fem_const.value[:] = self.transform_values_to_form_coeficients(self.y_values)
 
     def set_value(self, i, y):
         self.y_values[i] = y
-        self.update_fem_const()
+        self.fem_const.value[:] = self.transform_values_to_form_coeficients(self.y_values)
 
     def get_values(self):
         return self.y_values.copy()
@@ -164,7 +182,7 @@ class Lagrange_property(Material_property):
         fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name="poly"))
         fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, mode='markers', name="L - points"))
         return fig
-    
+
 class Material():
     def __init__(self,
                  k : Material_property, 
@@ -191,52 +209,111 @@ class Material():
             e += self.cp.fem_const[i]*T**(i+1)/(i+1)
         return e*self.cp.multiplier
 
-class MaterialsSet():
-    def __init__(self, domain, mat_dict):
-        self.mat_dict = mat_dict
-        self.mats = self.instantiate_materials(domain, self.mat_dict)
-        self.key_map = {name:i for i, name in enumerate(mat_dict.keys())}
-
-    def instantiate_materials(self, domain, mat_dict) -> List[Material]:
-        return [tuple_data[0](domain, name=name) for name, tuple_data in mat_dict.items()]
+    def get_property(self, property: str) -> Union[Polynomial_property, Lagrange_property]:
+        "This alows getting property by name (string)"
+        return getattr(self, property)
     
-    def convert_to_integer_index(self, index):
+    def get_property_values(self, property: str) -> np.ndarray:
+        "This alows getting values of property by name (string) of the property"
+        return self.get_property(self, property).get_values()
+    
+    def set_property_values(self, property: str, values) -> None:
+        "This alows setting values of property by name (string) of the property"
+        self.get_property(self, property).set_values(values)
+
+class MaterialsSet():
+    def __init__(self, domain, mat_dict, h0_T_ref=20):
+        self.mat_dict = mat_dict
+        self.mats = self.instantiate_materials(domain, self.mat_dict, h0_T_ref=h0_T_ref)
+        self.key_map = {name:i for i, name in enumerate(mat_dict.keys())}
+        self.h0_T_ref = h0_T_ref
+
+    def instantiate_materials(self, domain, mat_dict, h0_T_ref=None) -> List[Material]:
+        "Takes list of material classes and instantiates all of them"
+        if h0_T_ref is None:
+            h0_T_ref = 20
+        return [tuple_data[0](domain, name=name, h0_T_ref=h0_T_ref) for name, tuple_data in mat_dict.items()]
+    
+    def resolve_index(self, m=None):
+        if m is None:
+            m = np.arange(len(self.mats))
+        else:
+            m = self.convert_to_integer_index(m)
+        m = np.atleast_1d(m)
+        return m
+
+    def set_property_values(
+        self,
+        values: List[int] | np.ndarray,
+        property: str,
+        m: Optional[int | str | List[Union[int, str]] | np.ndarray] = None,
+    ) -> None:
+        "Sets values of property (string) of sellected material given by index m (int)"
+
+        m=self.resolve_index(m)   
+        start_idx = 0
+        for i in m:
+            p = self.get_material(i).get_property(property)
+            end_idx = start_idx + p.n_values
+            p.set_values(values[start_idx:end_idx])
+            start_idx = end_idx
+
+    def get_property_values(
+        self,
+        property: str,
+        m: Optional[int | str | List[Union[int, str]] | np.ndarray] = None,
+    ) -> np.ndarray:
+        "Gets values of property (string) of sellected material given by index m (int or str)"
+
+        m=self.resolve_index(m) 
+        k = []
+        for i in m:
+            p = self.get_material(i).get_property(property)
+            k.append(p.get_values())
+        return np.concatenate(k)
+
+    def single_convert_to_integer_index(self, index) -> int:
         if np.issubdtype(type(index), np.integer):
             return index
         elif isinstance(index, str):
             return self.key_map[index]
 
-    def __getitem__(self, i):
+    def convert_to_integer_index(self, input):
+        "Translates an index"
+        if hasattr(input, '__iter__') and not isinstance(input, str):
+            output = []
+            for sigle_index in input:
+                output.append(self.single_convert_to_integer_index(sigle_index))
+            return output
+        else:
+            return self.single_convert_to_integer_index(input)
+
+    def __getitem__(self, i) -> Material:
         i = self.convert_to_integer_index(i)
         return self.mats[i]
-    
+
     def __setitem__(self, i, value):
         i = self.convert_to_integer_index(i)
         self.mats[i] = value
 
-    def get_entities(self, index):
+    def get_material(self, index) -> Material:
         i = self.convert_to_integer_index(index)
-        return self.mat_list[i][1]
+        return self.mats[i]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.mats)
+
+    def plot_property(
+        self, m: Optional[Union[int, str]] = None, property: str = "k"
+    ) -> Optional[go.Figure]:
     
-    def plot_property(self, m=None, property='k'):
-        assert isinstance(m, int), "m must be an Integer"
+        m=self.resolve_index(m) 
         if MPI.COMM_WORLD.rank == 0:
-            match property:
-                case 'k':
-                    fig = self.mats[m].k.plot(return_fig=True)
-                case 'rho':
-                    fig = self.mats[m].rho.plot(return_fig=True)
-                case 'cp':
-                    fig = self.mats[m].cp.plot(return_fig=True)
-            return fig
-            
-
-    
-
-
-
-                         
-
+            figs = []
+            for i, single_m in enumerate(m):
+                # only rank=0 return fig, other return None
+                p = self.get_material(single_m).get_property(property)
+                fig = p.plot(return_fig=True)
+                fig.update_layout(title=dict(text=self.mats[single_m].name, x=0.5))
+                figs.append(fig)
+            return figs

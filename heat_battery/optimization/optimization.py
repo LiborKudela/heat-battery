@@ -34,16 +34,9 @@ class SteadyStateComparer:
         return np.concatenate(k)
     
     def set_k(self, k, m=None):
-        if m is None:
-            m = np.arange(len(self.sim.mats))
-        m = np.atleast_1d(m)
-        start_idx = 0
-        for i in m:
-            end_idx = start_idx + self.sim.mats[i].k.n_values
-            self.sim.mats[i].k.set_values(k[start_idx:end_idx])
-            start_idx = end_idx
+        self.sim.mats.set_property_values(k, 'k', m)
 
-    def generate_gradient_for_material(self, m=None, batch_size=None):
+    def generate_loss_gradient_for_material(self, m=None, batch_size=None):
         if m is None:
             m = np.arange(len(self.sim.mats))
         m = np.atleast_1d(m)
@@ -87,14 +80,14 @@ class SteadyStateComparer:
 
         return gradient
     
-    def generate_system_jacobian(self, m=None, batch_size=None):
+    def generate_solution_jacobian(self, m=None, full_domain=False):
         if m is None:
             m = np.arange(len(self.sim.mats))
         m = np.atleast_1d(m)
 
         controls = [self.sim.mats[i].k.fem_const for i in m]
         transform_jac = block_diag(*[self.sim.mats[i].k.transform_jac for i in m])
-        points = self.sim.T_probes_coords
+        points = self.sim.T_probes_coords if not full_domain else None
 
         forward_jacobian = ForwardDerivative_dudk(controls, self.sim.Fss, self.sim.solve_steady, self.sim.T, p_coords=points)
         
@@ -103,22 +96,25 @@ class SteadyStateComparer:
             original_T = self.sim.T.x.array.copy()
 
             self.set_k(k, m=m)
-            g = np.zeros_like(original_k)
+            j = np.zeros((len(k), len(points)*len(self.exp_data)))
 
             for i in range(len(self.exp_data)):
                 exp_data = self.exp_data[i]
                 T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
                 Qc = exp_data.steady_state_mean['Power [W]']
                 forward_jacobian.forward(Qc=Qc, T_amb=T_amb, save_xdmf=False)
-                j = forward_jacobian.compute_jacobian()
-                for i in range(j.shape[1]):
-                    j[:, i] = transform_jac.T.dot(j[:, i])
-
+                _j = forward_jacobian.compute_jacobian()
+                z = i*_j.shape[1]
+                j[:, z:z+_j.shape[1]] = transform_jac.T.dot(_j)
+                
             self.set_k(original_k, m=m)
             self.sim.T.x.array[:] = original_T
 
             return j
         return jacobian
+    
+    def generate_loss_component_jacobian(self, m=None):
+        return self.generate_solution_jacobian(m=m, full_domain=False)
 
     def loss_function(self, k, m=None):
         # save original state
@@ -156,7 +152,7 @@ class SteadyStateComparer:
             self.total_abs_error[i] = self.data[i]["Abs Error"].sum()
             self.total_square_error[i] = self.data[i]["Square Error"].sum()
             self.total_max_error[i] = self.data[i]["Abs Error"].max()
-        self.total_error = np.sum(self.total_square_error)
+        self.total_error = np.sum(self.total_square_error)/2
 
     def compare_steady_state(self, exp_data):
         T_amb = exp_data.steady_state_mean['16 - Ambient [°C]']
@@ -169,6 +165,7 @@ class SteadyStateComparer:
         data["Difference"] = data["Experiment Mean"] - data["Simulation"]
         data["Square Error"] = data["Difference"].pow(2)
         data["Abs Error"] = data["Difference"].abs()
+        data["Rel Error"] = data["Difference"]/(data["Experiment Mean"]-T_amb)
         data = data.dropna()
         return data, domain_data
         

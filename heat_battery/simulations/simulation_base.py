@@ -30,23 +30,24 @@ class Simulation():
                 dt_ctrl_interval=(0.1, 0.25),
                 dt_xdmf=10,
                 atol=1e-10,
-                rtol=1e-12):
+                rtol=1e-12,
+                h0_T_ref=20):
  
-        self.geometry_dir=geometry_dir
-        self.result_dir=result_dir
-        self.model_name=model_name
+        self.geometry_dir = geometry_dir
+        self.result_dir = result_dir
+        self.model_name = model_name
         self.T0 = T0
         self.T_guess = T_guess or self.T0
-        self.t_max=t_max
-        self.dt_start=dt_start
-        self.dt_min=dt_min
-        self.dt_max=dt_max
-        self.dt_ctrl_interval=dt_ctrl_interval
-        self.dt_xdmf=dt_xdmf
-        self.atol=atol
-        self.rtol=rtol
+        self.t_max = t_max
+        self.dt_start = dt_start
+        self.dt_min = dt_min
+        self.dt_max = dt_max
+        self.dt_ctrl_interval = dt_ctrl_interval
+        self.dt_xdmf = dt_xdmf
+        self.atol = atol
+        self.rtol = rtol
+        self.h0_T_ref = h0_T_ref
 
-        
         self.print_r0(f"Dolfinx version: {__version__}")
         self.load_geometry()
         self.define_measures()
@@ -90,7 +91,7 @@ class Simulation():
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
 
         # instantiate material*args, **kwargssSet(self.domain, self.geo_meta['materials'])
-        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
+        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'], self.h0_T_ref)
         self.subdomain_map = self.mats.key_map
 
         # boundary surface names defined in geometry metadata
@@ -104,6 +105,7 @@ class Simulation():
     def define_measures(self):
         self.dx = ufl.Measure("dx", domain=self.domain, subdomain_data=self.cell_tags)
         self.ds = ufl.Measure("ds", domain=self.domain, subdomain_data=self.facet_tags)
+        self.dS = ufl.Measure("dS", domain=self.domain, subdomain_data=self.facet_tags)
 
     def create_xdmf_files(self):
         # create result files
@@ -167,6 +169,10 @@ class Simulation():
     def get_measure_ds(self, boundary):
         i = self.compute_boundary_index(boundary)
         return self.ds(i+1)
+    
+    def get_measure_dS(self, boundary):
+        i = self.compute_boundary_index(boundary)
+        return self.dS(i+1)
 
     def set_unsteady_source_term(self, object, domain):
         i = self.compute_subdomain_index(domain)
@@ -327,6 +333,7 @@ class Simulation():
         problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
         solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
         solver.convergence_criterion = "residual"
+        solver.max_it = 30
         solver.atol = self.atol
         solver.rtol = self.rtol
         opts = PETSc.Options()
@@ -387,7 +394,16 @@ class Simulation():
 
                 self.update_unsteady_form_terms(self.t)
               
-                self.r_unsteady = self.unsteady_solver.solve(self.T)
+                try:
+                    self.r_unsteady = self.unsteady_solver.solve(self.T)
+                except Exception as e:
+                    if MPI.COMM_WORLD.rank == 0:
+                        print(e)
+                        print(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 50%")
+                    self.dt.value *= 0.5
+                    self.T.x.array[:] = self.T_n.x.array[:]
+                    continue
+
                 # time step adaptation
                 diff = self.T.vector - self.T_n.vector
                 max_T_diff = np.abs(diff.array).max()
@@ -529,18 +545,10 @@ class Simulation():
         'This method must run on all rank to work properly'
         m = m or range(len(self.mats))
         m = [m] if isinstance(m, int) else m
-        figs = []
+        figs = self.mats.plot_property(m=m, property=property)
         for i, _m in enumerate(m):
-            # only rank=0 return fig, other return None
-            fig = self.mats.plot_property(m=_m, property=property)
-            figs.append(fig)
-
-            if MPI.COMM_WORLD.rank == 0:
-                figs[-1].update_layout(title=dict(text=self.mats[_m].name, x=0.5))
-
             if include_density:
                 self.add_temperature_spectrum_trace(figs[i], m=_m, T=T)
-
         return figs
 
     def add_temperature_spectrum_trace(self, fig, m=None, T=None):
@@ -564,6 +572,7 @@ class Simulation():
     def probes_time_plot(self, *args, **kwargs):
         if MPI.COMM_WORLD.rank == 0:
             fig = px.line(self.probes.df, *args, **kwargs)
+            fig.update_layout(uirevision="None")
             return fig
 
     def domain_state_plot(self, T=None):

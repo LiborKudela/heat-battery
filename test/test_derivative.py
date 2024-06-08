@@ -67,7 +67,6 @@ class TestDerivative(unittest.TestCase):
         r = taylor_test(loss, grad, k0)
         self.assertTrue(np.allclose(r[2], 2.0, atol=0.1), f"Taylor test failed - Convergence rate: {r[2]}")
 
-
     def test_lsq_objective(self):
         points = [[0.0, 0.0, 0.0], [0.5, 0.5, 0.0]]
         true_values = [0.0, 0.0]

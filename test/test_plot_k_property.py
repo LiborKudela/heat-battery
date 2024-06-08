@@ -9,7 +9,7 @@ class TestPlotProperty(unittest.TestCase):
                 result_dir='results/experiment_test')
     
     def test_material_property_plots(self):
-       fig = self.sim.mats.plot_property(m=1)
+       fig = self.sim.mats.plot_property(m=1, property='k')
        #fig.show()
 
     def tearDown(self) -> None:

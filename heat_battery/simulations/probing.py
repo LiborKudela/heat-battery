@@ -1,9 +1,10 @@
 import csv
 import pandas as pd
 from mpi4py import MPI
-from dolfinx import geometry
+from dolfinx import geometry, io
 import numpy as np
 import pandas as pd
+import os
 
 class FunctionSampler:
     def __init__(self, p_coords, domain):
@@ -147,3 +148,24 @@ class Probe_writer:
         if MPI.COMM_WORLD.rank == 0:
             if hasattr(self, 'file'):
                 self.file.close()
+
+
+# class XDMF_writer:
+#     def __init__(self, result_dir, domain):
+#         self.result_dit = result_dir
+#         self.domain = domain
+
+#     def register_xdmf(self, name, unit=" ", pretty_name=None, format=None):
+#         self.xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, f'{name}.xdmf'), "w")
+#         self.xdmf.write_mesh(self.domain)
+
+#         def decorator(f):
+#             self.name_map[name] = len(self.names)
+#             self.pretty_names.append(pretty_name)
+#             self.formats.append(format)
+#             self.names.append(name)
+#             self.units.append(unit)
+#             self.probes.append(f)
+#             self.values.append(0.0)
+#         return decorator
+        

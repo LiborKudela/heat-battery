@@ -1,5 +1,5 @@
 from mpi4py import MPI
-from math import pi
+from math import pi, sqrt
 import gmsh
 import os
 from heat_battery.utilities import save_data
@@ -12,6 +12,7 @@ def build_geometry_from_stepfile(
         dir='meshes/experiment_inventor',   
         verbosity=0,
         mesh_size_max = 0.1,
+        mesh_size_from_curvature=0,
         fltk=False,
         extract_axisymetry=True,
         probes={},
@@ -19,6 +20,8 @@ def build_geometry_from_stepfile(
         bcs=[],
         step_scalling=0.001,
         custom_data={},
+        override_jac=None,
+        mesh_size_cb=None,
     ):
     if MPI.COMM_WORLD.rank == 0:
 
@@ -64,6 +67,9 @@ def build_geometry_from_stepfile(
             dim = 3
             jac_f = lambda x: 1
 
+        if override_jac is not None:
+            jac_f = override_jac
+
         gmsh.model.occ.synchronize()
         i = 1
         for bc_name, ents in bcs.items():
@@ -77,11 +83,29 @@ def build_geometry_from_stepfile(
             gmsh.model.addPhysicalGroup(dim, entities, i, name)
             i += 1
 
+        # mesh size settings
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), mesh_size_max)
+
+        if mesh_size_cb is not None:
+            gmsh.model.mesh.setSizeCallback(mesh_size_cb)
+
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", mesh_size_from_curvature)
+
+        if isinstance(fltk, str):
+            fltk = [fltk]
+        elif not fltk:
+            fltk = []
+
+        if 'premesh' in fltk:
+            print("Starting premesh fltk window")
+            gmsh.fltk.run()
+
+        print("Starting mesh algorithm")
         gmsh.model.mesh.generate(dim)
         gmsh.write(gmsh_file)
 
-        if fltk:
+        if 'postmesh' in fltk:
+            print("Starting postmesh fltk")
             gmsh.fltk.run()
 
         spec = getargspec(build_geometry_from_stepfile).args

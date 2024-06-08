@@ -114,7 +114,7 @@ class PseudoExperimentalData():
         pass
 
     def feed_steady_state(self, sim_res=None, Qc=0.0, T_amb=0.0):
-        self.steady_state_mean = sim_res
+        self.steady_state_mean = sim_res.copy()
         self.steady_state_mean['Power [W]'] = Qc
         self.steady_state_mean['16 - Ambient [°C]'] = T_amb
         self.steady_state_std = self.steady_state_mean.copy()

@@ -17,21 +17,35 @@ def wrap_constant_controls(controls):
             vars[control[i]] = ufl.variable(control[i])
     return vars
 
-def finite_diferences(f, perturbation=1e-6):
+def finite_diferences(f, perturbation=1e-6, central=False):
+    if not central:
+        def df(k, perturbation=perturbation):
+            org_f_value = f(k)
+            k_pert = k.copy()
+            g = []
+            for i in range(len(k)):
+                k_pert[i] += perturbation
+                pert_f_value = f(k_pert)
+                k_pert[i] -= perturbation
+                g_err = (pert_f_value-org_f_value)/perturbation
+                g.append(g_err)
+            return np.array(g), org_f_value
+        return df
+    else:
+        def df(k, perturbation=perturbation):
+            org_loss_value = f(k)
+            k_pert = k.copy()
+            g = []
+            for i in range(len(k)):
+                k_pert[i] += perturbation
+                pert_f_value_plus = f(k_pert)
+                k_pert[i] -= 2*perturbation
+                pert_f_value_minus = f(k_pert)
 
-    def compute_gradient(k, perturbation=perturbation):
-        org_loss_value = f(k)
-        k_pert = k.copy()
-        g = []
-        for i in range(len(k)):
-            k_pert[i] += perturbation
-            pert_loss_value = f(k_pert)
-            k_pert[i] -= perturbation
-            g_err = (pert_loss_value-org_loss_value)/perturbation
-            g.append(g_err)
-        return np.array(g), org_loss_value
-
-    return compute_gradient
+                g_err = (pert_f_value_plus-pert_f_value_minus)/(2*perturbation)
+                g.append(g_err)
+            return np.array(g), org_loss_value
+        return df
 
 class UflObjective:
     def __init__(self, J, u, controls):
@@ -272,7 +286,7 @@ class ForwardDerivative_dudk:
                 _j = self.sampler.eval(self.dudki)
                 jac.append(_j)
             else:
-                jac.append(self.dudki.copy())
+                jac.append(self.dudki.copy().x.array)
 
         return np.vstack(jac)
     
