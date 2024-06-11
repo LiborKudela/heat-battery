@@ -1,7 +1,5 @@
 import os
 import meshio
-import cloudpickle
-from mpi4py import MPI
 
 def convert_to_legacy_fenics(msh_path):
     

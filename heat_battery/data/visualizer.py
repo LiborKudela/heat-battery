@@ -36,7 +36,7 @@ class Visualizer():
         self.breathing_interval = 5000 # checks for server connection
 
         #server
-        self.update_data_status = 1
+        self.data_time_stamp = self.get_current_time_stamp()
 
         #TODO: add client counter
         
@@ -87,7 +87,10 @@ class Visualizer():
         '''Some data need all mpi ranks to evaluate sucesfully'''
         for href, page in self.pages.items():
             page._update_data()
-        self.update_data_status += 1
+        self.data_time_stamp = self.get_current_time_stamp()
+
+    def get_current_time_stamp(self):
+        return time.strftime("%m/%d/%Y, %H:%M:%S.%f")
 
     @on_master
     def set_layout(self):
@@ -178,15 +181,18 @@ class Visualizer():
             prevent_initial_call=True,
         )
         def update_content(data, n_intervals, pathname):
-            if (data != self.update_data_status) or dash_enrich.ctx.triggered_id == 'url':
-                # visualizer has new data or new url requsted, send them to client
-                data = self.update_data_status # age of the update send to client
+            # Periodic trigger at client side checks whether server has new data,
+            # if so we send the whole page to the client.
+            # If the client changed the URL (page) that he is watching we also
+            # send the new page.
+            # If the client has the newest data we do not update.
+            if (data != self.data_time_stamp) or dash_enrich.ctx.triggered_id == 'url':
+                data = self.data_time_stamp # update the data timestamp of data send from server to client
                 return data, self.pages[pathname].get_layout(), self.pages[pathname].disable_client_interval
             else:
-                # no need to send new data
                 return dash_enrich.no_update
         
-        # updates a resampling figure of any sessions
+        # updates a resampling figure of any url (page) that the client is currently watching
         @self.app.callback(
             dash_enrich.Output({"type": "dynamic-updater", "index": dash_enrich.MATCH}, "updateData"),
             dash_enrich.Input({"type": "dynamic-graph", "index": dash_enrich.MATCH}, "relayoutData"),
@@ -194,6 +200,11 @@ class Visualizer():
             memoize=False,
         )
         def update_fig(relayoutdata):
+            # Variable relayoutdata contains sellected zoom (area) of a figure
+            # by a user. We check which page (href) and which graph (i) on
+            # that page is sending the relayoutdata. Then we compute the data.
+            # The attribute data[i] in the page[href] is a FigureResample 
+            # (see https://github.com/predict-idlab/plotly-resampler)
             index = dash_enrich.ctx.triggered_id['index']
             href, i = index.split('-')
             return self.pages[href].data[int(i)].construct_update_data(relayoutdata)
@@ -205,4 +216,7 @@ class Visualizer():
             dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'breathing'},'n_intervals'),  
         )
         def send_icon(n_intervals):
-            return self.breathing_icon#
+            # Periodicaly resets the fire animation at the top. If it stops 
+            # blinking at the client side, it means that the connection to
+            # the server is lost.
+            return self.breathing_icon

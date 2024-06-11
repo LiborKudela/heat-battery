@@ -12,7 +12,7 @@ class Optimizer:
 
         #TODO: add state tracker for visualization
 
-    def optimise(self, k0, tol=1e-6, max_iter=100, verbose=True) -> np.ndarray:
+    def optimise(self, k0, tol=1e-6, max_iter=100, verbose=True, callback=None, callback_freq=1) -> np.ndarray:
         k = k0.copy()
         for i in range(max_iter):
             k = self.step(k)
@@ -20,6 +20,8 @@ class Optimizer:
                 print(f"{self.__class__.__name__} step {i+1}: k: {k}", f"loss: {self.l}")
             if self.l < tol:
                 break
+            if callback is not None and (i % callback_freq == 0):
+                callback(k)
         return k
 
 class ADAM(Optimizer):
@@ -59,13 +61,33 @@ class ADAM(Optimizer):
         self.alpha *= self.alpha_decay
         return k
             
-class GaussNewton(Optimizer):
-    def __init__(self, alpha=1.0):
+class Newton(Optimizer):
+    def __init__(self, grad, hess, alpha=1.0):
         self.alpha = alpha
+        self.grad = grad
+        self.hess = hess
 
-    def step(self, j, err):
-        update = -self.alpha*np.linalg.pinv(j)@err
-        return update
+    def step(self, k):
+        g, self.l = self.grad(k)
+        h, _ = self.hess(k)
+        k = k - self.alpha*np.linalg.inv(h.T)@g
+        return k
+    
+class NewtonLineSearch(Optimizer):
+    def __init__(self, loss, grad, hess, alpha=1.0, max_it_ls=100):
+        self.alpha = alpha
+        self.loss = loss
+        self.grad = grad
+        self.hess = hess
+        self.max_it_ls = max_it_ls
+
+    def step(self, k):
+        h = self.hess(k)
+        g, l = self.grad(k)
+        update_dir = -np.linalg.inv(h)@g #TODO: use linsolve instead
+        k, self.l = line_search(self.loss, k, update_dir, alpha0=self.alpha, 
+                        max_it=self.max_it_ls)
+        return k
     
 def line_search(loss, k0, direction, alpha0=1.0, tol=1e-6, max_it=np.inf, verbose=True):
     normed_dir = direction/np.linalg.norm(direction)
@@ -103,12 +125,12 @@ def line_search(loss, k0, direction, alpha0=1.0, tol=1e-6, max_it=np.inf, verbos
     return k, l
 
 class GaussNewtonDescent(Optimizer):
-    def __init__(self, loss, grad, jac, alpha=2.0, max_it=np.inf, sigma_lim=1e-15):
+    def __init__(self, loss, grad, jac, alpha=2.0, max_it_ls=np.inf, sigma_lim=1e-15):
         self.loss = loss
         self.grad = grad
         self.jac = jac
         self.alpha = alpha
-        self.max_it = max_it
+        self.max_it_ls = max_it_ls
         self.sigma_lim = sigma_lim
 
     def step(self, k):
@@ -136,7 +158,7 @@ class GaussNewtonDescent(Optimizer):
         g, l = self.grad(k)
         update_dir = -np.linalg.inv(j@j.T)@g #TODO: use linsolve instead
         k, self.l = line_search(self.loss, k, update_dir, alpha0=self.alpha, 
-                        max_it=self.max_it)
+                        max_it=self.max_it_ls)
         return k
 
 class RandomDirectionSearch(Optimizer):

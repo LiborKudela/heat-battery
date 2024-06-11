@@ -41,7 +41,6 @@ def finite_diferences(f, perturbation=1e-6, central=False):
                 pert_f_value_plus = f(k_pert)
                 k_pert[i] -= 2*perturbation
                 pert_f_value_minus = f(k_pert)
-
                 g_err = (pert_f_value_plus-pert_f_value_minus)/(2*perturbation)
                 g.append(g_err)
             return np.array(g), org_loss_value

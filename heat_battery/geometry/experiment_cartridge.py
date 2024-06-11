@@ -147,7 +147,7 @@ def     build_geometry(
 
         h_ref = h_b-h_d+h_t-h_unfill
 
-        probes = {
+        points = {
             'T':{
                 '10 - A - Surface [°C]': [r_c, 0.0, h_ref-0.054], 
                 '11 - B - Surface [°C]': [r_c, 0.0, h_ref-2*0.054],
@@ -156,7 +156,7 @@ def     build_geometry(
         }
 
         if dim == 2:
-            for probe_set in probes.values():
+            for probe_set in points.values():
                 # keep z but calculate radius from x and y
                 for probe_name in probe_set.keys():
                     coords = probe_set[probe_name]
@@ -172,7 +172,7 @@ def     build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes':probes,
+            'points':points,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

@@ -15,7 +15,7 @@ def build_geometry_from_stepfile(
         mesh_size_from_curvature=0,
         fltk=False,
         extract_axisymetry=True,
-        probes={},
+        points={},
         mats=[],
         bcs=[],
         step_scalling=0.001,
@@ -56,7 +56,7 @@ def build_geometry_from_stepfile(
             dim = 2
             jac_f = lambda x: 2*pi*x[0]
 
-            for probe_set in probes.values():
+            for probe_set in points.values():
                 # keep z but calculate radius from x and y
                 for probe_name in probe_set.keys():
                     coords = probe_set[probe_name]
@@ -115,7 +115,7 @@ def build_geometry_from_stepfile(
         add_data = {
             'call_data':call_data,
             'dim':dim,
-            'probes':probes,
+            'points':points,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

@@ -317,3 +317,5 @@ class MaterialsSet():
                 fig.update_layout(title=dict(text=self.mats[single_m].name, x=0.5))
                 figs.append(fig)
             return figs
+        else:
+            return [None]*len(m)

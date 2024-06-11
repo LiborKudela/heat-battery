@@ -218,7 +218,7 @@ def build_geometry(
         r_2 = r_c+2*0.022
         r_3 = r_c+3*0.022
 
-        probes = {
+        points = {
             'T':{
                 '1 - Top [°C]': [r_1, 0.0, h_ref-0.06], 
                 '2 - Top [°C]': [r_2, 0.0, h_ref-0.06],
@@ -239,7 +239,7 @@ def build_geometry(
         }
 
         if dim == 2:
-            for probe_set in probes.values():
+            for probe_set in points.values():
                 # keep z but calculate radius from x and y
                 for probe_name in probe_set.keys():
                     coords = probe_set[probe_name]
@@ -255,7 +255,7 @@ def build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes':probes,
+            'points':points,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

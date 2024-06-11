@@ -170,7 +170,7 @@ class SteadyStateComparer:
         return data, domain_data
         
     def compare_plot(self):
-        if MPI.COMM_WORLD.rank == 0:
+        if MPI.COMM_WORLD.rank == 0 and not self.data[0].empty:
             figs = []
             for data in self.data:
                 fig = go.Figure()
@@ -184,7 +184,8 @@ class SteadyStateComparer:
         return self.sim.material_plot(m=m, property=property, include_density=include_density, T=self.domain_data)
     
     def domain_state_plot(self):
-        return self.sim.domain_state_plot(T=self.domain_data)
+        if self.domain_data[0] is not None:
+            return self.sim.domain_state_plot(T=self.domain_data)
         
     def print_data(self):
         if MPI.COMM_WORLD.rank == 0:
@@ -193,3 +194,9 @@ class SteadyStateComparer:
     def save_data(self):
         if MPI.COMM_WORLD.rank == 0:
             self.data.to_csv(os.path.join(self.sim.result_dir, "comprarer.csv"))
+
+class MultiSimSteadyStateComparer:
+    "Allows to optimise agains multiple geometries."
+    def __init__(self, comparers: List[SteadyStateComparer]):
+        self.comparers = comparers
+

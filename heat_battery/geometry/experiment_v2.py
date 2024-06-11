@@ -138,7 +138,7 @@ def build_geometry(
         wire_r = d_wire/2
         medium_r = d_medium/2
      
-        probes = {
+        points = {
             'T':{
                 'T - wire mid': [0.0, 0.0, h_mid], 
                 'T - wire surf': [wire_r-1e-6, 0.0, h_mid],
@@ -151,7 +151,7 @@ def build_geometry(
         }
 
         if dim == 2:
-            for probe_set in probes.values():
+            for probe_set in points.values():
                 # keep z but calculate radius from x and y
                 for probe_name in probe_set.keys():
                     coords = probe_set[probe_name]
@@ -167,7 +167,7 @@ def build_geometry(
             'call_data':call_data,
             'dim':dim,
             'symmetry':symetry_3d, 
-            'probes':probes,
+            'points':points,
             'materials':mats,
             'boundaries':bcs,
             'jac_f':jac_f,

@@ -36,8 +36,8 @@ class Experiment_v3(Simulation):
     def create_probes(self, probes):
         super().create_probes(probes)
 
-        self.T_probes_coords = list(self.geo_meta['probes']['T'].values())
-        self.T_probes_names = list(self.geo_meta['probes']['T'].keys())
+        self.T_probes_coords = list(self.geo_meta['points']['T'].values())
+        self.T_probes_names = list(self.geo_meta['points']['T'].keys())
         sampler = FunctionSampler(self.T_probes_coords, self.domain)
         @probes.register_probe('T', '°C')
         def T_probe():

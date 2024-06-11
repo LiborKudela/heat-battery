@@ -79,7 +79,7 @@ class TestGeometryBuilders(unittest.TestCase):
         r_3 = r_2 + 0.029
         r_4 = r_3 + 0.020
 
-        probes = {
+        points = {
             'T':{
                 '0 - Top [°C]': [r_0, 0.0, h_ref-0.06],
                 '1 - Top [°C]': [r_1, 0.0, h_ref-0.06], 
@@ -120,7 +120,7 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir = 'meshes/experiment_v1_inventor',
             mesh_size_max=0.001,
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -130,7 +130,7 @@ class TestGeometryBuilders(unittest.TestCase):
     def test_experiment_v21_inventor_axisymetry(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.1.stp"
      
-        probes = {
+        points = {
             'T':{
                 'T - wire mid': [0.0, 0.0, 0.0], 
                 'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
@@ -156,7 +156,7 @@ class TestGeometryBuilders(unittest.TestCase):
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
             mats=mats,
-            probes=probes,
+            points=points,
             bcs=bcs,
             fltk=False,
             extract_axisymetry=True,
@@ -167,7 +167,7 @@ class TestGeometryBuilders(unittest.TestCase):
     def test_experiment_v22_inventor_axisymetry(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.2.stp"
        
-        probes = {
+        points = {
             'T':{
                 'T - wire mid': [0.0, 0.0, 0.0], 
                 'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
@@ -194,7 +194,7 @@ class TestGeometryBuilders(unittest.TestCase):
             name='mesh_contact',
             dir='meshes/experiment_inventor',  
             mesh_size_max=0.0001, 
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -206,7 +206,7 @@ class TestGeometryBuilders(unittest.TestCase):
     def test_twowire_stp(self):
         path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TwoWire.stp"
  
-        probes = {
+        points = {
             'T':{
                 'T - wire mid': [0.0, 0.0, 0.0], 
                 'T - wire surf': [0.0001-1e-6, 0.0, 0.0],
@@ -234,7 +234,7 @@ class TestGeometryBuilders(unittest.TestCase):
             name='mesh',
             dir='meshes/two_wire',
             mesh_size_max=0.0001,  
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -249,13 +249,13 @@ class TestGeometryBuilders(unittest.TestCase):
             'heated cartridge':(materials.Steel04, [1]), 
             'unheated':(materials.Steel04, [2, 3])
             }
-        probes={}
+        points={}
         bcs = {'outer_surface': [2,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]}  
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46',
             mesh_size_max=0.001, 
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -268,13 +268,13 @@ class TestGeometryBuilders(unittest.TestCase):
         mats = {
             'heated':(materials.Steel04, [2]), 
             'unheated':(materials.Steel04, [1, 3])}
-        probes={}
+        points={}
         bcs = {'outer_surface': [3,4,5,6,7,10,12,13,14,15,16,17,18,19,20,21]}  
         build_geometry_from_stepfile(
             path = path,
             dir = 'meshes/experiment_TF46_axisymetry',
             mesh_size_max=0.001,
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -290,7 +290,7 @@ class TestGeometryBuilders(unittest.TestCase):
             'heated cartridge':(materials.Cartridge_heated, [2, 3]), 
         }
 
-        probes = {
+        points = {
             'T':{
                 'inner_cartridge': [0, -0.16/2,-1.7/2],
                 'outer_cartridge': [0, -0.36/2,-1.7/2], 
@@ -306,7 +306,7 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir = 'meshes/urbanek',
             mesh_size_max=0.04,
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,
@@ -323,7 +323,7 @@ class TestGeometryBuilders(unittest.TestCase):
             'heated cartridge':(materials.Cartridge_heated, [2, 3]), 
         }
 
-        probes = {
+        points = {
             'T':{
                 'inner_cartridge': [0, -0.16/2,-1.7/2],
                 'outer_cartridge': [0, -0.36/2,-1.7/2], 
@@ -340,7 +340,7 @@ class TestGeometryBuilders(unittest.TestCase):
             path = path,
             dir = 'meshes/urbanek_mem',
             mesh_size_max=0.04,
-            probes=probes,
+            points=points,
             mats=mats,
             bcs=bcs,
             fltk=False,

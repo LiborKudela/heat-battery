@@ -546,8 +546,8 @@ class Simulation():
         m = m or range(len(self.mats))
         m = [m] if isinstance(m, int) else m
         figs = self.mats.plot_property(m=m, property=property)
-        for i, _m in enumerate(m):
-            if include_density:
+        if include_density:
+            for i, _m in enumerate(m):
                 self.add_temperature_spectrum_trace(figs[i], m=_m, T=T)
         return figs
 
@@ -578,7 +578,7 @@ class Simulation():
     def domain_state_plot(self, T=None):
         'This method must run on all rank to work properly'
         root = 0
-        T = T or self.T
+        T = T if T is not None else self.T
         T = T if isinstance(T, list) else [T]
         data = [None]*len(T)
         for i, _T in enumerate(T):

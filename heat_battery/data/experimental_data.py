@@ -115,12 +115,24 @@ class PseudoExperimentalData():
 
     def feed_steady_state(self, sim_res=None, Qc=0.0, T_amb=0.0):
         self.steady_state_mean = sim_res.copy()
+        self.T_names = self.steady_state_mean.index
         self.steady_state_mean['Power [W]'] = Qc
         self.steady_state_mean['16 - Ambient [°C]'] = T_amb
         self.steady_state_std = self.steady_state_mean.copy()
         self.steady_state_std.values[:] = 0.0
         self.steady_state_mean.rename("Experiment Mean", inplace=True)
         self.steady_state_std.rename("Experiment Std", inplace=True)
+
+    def add_noise(self, scale=0.001, relative=False):
+        true_steady_state_mean = self.steady_state_mean[self.T_names].copy()
+        n = len(true_steady_state_mean)
+        if relative:
+            scale = (true_steady_state_mean.to_numpy()-self.steady_state_mean['16 - Ambient [°C]'])*np.full(n, scale)
+        else:
+            scale = np.full(n, scale)
+        noise = np.random.normal(np.zeros(n), scale, n)
+        noise = MPI.COMM_WORLD.bcast(noise)
+        self.steady_state_mean[self.T_names] += noise
 
     def feed_unsteady(self, sim_res=None):
         pass
@@ -132,6 +144,8 @@ class PseudoExperimentalData():
         fig = go.Figure()
         fig.add_bar(x=self.steady_state_mean.index, y=self.steady_state_mean.values, name='Experiment')
         return fig
+    
+
     
 
     
