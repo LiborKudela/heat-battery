@@ -21,14 +21,13 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install OpenMPI
       run: | 
-        sudo apt-get update \
-        sudo apt install build-essential \
+        sudo apt-get update
+        sudo apt install build-essential
         sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
     - name: Install FeniCSx
       run: | 
-        sudo sudo add-apt-repository ppa:fenics-packages/fenics \
-        sudo apt-get update \
-        sudo apt install build-essential \
+        sudo sudo add-apt-repository ppa:fenics-packages/fenics
+        sudo apt-get update
         sudo sudo apt install fenicsx
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
