@@ -194,9 +194,3 @@ class SteadyStateComparer:
     def save_data(self):
         if MPI.COMM_WORLD.rank == 0:
             self.data.to_csv(os.path.join(self.sim.result_dir, "comprarer.csv"))
-
-class MultiSimSteadyStateComparer:
-    "Allows to optimise agains multiple geometries."
-    def __init__(self, comparers: List[SteadyStateComparer]):
-        self.comparers = comparers
-

@@ -3,10 +3,7 @@ from dolfinx import fem
 from petsc4py import PETSc
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from scipy.interpolate import lagrange
 from typing import List, Optional, Union
-
 
 class PropertyUnits:
     default = {'name':'', 'unit': '[]'}

@@ -1,5 +1,3 @@
-import os
-import meshio
 import cloudpickle
 from mpi4py import MPI
 
@@ -13,3 +11,7 @@ def load_data(filepath):
     with open(filepath, 'rb') as fp:
         data = cloudpickle.load(fp)
     return data
+
+def test_package():
+    #TODO: make this proper
+    return 0
