@@ -33,9 +33,9 @@ jobs:
 
     - name: Install FeniCSx
       run: | 
-        sudo sudo add-apt-repository ppa:fenics-packages/fenics
+        sudo add-apt-repository ppa:fenics-packages/fenics
         sudo apt-get update
-        sudo sudo apt install fenicsx
+        sudo apt install fenicsx
         echo "Install finnished!!"
 
     - name: Test dolfinx import
