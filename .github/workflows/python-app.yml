@@ -31,12 +31,15 @@ jobs:
         pip3 install mpi4py
         mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 
-    - name: Install and test FeniCSx
+    - name: Install FeniCSx
       run: | 
         sudo sudo add-apt-repository ppa:fenics-packages/fenics
         sudo apt-get update
         sudo sudo apt install fenicsx
-        python3 -c "import dolfinx"
+        echo "Install finnished!!"
+
+    - name: Test dolfinx import
+      run: python3 -c "import dolfinx; print("Python is OK, dolfinx import success!")"
 
     - name: Install HeatBattery via setup.py
       run: pip3 install .
