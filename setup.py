@@ -18,6 +18,7 @@ setup(
     url='https://github.com/LiborKudela/heat-battery',
     install_requires=[
         'mpi4py>=3.1.3',
+        'petsc4py=>3.15.1',
         'cloudpickle>=3.0.0',
         'pandas>=2.1.2',
         'plotly>=5.18.0',
