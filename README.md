@@ -29,8 +29,13 @@ mpirun -n 5 python3 -c "print('This message should repeat five times.')"
 ```
 You can read more information on MPI instalation [here](#https://webpages.charlotte.edu/abw/coit-grid01.uncc.edu/ParallelProgSoftware/Software/OpenMPIInstall.pdf).
 
+### 2. Install gmsh for mesh generation
+```bash
+sudo apt update
+sudo apt install gmsh
+```
 
-### 2. Install latest release version of FEniCSx
+### 3. Install latest release version of FEniCSx
 ```bash
 sudo add-apt-repository ppa:fenics-packages/fenics
 sudo apt update
@@ -38,7 +43,7 @@ sudo apt install fenicsx
 ```
 You can read detailed instructions [here](#https://fenicsproject.org/download/#:~:text=The%20easiest%20way%20to%20install%20FEniCSx%20on%20Debian%20or%20Ubuntu%20Linux%20is%20via%20apt%3A).
 
-### 3. Install latest release versio of HeatBattery:
+### 4. Install latest release versio of HeatBattery:
 You can use pypi repo (:warning: not functional yet, I did not decide on LICENCSE yet)
 ```bash
 pip install heat_battery
@@ -51,12 +56,12 @@ cd heat_battery
 pip install .
 ```
 
-### 4. Test the package
+### 5. Test the package
 ```bash
 python3 -c "import heat_battery; heat_battery.test_package()"
 ```
 
-### 5. Install Paraview (optional!! for postprocessing)
+### 6. Install Paraview (optional!! for postprocessing)
 Paraview can be installed in Linux and Windows. Please see the details options [here](#https://www.paraview.org/download/).
 
 ## Main Features

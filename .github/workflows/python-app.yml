@@ -31,8 +31,11 @@ jobs:
         pip3 install mpi4py
         mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 
-    - name: Install gmsh
-      run: sudo apt install gmsh
+    - name: Install and test gmsh
+      run: |
+        sudo apt install gmsh
+        pip3 install gmsh
+        python3 -c "import gmsh"
 
     - name: Install FeniCSx
       run: | 

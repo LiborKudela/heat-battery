@@ -58,7 +58,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Cartridge Failed to generate")
         
     def test_experiment_v1_inventor_axisymetry(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v1.stp"
+        path = "./test/Experiment_v1.stp"
         mats = {
             'walls':(materials.Steel04, [1]), 
             'insulation bottom':(materials.Standard_insulation, [2]),    
@@ -128,7 +128,7 @@ class TestGeometryBuilders(unittest.TestCase):
             )
 
     def test_experiment_v21_inventor_axisymetry(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.1.stp"
+        path = "./test/Experiment_v2.1.stp"
      
         points = {
             'T':{
@@ -165,7 +165,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Experiment 2 Failed to generate")
 
     def test_experiment_v22_inventor_axisymetry(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Experiment_v2.2.stp"
+        path = "./test/Experiment_v2.2.stp"
        
         points = {
             'T':{
@@ -204,7 +204,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "2D Geometry Experiment 2 Failed to generate")
 
     def test_twowire_stp(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TwoWire.stp"
+        path = "./test/TwoWire.stp"
  
         points = {
             'T':{
@@ -244,7 +244,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "Two wire method experiment")
 
     def test_TF46(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TF46.stp"
+        path = "./test/TF46.stp"
         mats = {
             'heated cartridge':(materials.Steel04, [1]), 
             'unheated':(materials.Steel04, [2, 3])
@@ -264,7 +264,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "geometry TF46 inventor Failed to generate")
 
     def test_TF46_axisymetric(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/TF46.stp"
+        path = "./test/TF46.stp"
         mats = {
             'heated':(materials.Steel04, [2]), 
             'unheated':(materials.Steel04, [1, 3])}
@@ -283,7 +283,7 @@ class TestGeometryBuilders(unittest.TestCase):
         self.assertTrue(True, "geometry TF46 inventor Failed to generate")
 
     def test_urbanek(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Urbanek_v2.stp"
+        path = "./test/Urbanek_v2.stp"
         mats = {
             'sand':(materials.Sand_urbanek, [1]), 
             'insulation':(materials.Insulation_urbanek, [4]),    
@@ -316,7 +316,7 @@ class TestGeometryBuilders(unittest.TestCase):
             )
         
     def test_urbanek_mem(self):
-        path = "/home/numlab/Projects/CurrentProjects/HeatBattery/test/Urbanek_membrane.stp"
+        path = "./test/Urbanek_membrane.stp"
         mats = {
             'sand':(materials.Sand_urbanek, [1]), 
             'insulation':(materials.Insulation_urbanek, [4]),    
