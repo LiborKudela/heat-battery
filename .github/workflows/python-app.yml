@@ -19,12 +19,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: setup.py
+
+    - name: Check Python3 version
+      run: python3 --version
     
     - name: Install and test OpenMPI
       run: | 
@@ -41,7 +38,8 @@ jobs:
         sudo sudo apt install fenicsx
         python3 -c "import dolfinx"
 
-    - run: pip3 install -e .
+    - name: Install HeatBattery via setup.py
+      run: pip3 install .
 
     - name: Test with unittest
       run: |
