@@ -39,7 +39,7 @@ jobs:
         echo "Install finnished!!"
 
     - name: Test dolfinx import
-      run: python3 -c "import dolfinx; print('Python is OK, dolfinx import success!')"
+      run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
 
     - name: Install HeatBattery via setup.py
       run: pip3 install .

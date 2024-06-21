@@ -23,7 +23,7 @@ setup(
         'pandas>=2.1.2',
         'plotly>=5.18.0',
         'plotly-resampler>=0.9.1',
-        'numpy>=1.26.4',
+        'numpy==1.26.4',
         'dash-extensions>=1.0.4',
         'dash-bootstrap-components>=1.5.0',
         'trace-updater>=0.0.9.1',
