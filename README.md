@@ -1,3 +1,5 @@
+![build](https://github.com/LiborKudela/heat-battery/actions/workflows/python-app.yml/badge.svg)
+
 ## Battery included heat equation solver for solid heat storages
 
 ### What is it?
@@ -37,7 +39,7 @@ sudo apt install fenicsx
 You can read detailed instructions [here](#https://fenicsproject.org/download/#:~:text=The%20easiest%20way%20to%20install%20FEniCSx%20on%20Debian%20or%20Ubuntu%20Linux%20is%20via%20apt%3A).
 
 ### 3. Install latest release versio of HeatBattery:
-You can use pypi repo (not functional yet) :warning:
+You can use pypi repo (:warning: not functional yet, I did not decide on LICENCSE yet)
 ```bash
 pip install heat_battery
 ```
