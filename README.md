@@ -1,4 +1,4 @@
-![build](https://github.com/LiborKudela/heat-battery/actions/workflows/python-app.yml/badge.svg)
+[![build](https://github.com/LiborKudela/heat-battery/actions/workflows/python-app.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/python-app.yml)
 
 ## Battery included heat equation solver for solid heat storages
 
