@@ -21,6 +21,7 @@ jobs:
     - uses: Vampire/setup-wsl@v3
       with:
          distribution: Ubuntu-22.04
+         wsl-shell-user: test
          update: 'true'
 
     - uses: actions/checkout@v4
