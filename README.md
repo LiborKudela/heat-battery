@@ -1,4 +1,5 @@
 [![build](https://github.com/LiborKudela/heat-battery/actions/workflows/build-ubuntu.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/build-ubuntu.yml)
+[![build](https://github.com/LiborKudela/heat-battery/actions/workflows/build-wsl.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/build-wsl.yml)
 
 ## Battery included heat equation solver for solid heat storages
 

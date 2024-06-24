@@ -25,7 +25,7 @@ jobs:
 
     - uses: actions/checkout@v4
     
-    - name: Check Python3 version and ad pip3
+    - name: Check Python3 version and add pip3
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
         python3 --version
@@ -37,14 +37,14 @@ jobs:
         sudo apt-get update
         sudo apt install -y build-essential 
         sudo apt-get -y install openmpi-bin openmpi-doc libopenmpi-dev
-        pip3 install -y mpi4py
+        pip3 install mpi4py
         mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 
     - name: Install and test gmsh
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
         sudo apt -y install gmsh
-        pip3 -y install gmsh
+        pip3 install gmsh
         python3 -c "import gmsh"
 
     - name: Install FeniCSx
