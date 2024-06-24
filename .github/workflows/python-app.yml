@@ -55,9 +55,5 @@ jobs:
     - name: Show version of installed packages
       run: pip3 freeze
 
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Test with unittest
+    - name: Test with unittest 
       run: python3 -m unittest discover -v -s ./test  -p 'test_*.py'
