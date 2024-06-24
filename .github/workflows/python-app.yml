@@ -50,7 +50,7 @@ jobs:
     - name: Install HeatBattery via setup.py
       run: |
         pip3 install .
-        ppython3 -c "import heat_battery; print("heat_battery imported successfully!")"
+        python3 -c "import heat_battery; print("heat_battery imported successfully!")"
 
     - name: Show version of installed packages
       run: pip3 freeze
