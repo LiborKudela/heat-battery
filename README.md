@@ -26,6 +26,7 @@ terminal with the WSL distrubution and proceed with the following steps.
 sudo apt-get update 
 sudo apt install build-essential 
 sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
+pip3 install mpi4py
 mpirun -n 5 python3 -c "print('This message should repeat five times.')"
 ```
 You can read more information on MPI instalation [here](#https://webpages.charlotte.edu/abw/coit-grid01.uncc.edu/ParallelProgSoftware/Software/OpenMPIInstall.pdf).
@@ -34,6 +35,8 @@ You can read more information on MPI instalation [here](#https://webpages.charlo
 ```bash
 sudo apt update
 sudo apt install gmsh
+pip3 install gmsh
+python3 -c "import gmsh"
 ```
 
 ### 3. Install latest release version of FEniCSx
@@ -41,20 +44,21 @@ sudo apt install gmsh
 sudo add-apt-repository ppa:fenics-packages/fenics
 sudo apt update
 sudo apt install fenicsx
+python3 -c "import dolfinx"
 ```
 You can read detailed instructions [here](#https://fenicsproject.org/download/#:~:text=The%20easiest%20way%20to%20install%20FEniCSx%20on%20Debian%20or%20Ubuntu%20Linux%20is%20via%20apt%3A).
 
 ### 4. Install latest release versio of HeatBattery:
 You can use pypi repo (:warning: not functional yet, I did not decide on LICENCSE yet)
 ```bash
-pip install heat_battery
+pip3 install heat_battery
 ```
 
 You can clone the repository and install directly.
 ```bash
 git clone https://github.com/LiborKudela/heat-battery
 cd heat_battery
-pip install .
+pip3 install .
 ```
 
 ### 5. Test the package
