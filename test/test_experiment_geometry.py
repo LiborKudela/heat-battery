@@ -1,14 +1,22 @@
 import unittest
-from heat_battery.geometry.dummy import build_geometry as build_dummy
+from examples.Example_01.geometry import build_geometry as build_example_geometry
 from heat_battery.geometry.step_loader import build_geometry_from_stepfile
 from heat_battery.materials import materials
 
 class TestGeometryBuilders(unittest.TestCase):
 
-    def test_gmsh_dummy(self):
-        build_dummy()
+    def test_gmsh(self):
+
+        from mpi4py import MPI
+        import gmsh
+
+        if MPI.COMM_WORLD.rank == 0:
+            gmsh.initialize()
+            gmsh.finalize()
+        MPI.COMM_WORLD.Barrier()
+
         self.assertTrue(True, "Dummy failed")
-        
+
     def test_mesh_form_step(self):
         path = "./test/Experiment_v1.stp"
         mats = {

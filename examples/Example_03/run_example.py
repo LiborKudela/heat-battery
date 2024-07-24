@@ -1,16 +1,22 @@
 def run():
 
+    from .geometry import build_geometry
     from .model import THW_twowire
     import os
 
     # what folder is this file in?
     example_dir = os.path.dirname(__file__)
 
+    # builde geometry for simulation
+    g_dir = os.path.join(example_dir, 'meshes')
+    build_geometry(g_dir, example_dir)
+
     # create simulation
+    r_dir = os.path.join(example_dir, 'results')
     sim = THW_twowire(
-        geometry_dir=os.path.join(example_dir, 'meshes/two_wire'), 
-        model_name='mesh',
-        result_dir=os.path.join(example_dir, 'results'),
+        geometry_dir=g_dir, 
+        model_name='two_wire',
+        result_dir=r_dir,
         dt_min=0.00000001,
         dt_start=0.0000001,
         dt_max=10.0,

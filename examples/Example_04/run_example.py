@@ -1,6 +1,7 @@
 def run():
 
     # local imports
+    from .geometry import build_geometry
     from .model import PassiveStorage
     from heat_battery.data import Visualizer, pages
     import os
@@ -8,15 +9,20 @@ def run():
     # what folder is this file in?
     example_dir = os.path.dirname(__file__)
 
+    # builde geometry for simulation
+    g_dir = os.path.join(example_dir, 'meshes')
+    build_geometry(g_dir, example_dir)
+
     # create simulation
+    r_dir = os.path.join(example_dir, 'results')
     sim = PassiveStorage(
         dt_min=0.01,
         dt_max=600.0,
         dt_start=1.0,
         dt_ctrl_interval=(1.0, 2.0),
-        geometry_dir=os.path.join(example_dir, 'meshes'), 
-        model_name='mesh',
-        result_dir=os.path.join(example_dir, 'results'),
+        geometry_dir=g_dir, 
+        model_name='passive_storage',
+        result_dir=r_dir,
         h0_T_ref=18,
         atol=1e-8,
         rtol=1e-10,

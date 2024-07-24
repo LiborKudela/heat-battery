@@ -126,3 +126,4 @@ def build_geometry_from_stepfile(
             bcs,
             jac_f,
         )
+    MPI.COMM_WORLD.Barrier()

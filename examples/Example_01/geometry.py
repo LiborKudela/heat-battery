@@ -270,10 +270,3 @@ def build_geometry(
     MPI.COMM_WORLD.Barrier()
 
     return None
-
-# build two meshes
-dir = 'meshes'
-if __name__ == '__main__':
-    build_geometry(dim=2, dir=dir, verbosity=5)
-    build_geometry(dim=3, dir=dir, verbosity=5)
-

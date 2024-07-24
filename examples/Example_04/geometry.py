@@ -1,30 +1,32 @@
 from heat_battery.geometry.step_loader import build_geometry_from_stepfile
 from heat_battery.materials import materials
 
-path = "Passive_storage.stp"
-mats = {
-    'sand':(materials.Sand_urbanek, [1]), 
-    'insulation':(materials.Insulation_urbanek, [4]),    
-    'heated cartridge':(materials.Cartridge_heated, [2, 3]), 
-}
-
-points = {
-    'T':{
-        'inner_cartridge': [0, -0.16/2,-1.7/2],
-        'outer_cartridge': [0, -0.36/2,-1.7/2], 
-    },
-}
-
-bcs = {
-    'outer_surface': [21,22,25],
-    'mebrane_surface': [14,15,16,17,18,19],
-    'cartridge_surface': [1,2,3,4,5,6],
+def build_geometry(g_dir, stp_dir):
+    path = f"{stp_dir}/Passive_storage.stp"
+    mats = {
+        'sand':(materials.Sand_urbanek, [1]), 
+        'insulation':(materials.Insulation_urbanek, [4]),    
+        'heated cartridge':(materials.Cartridge_heated, [2, 3]), 
     }
 
-if __name__ == '__main__':
+    points = {
+        'T':{
+            'inner_cartridge': [0, -0.16/2,-1.7/2],
+            'outer_cartridge': [0, -0.36/2,-1.7/2], 
+        },
+    }
+
+    bcs = {
+        'outer_surface': [21,22,25],
+        'mebrane_surface': [14,15,16,17,18,19],
+        'cartridge_surface': [1,2,3,4,5,6],
+        }
+
+    
     build_geometry_from_stepfile(
         path = path,
-        dir = 'meshes',
+        dir = g_dir,
+        name='passive_storage',
         mesh_size_max=0.04,
         points=points,
         mats=mats,

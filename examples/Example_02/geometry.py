@@ -2,8 +2,8 @@ from heat_battery.simulations.simulation_base import MPI
 from heat_battery.materials import materials
 from heat_battery.geometry import build_geometry_from_stepfile
 
-def build_geometry():
-    path = "Experiment_v1.stp"
+def build_geometry(g_dir, stp_dir):
+    path = f"{stp_dir}/Experiment_v1.stp"
     mats = {
         'walls':(materials.Steel04, [1]), 
         'insulation bottom':(materials.Standard_insulation, [2]),    
@@ -64,7 +64,7 @@ def build_geometry():
     
     build_geometry_from_stepfile(
         path = path,
-        dir = 'meshes',
+        dir = g_dir,
         name = 'inventor_v1',
         mesh_size_max=0.001,
         points=points,
@@ -74,7 +74,4 @@ def build_geometry():
         extract_axisymetry=True,
         )
 
-# build the mesh
-if __name__ == '__main__':
-    build_geometry()
 
