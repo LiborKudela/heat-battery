@@ -186,7 +186,8 @@ class Material():
                  rho : Material_property, 
                  cp : Material_property,
                  sigma=None,
-                 h0_T_ref = 20, 
+                 h0_T_ref = 20,
+                 price=0.0,
                  name="Unspecified"):
         
         self.h0_T_ref = h0_T_ref
@@ -194,6 +195,7 @@ class Material():
         self.rho = rho
         self.cp = cp
         self.sigma = sigma
+        self.price = price
         self.name = name
 
     def h(self, T):

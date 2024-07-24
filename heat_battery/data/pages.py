@@ -1,6 +1,8 @@
 import dash_extensions.enrich as dash_enrich
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
+import dash
+import time
 
 
 from trace_updater import TraceUpdater
@@ -188,3 +190,52 @@ class VtkMeshPage(GridLayoutPage):
     
     def update_data(self):
         self.data = self.figure_constructor(*self.args, **self.kwargs)
+
+class Table(VisualizerPage):
+    def __init__(self, name, table):
+        super().__init__(name)
+        self.table = table
+        self.id = id
+
+    def get_layout(self):
+        return dash_enrich.html.Div([
+            dash_enrich.dash_table.DataTable(
+            id={'type':'datatable-interactivity', "index":  f"{self.href}"},
+            data=self.table.to_dict('records'),
+            columns=[{"name": i, "id": i, "selectable": True} for i in self.table.columns],
+            column_selectable="single",
+            selected_columns=[],
+            row_selectable="single",
+            selected_rows=[],
+            page_size=5,
+            page_action="native",
+            page_current=0,
+            style_cell={
+                'overflow': 'hidden',
+                'textOverflow': 'ellipsis',
+                'maxWidth': 0,
+                'overflowX': 'auto',
+            },
+            tooltip_data=[
+                {column: {'value': str(value), 'type': 'markdown'} for column, value in row.items()} 
+            for row in self.table.to_dict('records')],
+            tooltip_duration=None,
+            # editable=False,
+            filter_action="native",
+            sort_action="native",
+            sort_mode="single",
+            ),
+            dash_enrich.dcc.Loading(
+                id="loading-1",
+                type="default",
+                children=dash_enrich.html.Div(id={'type':'datatable-loading-div', "index":  f"{self.href}"})
+            ),
+        ])
+    
+    def get_content(self, row_data):
+        print(f"hello I am {self.href}")
+        print(row_data)
+        time.sleep(3) #dummy delay
+        return dash_enrich.html.Div(
+            children="Text text texty text"
+        )

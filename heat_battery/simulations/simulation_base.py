@@ -14,7 +14,7 @@ import plotly.express as px
 
 from .probing import Probe_writer
 from ..materials import MaterialsSet
-from ..utilities import load_data
+from ..utilities import load_data, ProgressBar
 
 class Simulation():
     def __init__(self,
@@ -25,13 +25,18 @@ class Simulation():
                 T_guess=None, 
                 t_max=3600,
                 dt_start=0.01,
-                dt_min=0.1,
+                dt_min=0.01,
                 dt_max=60.0,
                 dt_ctrl_interval=(0.1, 0.25),
                 dt_xdmf=10,
                 atol=1e-10,
                 rtol=1e-12,
-                h0_T_ref=20):
+                h0_T_ref=20,
+                build_solvers=[
+                    'derivative',
+                    'steady',
+                    'unsteady'],
+                ):
  
         self.geometry_dir = geometry_dir
         self.result_dir = result_dir
@@ -51,7 +56,6 @@ class Simulation():
         self.print_r0(f"Dolfinx version: {__version__}")
         self.load_geometry()
         self.define_measures()
-        self.create_xdmf_files()
         self.create_function_spaces()
         self.create_functions()
         self.calculate_volumes_of_subdomains()
@@ -60,10 +64,22 @@ class Simulation():
         self.define_form_subdomain_terms()
         self.resolve_form_terms_update_callbacks()
         self.resolve_form_terms_next_step_callbacks()
-        self.create_steady_state_form_solver()
-        self.create_unsteady_form_solver()
+        self.resolve_form_terms_converged_callbacks()
+
+        for s_type in build_solvers:
+            if s_type == 'derivative':
+                pass
+                #self.create_time_derivative_form_solver()
+            elif s_type == 'steady':
+                self.create_steady_state_form_solver()
+                self.create_steady_probe_writer()
+            elif s_type == 'unsteady':
+                self.create_unsteady_form_solver()
+                self.create_unsteady_probe_writer()
+            else:
+                print(f"Uknown solver : {s_type}")
+        
         self.create_forms_for_calculating_temperature_spectrum()
-        self.create_probe_writer()
         self.create_static_vtk_data()
 
     def print_r0(self, *args, **kwargs):
@@ -107,14 +123,6 @@ class Simulation():
         self.ds = ufl.Measure("ds", domain=self.domain, subdomain_data=self.facet_tags)
         self.dS = ufl.Measure("dS", domain=self.domain, subdomain_data=self.facet_tags)
 
-    def create_xdmf_files(self):
-        # create result files
-        self.result_dir = os.path.join(self.result_dir, f'{self.dim}d')
-        self.xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, 'functions.xdmf'), "w")
-        self.xdmf.write_mesh(self.domain)
-        self.xdmf_steady = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, 'steady_functions.xdmf'), "w")
-        self.xdmf_steady.write_mesh(self.domain)
-
     def create_function_spaces(self):
         #self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
         self.V = fem.functionspace(self.domain, ("Lagrange", 1))
@@ -130,6 +138,11 @@ class Simulation():
         self.T_n = fem.Function(self.V)
         self.T_n.name = "T_n"
         self.T_n.x.array[:] = self.T0
+
+        # temperature time dirivative at state T_n and previous time t_n
+        self.dT = fem.Function(self.V)
+        self.dT.name = "dT"
+        self.dT.x.array[:] = 0.0
 
         # temperature for interpolation (for equidistant time points)
         self.T_xdmf = fem.Function(self.V)
@@ -149,6 +162,9 @@ class Simulation():
         self.dt = fem.Constant(self.domain, PETSc.ScalarType((self.dt_start)))
         self.t = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
+
+    def get_custom_data(self, key):
+        return self.geo_meta['call_data']['custom_data'][key]
 
     def compute_subdomain_index(self, domain):
         if np.issubdtype(type(domain), np.integer):
@@ -174,45 +190,28 @@ class Simulation():
         i = self.compute_boundary_index(boundary)
         return self.dS(i+1)
 
-    def set_unsteady_source_term(self, object, domain):
+    def set_source_term(self, object, domain):
         i = self.compute_subdomain_index(domain)
-        self.q_source_unsteady[i] = object
+        self.q_source[i] = object
         
-    def get_unsteady_source_term(self, domain):
+    def get_source_term(self, domain):
         i = self.compute_subdomain_index(domain)
-        return self.q_source_unsteady[i]
+        return self.q_source[i]
         
-    def set_unsteady_bc_term(self, object, boundary):
+    def set_bc_term(self, object, boundary):
         i = self.compute_boundary_index(boundary)
-        self.bcs_unsteady[i] = object
+        self.bcs_terms[i] = object
         
-    def get_unsteady_bc_term(self, boundary):
+    def get_bc_term(self, boundary):
         i = self.compute_boundary_index(boundary)
-        return self.bcs_unsteady[i]
-    
-    def set_steady_state_source_term(self, object, domain):
-        i = self.compute_subdomain_index(domain)
-        self.q_source_steady[i] = object
-        
-    def get_steady_steady_source_term(self, domain):
-        i = self.compute_subdomain_index(domain)
-        return self.q_source_steady[i]
-        
-    def set_steady_state_bc_term(self, object, boundary):
-        i = self.compute_boundary_index(boundary)
-        self.bcs_steady[i] = object
-        
-    def get_steady_state_bc_term(self, boundary):
-        i = self.compute_boundary_index(boundary)
-        return self.bcs_steady[i]
+        return self.bcs_terms[i]
         
     def create_form_terms_presized_lists(self):
-        self.q_source_unsteady = [None]*len(self.mats)
-        self.q_source_steady = [None]*len(self.mats)
-        self.bcs_unsteady = [None]*len(self.bcs)
-        self.bcs_steady = [None]*len(self.mats)
+        self.q_source = [None]*len(self.mats)
+        self.bcs_terms = [None]*len(self.bcs)
         self.unsteady_term_update_callbacks = []
         self.unsteady_term_next_step_callbacks = []
+        self.unsteady_term_converged_callbacks = []
 
     def update_unsteady_form_terms(self, t):
         for update_function in self.unsteady_term_update_callbacks:
@@ -222,49 +221,74 @@ class Simulation():
         for next_step_function in self.unsteady_term_next_step_callbacks:
             next_step_function()
 
+    def converged_unsteady_form_terms(self):
+        all_converged = True
+        for converged_function in self.unsteady_term_converged_callbacks:
+            all_converged *= converged_function()
+        return all_converged
+
     def define_form_subdomain_terms(self):
         pass
 
-    def resolve_form_terms_update_callbacks(self):
-        # collect all updaters for unsteady volumetric terms
-        for obj in self.q_source_unsteady:
-            if obj is not None and not obj.update in self.unsteady_term_update_callbacks:
-                self.unsteady_term_update_callbacks.append(obj.update)
+    def resolve_term_callbacks(self, callback_name):
+        unique_callbacks = []
+        # collect all updaters for source terms
+        for obj in self.q_source:
+            if obj is not None and hasattr(obj, callback_name) and not getattr(obj, callback_name) in unique_callbacks:
+                unique_callbacks.append(getattr(obj, callback_name))
 
-        # collect all updaters for unsteady boundary terms
-        for obj in self.bcs_unsteady:
-            if obj is not None and not obj.update in self.unsteady_term_update_callbacks:
-                self.unsteady_term_update_callbacks.append(obj.update)
+        # collect all updaters for boundary terms
+        for obj in self.bcs_terms:
+            if obj is not None and hasattr(obj, callback_name) and not getattr(obj, callback_name) in unique_callbacks:
+                unique_callbacks.append(getattr(obj, callback_name))
+
+        return unique_callbacks
+
+    def resolve_form_terms_update_callbacks(self):
+        "Collects update callbacks for all instances of Terms in unsteady form"
+        self.unsteady_term_update_callbacks = self.resolve_term_callbacks('update')
 
     def resolve_form_terms_next_step_callbacks(self):
-        # collect all next_steps for unsteady volumetric terms
-        for obj in self.q_source_unsteady:
-            if obj is not None and not obj.next_step in self.unsteady_term_next_step_callbacks:
-                self.unsteady_term_next_step_callbacks.append(obj.next_step)
+        "Collects next_steps callbacks for all instances of Terms in unsteady form"
+        self.unsteady_term_next_step_callbacks = self.resolve_term_callbacks('next_step')
 
-        # collect all updaters for unsteady boundary terms
-        for obj in self.bcs_unsteady:
-            if obj is not None and not obj.next_step in self.unsteady_term_next_step_callbacks:
-                self.unsteady_term_next_step_callbacks.append(obj.next_step)
+    def resolve_form_terms_converged_callbacks(self):
+        "Collects converged callbacks for all instances of Terms in unsteady form"
+        self.unsteady_term_converged_callbacks = self.resolve_term_callbacks('converged')
+
+    def get_all_forcing_form_terms(self, T, t):
+        Fd = 0
+        for i, mat in enumerate(self.mats, 1):
+            domain_name = mat.name
+            # derivative term: 0 = dT/dt*rho(T)*cp(T)
+            #Fd += mat.rho(T)*mat.cp(T)*self.dT*self.T_v*self.jac*self.dx(i)
+
+            # unsteady state form heat capacity term: 0 = dT/dt*rho*cp 
+            Fd += ufl.dot(mat.k(T)*ufl.grad(T), ufl.grad(self.T_v))*self.jac*self.dx(i)
+
+            #internal sources of heat in domains
+            if self.q_source[i-1] is not None: # if defined for a subdomain
+                Fd += -self.q_source[i-1](T, self.x, t, domain=domain_name)*self.T_v*self.jac*self.dx(i)
+
+        # external dynamical boundary conditions
+        for i, bc in enumerate(self.bcs, 1): # i == subdomain index and measure index
+            bc_name = bc
+            if self.bcs_terms[i-1] is not None: # if defined for a surface
+                Fd += self.bcs_terms[i-1](T, self.x, t, domain=bc_name)*self.T_v*self.jac*self.ds(i) 
+        return Fd
+
+    def create_time_derivative_form_solver(self):
+        self.Fd = 0.0
+        for i, mat in enumerate(self.mats, 1):
+            self.Fd += mat.rho(self.T_n)*mat.cp(self.T_n)*self.dT*self.T_v*self.jac*self.dx(i)
+        self.Fd += self.get_all_forcing_form_terms(self.T_n, self.t_n)
+        self.derivative_solver = self.create_newton_solver(self.dT, self.Fd)
 
     def create_steady_state_form_solver(self):
         # steady state form: 0 = 0
         self.Fss = 0
-        for i, mat in enumerate(self.mats, 1):
-            domain_name = mat.name
-            # steady state heat conduction term: 0 = λ*∇(∇(T))
-            self.Fss += ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(self.T_v))*self.jac*self.dx(i)
-
-            # stedy state source term: 0 = q(T)
-            if self.q_source_steady[i-1] is not None:
-                self.Fss += -self.q_source_steady[i-1](self.T, self.x, domain_name)*self.T_v*self.jac*self.dx(i)
-
-        for i, bc in enumerate(self.bcs, 1):
-            bc_name = bc
-            if self.bcs_steady[i-1] is not None:
-                self.Fss += self.bcs_steady[i-1](self.T, self.x, bc_name)*self.T_v*self.jac*self.ds(i)
-
-        self.steady_solver = self.create_solver(self.Fss, self.T)
+        self.Fss += self.get_all_forcing_form_terms(self.T, t=None)
+        self.steady_solver = self.create_newton_solver(self.Fss, self.T)
 
     def create_unsteady_form_solver(self):
         #unsteady state form: 0 = 0
@@ -272,25 +296,13 @@ class Simulation():
         for i, mat in enumerate(self.mats, 1): # i == subdomain index / measure index
             domain_name = mat.name
             # unsteady state form heat capacity term: 0 = dT/dt*rho*cp
-            self.F += mat.rho(self.T)*mat.cp(self.T)*self.T*self.T_v*self.jac*self.dx(i) 
+            self.F += mat.rho(self.T)*mat.cp(self.T)*self.T*self.T_v*self.jac*self.dx(i)
             self.F += -mat.rho(self.T_n)*mat.cp(self.T_n)*self.T_n*self.T_v*self.jac*self.dx(i)
 
-            # unsteady state heat conduction term: 0 = λ*∇(∇(T))
-            self.F += self.theta*self.dt*ufl.dot(mat.k(self.T)*ufl.grad(self.T), ufl.grad(self.T_v))*self.jac*self.dx(i)
-            self.F += (1-self.theta)*self.dt*ufl.dot(mat.k(self.T_n)*ufl.grad(self.T_n), ufl.grad(self.T_v))*self.jac*self.dx(i)
-
-            # unstedy state source term: 0 = q(T)
-            if self.q_source_unsteady[i-1] is not None: # if defined for a subdomain
-                self.F += -self.theta*self.dt*self.q_source_unsteady[i-1](self.T, self.t, self.x, domain_name)*self.T_v*self.jac*self.dx(i) 
-                self.F += -(1-self.theta)*self.dt*self.q_source_unsteady[i-1](self.T_n, self.t_n, self.x, domain_name)*self.T_v*self.jac*self.dx(i)
-
-        for i, bc in enumerate(self.bcs, 1): # i == subdomain index / measure index
-            bc_name = bc
-            if self.bcs_unsteady[i-1] is not None: # if defined for a surface
-                self.F += self.theta*self.dt*self.bcs_unsteady[i-1](self.T, self.t, self.x, bc_name)*self.T_v*self.jac*self.ds(i) 
-                self.F += (1-self.theta)*self.dt*self.bcs_unsteady[i-1](self.T_n, self.t_n, self.x, bc_name)*self.T_v*self.jac*self.ds(i)
+        self.F += self.theta*self.dt*self.get_all_forcing_form_terms(self.T, self.t)
+        self.F += (1-self.theta)*self.dt*self.get_all_forcing_form_terms(self.T_n, self.t_n)
         
-        self.unsteady_solver = self.create_solver(self.F, self.T)
+        self.unsteady_solver = self.create_newton_solver(self.F, self.T)
 
     def create_forms_for_calculating_temperature_spectrum(self):
         # greek-Psi forms for calculating cumulative temperature spectrum of subdomains
@@ -305,166 +317,30 @@ class Simulation():
             # density forms
             self.psi_prime_forms.append(fem.form((self.b*ufl.exp(self.b*(self.T-self.T_hat)))/(1+ufl.exp(self.b*(self.T-self.T_hat)))**2/self.V_subdomain[i-1]*self.jac*self.dx(i)))
 
-    def create_probe_writer(self):
-        # probe writer
-        self.probes = Probe_writer(os.path.join(self.result_dir, 'probes.csv'))
-        self.create_probes(self.probes)
+    def create_common_probes(self, probes):
+        pass
+        
+    def create_steady_probes(self, probes):
 
-    def create_static_vtk_data(self):    
-        # vtk plot stuff that do not need to be recreated every time
-        cells, types, x = plot.vtk_mesh(self.V)
-        num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local
-        num_dofs_local = self.V.dofmap.index_map.size_local * self.V.dofmap.index_map_bs
-        self.num_dofs_local = num_dofs_local
-        num_dofs_per_cell = cells[0]
-        cells_dofs = (np.arange(len(cells)) % (num_dofs_per_cell+1)) != 0
-        global_dofs = self.V.dofmap.index_map.local_to_global(cells[cells_dofs].copy())
-        cells[cells_dofs] = global_dofs
-        root = 0
-        global_cells = self.domain.comm.gather(cells[:(num_dofs_per_cell+1)*num_cells_local], root=root)
-        global_types = self.domain.comm.gather(types[:num_cells_local])
-        global_x = self.domain.comm.gather(x[:self.V.dofmap.index_map.size_local,:], root=root)
-        if MPI.COMM_WORLD.rank == 0:
-            self.root_x = np.vstack(global_x)
-            self.root_cells = np.concatenate(global_cells)
-            self.root_types = np.concatenate(global_types)
+        @probes.register_probe('t_cpu', 's')
+        def t_cpu():
+            return self.elapsed_steady
 
-    def create_solver(self, F, u):
-        problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
-        solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
-        solver.convergence_criterion = "residual"
-        solver.max_it = 30
-        solver.atol = self.atol
-        solver.rtol = self.rtol
-        opts = PETSc.Options()
-        ksp = solver.krylov_solver
-        pc = ksp.getPC()
-        option_prefix = ksp.getOptionsPrefix()
-        opts[f"{option_prefix}ksp_type"] = 'gmres'
-        opts[f"{option_prefix}pc_type"] = 'gamg'
-        opts[f"{option_prefix}ksp_reuse_preconditioner"] = 'false'
-        ksp.setFromOptions()
-        return solver
-    
-    def close_results(self):
-        self.probes.close()
-        self.xdmf.close()
-        self.xdmf_steady.close()
-    
-    def solve_steady(self, T_guess=None, save_xdmf=False):
-        if T_guess is not None:
-            self.T.x.array[:] = T_guess
-        r = self.steady_solver.solve(self.T)
-        self.probes.evaluate_probes()
-        #self.probes.print()
-        if save_xdmf:
-            self.xdmf_steady.write_function(self.T)
+        @probes.register_probe('NLS_iter', '-', format='d')
+        def NLS_iter():
+            return self.r_steady[0]
+        
+        @probes.register_probe('KSP_iter', '-', format='d')
+        def KSP_iter():
+            return self.steady_solver.krylov_solver.its
+        
+        @probes.register_probe('ksp_norm', '-')
+        def KSP_norm():
+            return self.steady_solver.krylov_solver.norm
 
-    def solve_unsteady(self, 
-            T0=None, T_guess=None, t_max=100, 
-            verbose=False, save_xdmf=True, call_back=lambda: None, 
-            call_back_each_t=None, call_back_each_step=None):
-        self.t.value = 0
-        prev_callback_t = 0.0
-        prev_callback_step = 0
-        self.t_n.value = self.t.value
-        if T0 is not None:
-            self.T_n.x.array[:] = T0
-        if T_guess is not None:
-            self.T.x.array[:] = T_guess
-        t_start = time.time()
-        next_xdmf_t = 0.0
-        self.probes.evaluate_probes()
-        self.update_unsteady_form_terms(self.t_n)
-        if verbose:
-            self.probes.print()
-        self.t_max = t_max
-        stop_timesteping = False
-        step = 0
-        while self.t.value < self.t_max:
-            i_start = time.time()
-            step += 1
+        self.create_common_probes(probes)
 
-            success = False
-            last_dt_min_atempt = False
-            while not success:
-                if self.t_n.value + self.dt.value > self.t_max:
-                    self.dt.value = self.t_max - self.t.value
-                self.t.value = self.t_n.value + self.dt.value
-
-                self.update_unsteady_form_terms(self.t)
-              
-                try:
-                    self.r_unsteady = self.unsteady_solver.solve(self.T)
-                except Exception as e:
-                    if MPI.COMM_WORLD.rank == 0:
-                        print(e)
-                        print(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 50%")
-                    self.dt.value *= 0.5
-                    self.T.x.array[:] = self.T_n.x.array[:]
-                    continue
-
-                # time step adaptation
-                diff = self.T.vector - self.T_n.vector
-                max_T_diff = np.abs(diff.array).max()
-                max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
-                if max_T_diff > self.dt_ctrl_interval[1]:
-                    self.dt.value *= 0.9
-                    self.dt.value = max(self.dt_min, self.dt.value)
-                    if self.dt.value == self.dt_min and not last_dt_min_atempt:
-                        last_dt_min_atempt = True
-                    elif last_dt_min_atempt:
-                        print(f"Minimal dt is too large - max_T_diff was {max_T_diff}")
-                        stop_timesteping = True
-                        break
-                    continue
-                elif max_T_diff < self.dt_ctrl_interval[0]:
-                    self.dt.value /= 0.95
-                    self.dt.value = min(self.dt_max, self.dt.value)
-
-
-                self.probes.evaluate_probes()
-                success = True
-            
-            if stop_timesteping:
-                print("Adaptive strategy triggered stop.")
-                break
-
-            while next_xdmf_t <= self.t.value and save_xdmf:
-                denom_dt = self.t.value - self.t_n.value
-                enum_dt = next_xdmf_t - self.t_n.value
-                self.T_xdmf.x.array[:] = self.T.x.array
-                self.T_xdmf.x.array[:] -= self.T_n.x.array
-                self.T_xdmf.x.array[:] *= enum_dt/denom_dt
-                self.T_xdmf.x.array[:] += self.T_n.x.array
-                self.xdmf.write_function(self.T_xdmf, next_xdmf_t)
-                next_xdmf_t += self.dt_xdmf
-            MPI.COMM_WORLD.Barrier()
-
-            self.T_n.x.array[:] = self.T.x.array
-            self.t_n.value = self.t.value
-            self.next_step_unsteady_form_terms()
-
-            if MPI.COMM_WORLD.rank == 0:
-                self.elapsed = time.time() - t_start
-                self.ielapsed = time.time() - i_start
-            self.probes.write_probes()
-
-            if verbose:
-                self.probes.print()
-
-            if (call_back_each_t is not None) and (self.t.value > prev_callback_t + call_back_each_t):
-                call_back()
-                prev_callback_t += call_back_each_t
-
-            if (call_back_each_step is not None) and (step > prev_callback_step + call_back_each_step):
-                call_back()
-                prev_callback_step += call_back_each_step
-
-        if MPI.COMM_WORLD.rank == 0:
-            return self.probes.df.copy()
-
-    def create_probes(self, probes):
+    def create_unsteady_probes(self, probes):
 
         @probes.register_probe('progress', '%')
         def progress():
@@ -498,9 +374,259 @@ class Simulation():
         def KSP_iter():
             return self.unsteady_solver.krylov_solver.its
         
+        @probes.register_probe('TERM_iter', '-', format='d')
+        def KSP_norm():
+            return self.unsteady_term_its
+        
         @probes.register_probe('ksp_norm', '-')
         def KSP_norm():
             return self.unsteady_solver.krylov_solver.norm
+        
+        self.create_common_probes(probes)
+
+    def create_unsteady_probe_writer(self) -> Probe_writer:
+        # probe writer
+        result_dir = os.path.join(self.result_dir, f'{self.model_name}')
+        self.unsteady_probes = Probe_writer(result_dir, 'unsteady.csv')
+        self.create_unsteady_probes(self.unsteady_probes)
+    
+    def create_steady_probe_writer(self) -> Probe_writer:
+        # probe writer
+        result_dir = os.path.join(self.result_dir, f'{self.model_name}')
+        self.steady_probes = Probe_writer(result_dir, 'steady_probes.csv')
+        self.create_steady_probes(self.steady_probes)
+
+    def create_static_vtk_data(self):    
+        # vtk plot stuff that do not need to be recreated every time
+        cells, types, x = plot.vtk_mesh(self.V)
+        num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local
+        num_dofs_local = self.V.dofmap.index_map.size_local * self.V.dofmap.index_map_bs
+        self.num_dofs_local = num_dofs_local
+        num_dofs_per_cell = cells[0]
+        cells_dofs = (np.arange(len(cells)) % (num_dofs_per_cell+1)) != 0
+        global_dofs = self.V.dofmap.index_map.local_to_global(cells[cells_dofs].copy())
+        cells[cells_dofs] = global_dofs
+        root = 0
+        global_cells = self.domain.comm.gather(cells[:(num_dofs_per_cell+1)*num_cells_local], root=root)
+        global_types = self.domain.comm.gather(types[:num_cells_local])
+        global_x = self.domain.comm.gather(x[:self.V.dofmap.index_map.size_local,:], root=root)
+        if MPI.COMM_WORLD.rank == 0:
+            self.root_x = np.vstack(global_x)
+            self.root_cells = np.concatenate(global_cells)
+            self.root_types = np.concatenate(global_types)
+
+    def create_newton_solver(self, F, u):
+        problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
+        solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
+        solver.convergence_criterion = "residual"
+        solver.max_it = 30
+        solver.atol = self.atol
+        solver.rtol = self.rtol
+        opts = PETSc.Options()
+        ksp = solver.krylov_solver
+        pc = ksp.getPC()
+        option_prefix = ksp.getOptionsPrefix()
+        opts[f"{option_prefix}ksp_type"] = 'gmres'
+        opts[f"{option_prefix}pc_type"] = 'gamg'
+        opts[f"{option_prefix}ksp_reuse_preconditioner"] = 'false'
+        ksp.setFromOptions()
+        return solver
+    
+    def solve_time_derivative(self,
+        dT_guess=None):
+        if dT_guess is not None:
+            self.T.x.array[:] = dT_guess
+        self.r_derivative = self.derivative_sollver.solve(self.T)
+
+    def solve_steady(self, 
+        T_guess=None, xdmf_file=None, save_probes=False, 
+        verbose=False, close_probes=True):
+        t_start = time.time()
+        if T_guess is not None:
+            self.T.x.array[:] = T_guess
+
+        #FIXME: add update for source_terms and bc_terms before simulation
+        #FIXME: this should run in loop when the Terms are implicit in nature
+        self.r_steady = self.steady_solver.solve(self.T)
+        
+        if MPI.COMM_WORLD.rank == 0:
+            self.elapsed_steady = time.time() - t_start
+
+        self.steady_probes.evaluate_probes()
+
+        if verbose:
+            self.steady_probes.pretty_print()
+
+        if save_probes:
+            self.steady_probes.write_probes_to_file()
+        self.steady_probes.write_probes_to_memory()
+
+        if xdmf_file is not None:
+            xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, xdmf_file), "w")
+            xdmf.write_mesh(self.domain)
+            xdmf.write_function(self.T)
+            xdmf.close()
+
+        if close_probes:
+            self.steady_probes.close()
+
+        return self.steady_probes
+
+    def solve_unsteady(self, 
+            T0=None, T_guess=None, t_max=100, 
+            verbose=True, xdmf_file=None, probes_file=None, close_probes=True,
+            force_explicit_terms=False, max_term_its=3, use_time_projection=True, 
+            call_back=lambda: None, call_back_each_t=None,
+            call_back_each_step=None):
+
+        # set initial state of simulation
+        if T0 is not None:
+            self.T_n.x.array[:] = T0
+        else:
+            self.T_n.x.array[:] = self.T0
+
+        if T_guess is not None:
+            self.T.x.array[:] = T_guess
+        else:
+            self.T.x.array[:] = self.T_guess
+            
+        t_start = time.time()
+        self.t.value = 0
+        prev_callback_t = 0.0
+        prev_callback_step = 0
+        self.t_n.value = self.t.value
+        next_xdmf_t = 0.0
+
+        # initialize unsteady probes and print to stdout
+        if probes_file is not None:
+            self.unsteady_probes.set_result_file_name(probes_file)
+        self.unsteady_probes.evaluate_probes()
+        self.update_unsteady_form_terms(self.t_n)
+
+        # open xdmf file for writing domain data
+        if xdmf_file is not None:
+            xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, xdmf_file), "w")
+            xdmf.write_mesh(self.domain)
+
+        if verbose:
+            self.unsteady_probes.pretty_string()
+        elif MPI.COMM_WORLD.rank == 0:
+            pbar = ProgressBar(
+                desc = f"{self.__class__.__name__} unsteady simulation progress", 
+                update_cb=lambda : self.unsteady_probes.get_value('progress'),
+                )
+
+        # time steping loop with time adaptation
+        self.t_max = t_max
+        stop_timesteping = False
+        step = 0
+        while self.t.value < self.t_max:
+            i_start = time.time()
+            step += 1
+            success = False
+            last_dt_min_atempt = False
+
+            # Keep trying to solve for new time step
+            self.unsteady_term_its = 1
+            while not success:
+                if self.t_n.value + self.dt.value > self.t_max:
+                    self.dt.value = self.t_max - self.t.value
+                self.t.value = self.t_n.value + self.dt.value
+
+                self.update_unsteady_form_terms(self.t)
+
+                try:
+                    self.r_unsteady = self.unsteady_solver.solve(self.T)
+                except Exception as e:
+                    if MPI.COMM_WORLD.rank == 0:
+                        print(e)
+                        print(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 50%")
+                    self.dt.value *= 0.5 # halve the step after unexpected fail
+                    self.T.x.array[:] = self.T_n.x.array[:]
+                    continue
+                self.unsteady_probes.evaluate_probes()
+                
+                # converge any implicit Terms if needed
+                if not force_explicit_terms and not self.converged_unsteady_form_terms():
+                    self.unsteady_term_its += 1
+                    continue
+                high_term_its = self.unsteady_term_its >= max_term_its
+
+                # Time step adaptation:
+                diff = self.T.vector - self.T_n.vector
+                max_T_diff = np.abs(diff.array).max()
+                max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
+                if max_T_diff > self.dt_ctrl_interval[1]:
+                    self.dt.value *= 0.9
+                    self.dt.value = max(self.dt_min, self.dt.value)
+                    if self.dt.value == self.dt_min and not last_dt_min_atempt:
+                        last_dt_min_atempt = True
+                    elif last_dt_min_atempt:
+                        print(f"Min dt is too large - max_T_diff was {max_T_diff}")
+                        stop_timesteping = True
+                        break #stop loop that iterates on curent time step
+                    continue
+                elif max_T_diff < self.dt_ctrl_interval[0] and not high_term_its:
+                    self.dt.value /= 0.95
+                    self.dt.value = min(self.dt_max, self.dt.value)
+                elif high_term_its:
+                    self.dt.value *= 0.95
+                    self.dt.value = max(self.dt_min, self.dt.value)
+                
+                success = True
+            
+            if stop_timesteping:
+                print("Adaptive strategy triggered stop.")
+                break # stop main unsteady solver loop
+            
+            denom_dt = self.t.value - self.t_n.value
+            while next_xdmf_t <= self.t.value and xdmf_file is not None:
+                enum_dt = next_xdmf_t - self.t_n.value
+                self.T_xdmf.x.array[:] = self.T.x.array
+                self.T_xdmf.x.array[:] -= self.T_n.x.array
+                self.T_xdmf.x.array[:] *= enum_dt/denom_dt
+                self.T_xdmf.x.array[:] += self.T_n.x.array
+                xdmf.write_function(self.T_xdmf, next_xdmf_t)
+                next_xdmf_t += self.dt_xdmf
+            MPI.COMM_WORLD.Barrier()
+
+            self.T_n.x.array[:] = self.T.x.array
+            self.t_n.value = self.t.value
+            self.next_step_unsteady_form_terms()
+
+            if use_time_projection:
+                self.T.x.array[:] -= self.T_n.x.array
+                self.T.x.array[:] *= self.dt.value/denom_dt
+                self.T.x.array[:] += self.T_n.x.array
+
+            if MPI.COMM_WORLD.rank == 0:
+                self.elapsed = time.time() - t_start
+                self.ielapsed = time.time() - i_start
+
+            self.unsteady_probes.write_probes_to_file()
+            self.unsteady_probes.write_probes_to_memory()
+
+            if verbose:
+                self.unsteady_probes.pretty_print()
+            elif MPI.COMM_WORLD.rank == 0:
+                pbar.update()
+
+            if (call_back_each_t is not None) and (self.t.value > prev_callback_t + call_back_each_t):
+                call_back()
+                prev_callback_t += call_back_each_t
+
+            if (call_back_each_step is not None) and (step > prev_callback_step + call_back_each_step):
+                call_back()
+                prev_callback_step += call_back_each_step
+
+        if xdmf_file is not None:
+            xdmf.close()
+
+        if close_probes:
+            self.unsteady_probes.close()
+
+        if MPI.COMM_WORLD.rank == 0:
+            return self.unsteady_probes
 
     def get_temperature_range(self, cell_tag=None):
         'This method must run on all rank to work properly'
@@ -571,7 +697,7 @@ class Simulation():
                 
     def probes_time_plot(self, *args, **kwargs):
         if MPI.COMM_WORLD.rank == 0:
-            fig = px.line(self.probes.df, *args, **kwargs)
+            fig = px.line(self.unsteady_probes.df, *args, **kwargs)
             fig.update_layout(uirevision="None")
             return fig
 

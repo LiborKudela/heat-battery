@@ -1,7 +1,31 @@
 import os
 import meshio
+from typing import Callable
+import cloudpickle
+from mpi4py import MPI
+
+def save_mesh_add_data(
+    add_data_file_path: str, call_data: dict, dim: int, points: dict,
+    mats: dict, bcs: dict, jac_f: Callable):
+    
+    add_data = {
+        'call_data':call_data,
+        'dim':dim,
+        'points':points,
+        'materials':mats,
+        'boundaries':bcs,
+        'jac_f':jac_f,
+        }
+    
+    if MPI.COMM_WORLD.rank == 0:
+        with open(add_data_file_path, 'wb') as fp:
+            cloudpickle.dump(add_data, fp)
+    return None
 
 def convert_to_legacy_fenics(msh_path):
+    #FIXME: this function is way behing the rest of the heat_battery module
+    # it need to take argument 'dir' and 'name' and produce legacy FeniCS files
+    # of mesh.xdmf, subdomains.xdmf and boundaries.xdmf
     
     path, file = os.path.split(msh_path)
     name, ext = os.path.splitext(file)
@@ -29,3 +53,4 @@ def convert_to_legacy_fenics(msh_path):
     meshio.write(meshio_boundaries_path, triangle_data)
 
     print("legacy fenics mesh written")
+    

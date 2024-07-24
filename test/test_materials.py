@@ -1,18 +1,18 @@
-from heat_battery.simulations import Experiment_v1
+from examples.Example_01.model import Experiment_v1
 import numpy as np
 import unittest
 
 class TestMaterialAPI(unittest.TestCase):
     def setUp(self) -> None:
-        self.sim = Experiment_v1(model_name="mesh_2d")
+        self.sim = Experiment_v1(
+            geometry_dir='examples/Example_01/meshes/',
+            model_name="mesh_2d",
+            )
         self.m_int = 0
         self.m_ints = [0,1]
-        self.m_str = 'steel'
-        self.m_strs = ['steel', 'insulation']
-        self.m_mixed = ['steel', 1]
-
-    def tearDown(self) -> None:
-        self.sim.close_results()
+        self.m_str = 'steel parts'
+        self.m_strs = ['steel parts', 'insulation']
+        self.m_mixed = ['steel parts', 1]
 
     def material_tree_test_recipe(self, index):
         # get property from deep inside tree

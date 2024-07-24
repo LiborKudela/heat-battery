@@ -1,28 +1,21 @@
-from . import steady_terms, unsteady_terms
-from .probing import FunctionSampler
-from .simulation_base import MPI, Simulation, fem, pd, ufl
+from heat_battery.simulations.simulation_base import MPI, Simulation, fem, pd, ufl
+from heat_battery.simulations.probing import FunctionSampler
+from heat_battery.simulations import terms
 
-
-class Experiment_urbanek_mem(Simulation):
+class PassiveStorage(Simulation):
     def define_form_subdomain_terms(self):
 
         # add dynamic source term for malapa cartridge
-        self.set_unsteady_source_term(unsteady_terms.TemperatureControlledUniformHeatSource(self), "heated cartridge")
+        self.set_source_term(terms.PIDControlledHeatSource(self), "heated cartridge")
 
         # add dynamic boundary term for ambient cooling on the outer surface
-        self.set_unsteady_bc_term(unsteady_terms.AmbientCooling(self), "outer_surface")
+        self.set_bc_term(terms.AmbientCooling(self), "outer_surface")
 
         # add dynamic boundary term for ambient cooling on the tubes surface
-        self.set_unsteady_bc_term(unsteady_terms.AmbientCooling(self), "mebrane_surface")
+        self.set_bc_term(terms.AmbientCooling(self), "mebrane_surface")
 
-        # add steady source term for malapa cartridge
-        self.set_steady_state_source_term(steady_terms.UniformHeatSource(self), "heated cartridge")
-
-        # add dynamic boundary term for ambient cooling on the surface
-        self.set_steady_state_bc_term(steady_terms.AmbientCooling(self), "outer_surface")
-
-    def create_probes(self, probes):
-        super().create_probes(probes)
+    def create_unsteady_probes(self, probes):
+        super().create_unsteady_probes(probes)
 
         self.T_probes_coords = list(self.geo_meta["points"]["T"].values())
         self.T_probes_names = list(self.geo_meta["points"]["T"].keys())
@@ -44,24 +37,24 @@ class Experiment_urbanek_mem(Simulation):
             H = self.domain.comm.allreduce((H), op=MPI.SUM)
             return H*2.77777778e-7
         
-        bc_obj = self.get_unsteady_bc_term('outer_surface')
-        qloss_form = fem.form(bc_obj(self.T, self.t, self.x)*self.jac*self.get_measure_ds('outer_surface'))
+        bc_obj = self.get_bc_term('outer_surface')
+        qloss_form = fem.form(bc_obj(self.T, self.x, self.t)*self.jac*self.get_measure_ds('outer_surface'))
         @probes.register_probe('heat_loss', 'W')
         def loss_probe():
             q_flow = fem.assemble_scalar(qloss_form)
             q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
             return q_flow
         
-        mem_obj = self.get_unsteady_bc_term('mebrane_surface')
-        mem_qloss_form = fem.form(mem_obj(self.T, self.t, self.x)*self.jac*self.get_measure_ds('mebrane_surface'))
+        mem_obj = self.get_bc_term('mebrane_surface')
+        mem_qloss_form = fem.form(mem_obj(self.T, self.x, self.t)*self.jac*self.get_measure_ds('mebrane_surface'))
         @probes.register_probe('heat_loss_mem', 'W')
         def loss_probe():
             q_flow = fem.assemble_scalar(mem_qloss_form)
             q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
             return q_flow
         
-        obj = self.get_unsteady_source_term('heated cartridge')
-        power_form = fem.form(obj(self.T, self.t, self.x, 'heated cartridge')*self.jac*self.get_measure_dx('heated cartridge'))
+        obj = self.get_source_term('heated cartridge')
+        power_form = fem.form(obj(self.T, self.x, self.t, 'heated cartridge')*self.jac*self.get_measure_dx('heated cartridge'))
         @probes.register_probe('power', 'W')
         def power():
             q_power = fem.assemble_scalar(power_form)
@@ -100,14 +93,15 @@ class Experiment_urbanek_mem(Simulation):
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
 
-    def solve_steady(self, Qc=10, T_amb=20, save_xdmf=False, alpha=6.3):
-        obj = self.get_steady_steady_source_term("heated cartridge")
+    def solve_steady(self, Qc=10, T_amb=20, xdmf_file=None, alpha=6.3):
+        #FIXME: This will not work for currente version of PID type Term
+        obj = self.get_source_term("heated cartridge")
         obj.Qc.value = Qc
 
-        obj = self.get_steady_state_bc_term("outer_surface")
+        obj = self.get_bc_term("outer_surface")
         obj.T_amb.value = T_amb
         obj.alpha.value = alpha
-        super().solve_steady(save_xdmf=save_xdmf)
+        super().solve_steady(xdmf_file=xdmf_file)
 
         return pd.Series(
             data=self.probes.get_value("T"),
@@ -116,24 +110,24 @@ class Experiment_urbanek_mem(Simulation):
         )
 
     def solve_unsteady(self, 
+            T_pid_input_control=lambda t: 400.0,
             T_amb_t=lambda t: 18.0,
             alpha_t=lambda t: 2.5,
             alpha_mem_t=lambda t: 1.0, 
-            T_cartridge_limit=None, 
-            power_limit=20000, 
+            pid=(100.0, 0.01, 100.0),
             **kwargs):
 
-        obj = self.get_unsteady_source_term("heated cartridge")
-        obj.T_limit = T_cartridge_limit
-        obj.T_eval = lambda: self.probes.get_value('Tc_avg')
-        obj.power_limit = power_limit
+        obj = self.get_source_term("heated cartridge")
+        obj.set_pid(*pid)
+        obj.set_reference(T_pid_input_control)
+        obj.set_probe(lambda t: self.unsteady_probes.get_value('Tc_avg'))
 
-        obj = self.get_unsteady_bc_term("outer_surface")
-        obj.T_amb_t = T_amb_t
-        obj.alpha_t = alpha_t
-
-        obj = self.get_unsteady_bc_term("mebrane_surface")
-        obj.T_amb_t = T_amb_t
-        obj.alpha_t = alpha_mem_t
+        obj = self.get_bc_term("outer_surface")
+        obj.set_update('T_amb', T_amb_t)
+        obj.set_update('alpha', alpha_t)
+        
+        obj = self.get_bc_term("mebrane_surface")
+        obj.set_update('T_amb', T_amb_t)
+        obj.set_update('alpha', alpha_mem_t)
 
         return super().solve_unsteady(**kwargs)

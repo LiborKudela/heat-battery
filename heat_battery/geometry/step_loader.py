@@ -1,15 +1,15 @@
 from mpi4py import MPI
-from math import pi, sqrt
+from math import pi
 import gmsh
 import os
-from heat_battery.utilities import save_data
-from inspect import getargspec
+from .utilities import save_mesh_add_data
+import inspect
 from textwrap import dedent
 
 def build_geometry_from_stepfile(
         path,
         name='mesh',
-        dir='meshes/experiment_inventor',   
+        dir='meshes',   
         verbosity=0,
         mesh_size_max = 0.1,
         mesh_size_from_curvature=0,
@@ -28,9 +28,10 @@ def build_geometry_from_stepfile(
         file_path = dir + f'/{name}'
         gmsh_file = file_path + '.msh'
         add_data_file = file_path + '.ad'
-
+    
         os.makedirs(dir, exist_ok=True)
 
+        print("Starting new GMSH session")
         gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber('General.Verbosity', verbosity)
@@ -103,22 +104,25 @@ def build_geometry_from_stepfile(
         print("Starting mesh algorithm")
         gmsh.model.mesh.generate(dim)
         gmsh.write(gmsh_file)
+        print("Mesh generated")
 
         if 'postmesh' in fltk:
             print("Starting postmesh fltk")
             gmsh.fltk.run()
 
-        spec = getargspec(build_geometry_from_stepfile).args
+        print("Closing GMSH session")
+        gmsh.finalize()
+
+        spec = inspect.getargspec(build_geometry_from_stepfile).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
 
-        add_data = {
-            'call_data':call_data,
-            'dim':dim,
-            'points':points,
-            'materials':mats,
-            'boundaries':bcs,
-            'jac_f':jac_f,
-            }
-        
-        save_data(add_data_file, add_data)
+        save_mesh_add_data(
+            add_data_file,
+            call_data,
+            dim,
+            points,
+            mats,
+            bcs,
+            jac_f,
+        )

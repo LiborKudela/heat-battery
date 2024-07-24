@@ -170,6 +170,17 @@ class Visualizer():
                 return not is_open
             return is_open
         
+        # makes the fire lottie at top screen breathe if server is alive and comunicating with the UI
+        @self.app.callback(
+            dash_enrich.Output("breathing-server", "children"),
+            dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'breathing'},'n_intervals'),  
+        )
+        def send_icon(n_intervals):
+            # Periodicaly resets the fire animation at the top. If it stops 
+            # blinking at the client side, it means that the connection to
+            # the server is lost.
+            return self.breathing_icon
+        
         # updates figures with new data (only when server updated, or url requested)
         @self.app.callback(
             dash_enrich.Output("update-data-status", 'data'),
@@ -200,23 +211,39 @@ class Visualizer():
             memoize=False,
         )
         def update_fig(relayoutdata):
-            # Variable relayoutdata contains sellected zoom (area) of a figure
+            # Variable relayoutdata contains zoom (area) of a figure sellected
             # by a user. We check which page (href) and which graph (i) on
             # that page is sending the relayoutdata. Then we compute the data.
             # The attribute data[i] in the page[href] is a FigureResample 
             # (see https://github.com/predict-idlab/plotly-resampler)
             index = dash_enrich.ctx.triggered_id['index']
-            href, i = index.split('-')
+            href, i = index.split('-') #TODO: can tubple be used instead of this string?
             return self.pages[href].data[int(i)].construct_update_data(relayoutdata)
-            
-        
-        # makes the fire lottie at top screen breathe if server is alive and comunicating with the UI
+
+        # callback for class Table
         @self.app.callback(
-            dash_enrich.Output("breathing-server", "children"),
-            dash_enrich.Input({'type': 'refresh-trigger', 'trigers': 'breathing'},'n_intervals'),  
+            dash_enrich.Output({'type':'datatable-interactivity', "index": dash_enrich.MATCH}, 'style_data_conditional'),
+            dash_enrich.Input({'type':'datatable-interactivity', "index": dash_enrich.MATCH}, 'selected_columns'),
+            dash_enrich.Input({'type':'datatable-interactivity', "index": dash_enrich.MATCH}, 'selected_rows'),
         )
-        def send_icon(n_intervals):
-            # Periodicaly resets the fire animation at the top. If it stops 
-            # blinking at the client side, it means that the connection to
-            # the server is lost.
-            return self.breathing_icon
+        def update_styles(selected_columns, selected_rows):
+            cs = [{'if': { 'column_id': i }, 'border': '1px solid black'} for i in selected_columns]
+            rs = [{'if': { 'row_id': i }, 'background_color': '#D2F3FF'} for i in selected_rows]
+            return cs #+ rs
+        
+        # update stuff under table
+        @self.app.callback(
+            #dash_enrich.Output({'type':'datatable-interactivity-container', "index": dash_enrich.MATCH}, 'children'),
+            dash_enrich.Output({'type':'datatable-loading-div', "index": dash_enrich.MATCH}, 'children'),
+            dash_enrich.Input({'type':'datatable-interactivity', "index": dash_enrich.MATCH}, "derived_virtual_data"),
+            dash_enrich.Input({'type':'datatable-interactivity', "index": dash_enrich.MATCH}, "derived_virtual_selected_rows"),
+            prevent_initial_call=True,
+            )
+        def update_view(rows, derived_virtual_selected_rows):
+            href = dash_enrich.ctx.triggered_id['index']
+            if not derived_virtual_selected_rows:
+                return dash_enrich.no_update
+            else:
+                row_id = derived_virtual_selected_rows[0]
+                return self.pages[href].get_content(rows[row_id])
+            

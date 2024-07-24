@@ -1,11 +1,11 @@
-from mpi4py import MPI
+from heat_battery.simulations.simulation_base import MPI
+from heat_battery.materials import materials
+from heat_battery.geometry.utilities import convert_to_legacy_fenics
+from heat_battery.utilities import save_data
+from inspect import getargspec
 from math import pi
 import gmsh
 import os
-from .. import materials
-from .utilities import convert_to_legacy_fenics
-from ..utilities import save_data
-from inspect import getargspec
 
 def add_cylinder(h0, h, r, dim=3, angle=2*pi):
     if dim == 3:
@@ -36,7 +36,7 @@ def add_bottom_plate(a, t, dim=3, angle=2*pi):
 
 def build_geometry(
         dim=3,
-        dir='meshes/experiment',
+        dir='meshes/experiment_contact',
         legacy_fenics=False,
         h_b=0.118,           # vyska spodni casti (m)
         h_t=0.2485,          # vyska horni casti (m)
@@ -44,7 +44,7 @@ def build_geometry(
         h_c=0.217,           # delka stopky patrony (m)
         h_c_heated=0.191,    # delka ohrivane casti patrony (m)
         h_e=0.075,           # vyska spodni casti po dno (m)
-        h_unfill=0.021,    # vyska nezaplnena piskem (m)
+        h_unfill=0.019,      # vyska nezaplnena piskem (m)
         d_c=0.014,           # prumer partony (m)
         d_cG=0.021,          # prumer zavitu partony (m)
         d_c_bolt=0.024,      # prumer matice partony (m)
@@ -72,7 +72,8 @@ def build_geometry(
         gmsh_file = file_path + '.msh'
         add_data_file = file_path + '.ad'
 
-        os.makedirs(dir, exist_ok=True)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
         gmsh.initialize()
         gmsh.option.setNumber('General.Terminal', 1)
         gmsh.option.setNumber('General.Verbosity', verbosity)
@@ -147,17 +148,25 @@ def build_geometry(
         cartridge_bolt = add_cylinder(h0_bolt, h_c_bolt, r_c_bolt, dim=dim, angle=angle)
         cartridge_unheated = gmsh.model.occ.fuse([(dim, cartridge_unheated)], [(dim, cartridge_thread), (dim, cartridge_bolt)])
 
-        f_tags, f_dim_tags = gmsh.model.occ.fragment(steel[0], insulation[0]+sand[0]+cartridge_unheated[0]+[(dim, cartridge_heated)]+top_plate[0])
+        #TODO: find a way to use surface normal extrusions so it is more automatic
+        #      and can be made for other surfacece easily
+        dr = 0.0001
+        contact_enlarged = add_cylinder(h0_heater-dr, h_c_heated+dr, r_c+dr, dim=dim, angle=angle)
+        contact_hole = add_cylinder(h0_heater, h_c_heated, r_c, dim=dim, angle=angle)
+        cartridge_contact = gmsh.model.occ.cut([(dim, contact_enlarged)], [(dim, contact_hole)])
+
+        f_tags, f_dim_tags = gmsh.model.occ.fragment(steel[0], insulation[0]+sand[0]+cartridge_unheated[0]+[(dim, cartridge_heated)]+top_plate[0]+cartridge_contact[0])
 
         gmsh.model.occ.synchronize()
 
         mats = {
-            'steel': (materials.Steel04, [f_tags[0][1], f_tags[6][1]]),
+            'steel parts': (materials.Steel04, [f_tags[0][1], f_tags[5][1]]),
             'insulation': (materials.Standard_insulation, [f_tags[1][1]]),
             'insulation bottom': (materials.Standard_insulation, [f_tags[2][1]]),
-            'unheated cartridge': (materials.Cartridge_unheated, [f_tags[4][1]]),
-            'heated cartridge': (materials.Cartridge_heated, [f_tags[5][1]]),
-            'sand': (materials.SandTheory, [f_tags[3][1]])
+            'unheated cartridge': (materials.Cartridge_unheated, [f_tags[3][1]]),
+            'heated cartridge': (materials.Cartridge_heated, [f_tags[4][1]]),
+            'sand': (materials.SandTheory, [f_tags[7][1]]),
+            'contact sand': (materials.new_contact_class(0.0001), [f_tags[6][1]])
         }
 
         # create selected p-groups
@@ -170,17 +179,17 @@ def build_geometry(
         # mark surfaces
         if dim == 3:
             if symetry_3d is None:
-                bcs = {'outer_surface': [1, 2, 3, 4, 5, 6, 7, 8, 9, 27, 28]}
+                bcs = {'outer_surface': [12, 13, 14, 15, 16, 17, 18, 19, 20, 34, 35]}
                 jac_f = lambda x: 1
             elif symetry_3d == 'half':
-                bcs = {'outer_surface': [1, 3, 4, 5, 6, 9, 14, 15, 29, 30]}
+                bcs = {'outer_surface': [13, 15, 16, 17, 18, 21, 26, 27, 37, 38]}
                 jac_f = lambda x: 2
             elif symetry_3d == 'quarter':
-                bcs = {'outer_surface': [5, 6, 7, 8, 23, 24, 25, 31, 32]}
+                bcs = {'outer_surface': [18, 19, 20, 21, 33, 34, 35, 40, 41]}
                 jac_f = lambda x: 4
             boundary_list_type = 'SurfacesList'
         elif dim == 2:
-            bcs = {'outer_surface': [1, 2, 3, 4, 5, 6, 24, 25]}
+            bcs = {'outer_surface': [13, 14, 15, 16, 17, 18, 33, 34]}
             jac_f = lambda x: 2*pi*x[0]
             boundary_list_type = 'CurvesList'
 
@@ -261,4 +270,10 @@ def build_geometry(
     MPI.COMM_WORLD.Barrier()
 
     return None
+
+# build two meshes
+dir = 'meshes'
+if __name__ == '__main__':
+    build_geometry(dim=2, dir=dir, verbosity=5)
+    build_geometry(dim=3, dir=dir, verbosity=5)
 
