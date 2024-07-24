@@ -55,5 +55,12 @@ jobs:
     - name: Show version of installed packages
       run: pip3 freeze
 
-    - name: Test with unittest 
-      run: python3 -m unittest discover -v -s ./test  -p 'test_*.py'
+    - name: Install coverage.py
+      run: pip3 install coverage
+
+    - name: Test with unittest and record coverage
+      run: coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
+
+    - name: Show coverage report
+      run: >
+        echo "Code coverage: $(coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
