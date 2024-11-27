@@ -1,0 +1,40 @@
+user: 
+    username: null
+    
+local_temp_dir: heat_battery_temp
+
+database:
+    use_engine: postgresql
+    
+    postgres:
+        db_name: null
+        user: null
+        password: null
+        host: null
+        port: 5432
+        connection_method: simple_pool
+        min_pool_size: 1
+        max_pool_size: 10
+        only_rank0_send_queries: true
+        verbosity: 0
+
+        # Features that are disabled below, prevent the query in question from
+        # being sent to the database from the python API. Next to the primary
+        # safety mechanism of having the database administrator set the
+        # appropriate grants, this is another layer of safety to prevent
+        # accidental data loss.
+        allow_create_database: true
+        allow_create_schema: true
+        allow_create_table: true
+        allow_drop_database: false
+        allow_drop_schema: true
+        allow_drop_schema_cascade: true
+        allow_drop_table: false
+
+    sqlite:
+        path: heat_battery.db
+        allow_create_database: false
+        allow_drop_database: false
+        allow_drop_table: false
+        allow_delete_table: false
+
