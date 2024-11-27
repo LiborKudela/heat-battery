@@ -2,7 +2,7 @@ from .utilities import load_yaml
 import os
 
 this_file_dir = os.path.dirname(os.path.abspath(__file__))
-GLOBAL_CONFIG_FILE_PATH = os.path.join(this_file_dir, "config.yaml")
+GLOBAL_CONFIG_FILE_PATH = os.path.join(this_file_dir, "base_config.yaml")
 LOCAL_CONFIG_FILE_PATH = os.path.join(os.getcwd(), "config.yaml")
 MAX_CONFIG_DEPTH = 10
 
