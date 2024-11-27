@@ -14,7 +14,7 @@ class TestSweep(unittest.TestCase):
             arg_4 = ParameterEvaluation("SELF['arg_1'] + SELF['arg_2']", eval_as_code=False),
             arg_5 = ParameterEvaluation("{SELF['arg_1']} + {SELF['arg_2']}", eval_as_code=False),
             arg_6 = ParameterEvaluation("{SELF['PRIORITY']}/{SELF['SIGNATURE']}", eval_as_code=False),
-            arg_7 = ParameterEvaluation("foo(SELF['arg_1'], SELF['arg_2'])", eval_as_code=True, defered_scope=dict(foo=foo)),
+            arg_7 = ParameterEvaluation("foo(SELF['arg_1'], SELF['arg_2'])", eval_as_code=True, deferred_scope=dict(foo=foo)),
             arg_8 = NoNumericalEffect('no-effect')
         ))
         self.pg.instantiate()
