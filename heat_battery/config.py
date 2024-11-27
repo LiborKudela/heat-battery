@@ -122,17 +122,26 @@ def get_config_item(
         if i < len(value_path) - 1 and not isinstance(value[key], dict):
             raise ValueError(
                 f"Config route ends with a non-dictionary value at path :'{value_path[:i]}' "
+                "Please check your config file."
             )
         
         if key not in value:
             raise ValueError(
-                f"Value for key: '{key}' is not set for value path: {value_path[:i]}!"
+                f"Key: '{key}' does not exist for value path: {value_path[:i]}! "
+                "Please check your config file."
             )   
         value = value[key]
 
+    if value is None:
+        raise ValueError(
+            f"Key: '{key}' is not set for value path: {value_path[:i]}! "
+            "Please check your config file."
+        )
+
     if must_be_terminating_key and isinstance(value, dict):
         raise ValueError(
-            f"Value for key: '{key}' is a non-terminating at path: {value_path[:i]}!"
-            )
+            f"Value for key: '{key}' is a non-terminating at path: {value_path[:i]}! "
+            "Please check your config file."
+        )
 
     return value

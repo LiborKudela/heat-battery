@@ -48,10 +48,6 @@ def get_postgres_version():
     conn.close()
     return version
 
-DB_VERSION = get_postgres_version()
-
-DB_VERSION = get_postgres_version()
-
 class SingleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
@@ -81,36 +77,48 @@ class SingleConnection:
     def putconn(self, conn):
         pass
 
-if get_config_item(['database', 'postgres', 'connection_method']) == 'threaded_pool':
-    DB_CONN_POOL = ThreadedConnectionPool(
-        minconn=get_config_item(['database', 'postgres', 'min_pool_size']),
-        maxconn=get_config_item(['database', 'postgres', 'max_pool_size']),
-        dsn=get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
-    )
-elif get_config_item(['database', 'postgres', 'connection_method']) == 'simple_pool':
-    DB_CONN_POOL = SimpleConnectionPool(
-        minconn=get_config_item(['database', 'postgres', 'min_pool_size']),
-        maxconn=get_config_item(['database', 'postgres', 'max_pool_size']),
-        dsn=get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
-    )
-elif get_config_item(['database', 'postgres', 'connection_method']) == 'reuse_single':
-    DB_CONN_POOL = SingleConnection(
-        get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
-    )
-else:
-    raise ValueError(
-        f"Invalid value for 'connection_method' in configuration file. "
-        f"Valid values are 'threaded_pool' and 'simple_pool'. "
-        f"Got {get_config_item(['database', 'postgres', 'connection_method'])}."
-    )
+
 
 class DBConnection:
+    DB_CONN_POOL = None
+
     def __init__(self):
-        self.conn = DB_CONN_POOL.getconn()
+        self.get_pool()
+        self.conn = DBConnection.DB_CONN_POOL.getconn()
 
     def __enter__(self):
         return self.conn
     
     def __exit__(self, exc_type, exc_value, traceback):
-        DB_CONN_POOL.putconn(self.conn)
+        DBConnection.DB_CONN_POOL.putconn(self.conn)
         #TODO: should we commit here?
+
+    def get_pool(self):
+        """
+        Initialize the connection pool if it is not already initialized so that 
+        postgres credentials are not needed if there is no connection to the
+        database.
+        """
+        if DBConnection.DB_CONN_POOL is None:
+            if get_config_item(['database', 'postgres', 'connection_method']) == 'threaded_pool':
+                DBConnection.DB_CONN_POOL = ThreadedConnectionPool(
+                    minconn=get_config_item(['database', 'postgres', 'min_pool_size']),
+                    maxconn=get_config_item(['database', 'postgres', 'max_pool_size']),
+                    dsn=get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
+                )
+            elif get_config_item(['database', 'postgres', 'connection_method']) == 'simple_pool':
+                DBConnection.DB_CONN_POOL = SimpleConnectionPool(
+                    minconn=get_config_item(['database', 'postgres', 'min_pool_size']),
+                    maxconn=get_config_item(['database', 'postgres', 'max_pool_size']),
+                    dsn=get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
+                )
+            elif get_config_item(['database', 'postgres', 'connection_method']) == 'reuse_single':
+                DBConnection.DB_CONN_POOL = SingleConnection(
+                    get_postgres_dsn(get_config_item(['database', 'postgres', 'db_name']))
+                )
+            else:
+                raise ValueError(
+                    f"Invalid value for 'connection_method' in configuration file. "
+                    f"Valid values are 'threaded_pool' and 'simple_pool'. "
+                    f"Got {get_config_item(['database', 'postgres', 'connection_method'])}."
+                )

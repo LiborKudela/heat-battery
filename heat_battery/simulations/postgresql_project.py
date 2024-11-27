@@ -532,23 +532,24 @@ def generate_jobs(
 def _create_database_query(if_exists:str='skip'):
     conn = get_single_db_connection('postgres')
     conn.autocommit = True
+    db_name = get_config_item(['database', 'postgres', 'db_name'])
 
     query = sql.SQL(
             "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = %s)"
         )
     cur = conn.cursor()
-    cur.execute(query, (Project.DB_NAME,))
+    cur.execute(query, (db_name,))
     res = cur.fetchone()[0]
     if res:
         if if_exists == 'skip': 
             print(
-                f"Database '{Project.DB_NAME}' already exists, "
+                f"Database '{db_name}' already exists, "
                 "skipping creation"
             )
             return None # <- stop here
         elif if_exists == 'fail':
             raise ValueError(
-                f"Database '{Project.DB_NAME}' already exists, "
+                f"Database '{db_name}' already exists, "
                 "cannot proceed further!"
             )
         else:
@@ -557,9 +558,9 @@ def _create_database_query(if_exists:str='skip'):
                 f"got '{if_exists}'."
             )
 
-    print(f"Database '{Project.DB_NAME}' does not exist, creating it")
+    print(f"Database '{db_name}' does not exist, creating it")
     query = sql.SQL("CREATE DATABASE {}")
-    query = query.format(sql.Identifier(Project.DB_NAME))
+    query = query.format(sql.Identifier(db_name))
     cur = conn.cursor()
     cur.execute(query)
     conn.commit()
@@ -569,7 +570,6 @@ def create_database(if_exists:str='skip'):
     _create_database_query(if_exists=if_exists)
 
 class Project:
-    DB_NAME = get_config_item(['database', 'postgres', 'db_name'])
 
     FILES_TABLE_NAME = 'files'
     FILES_COLUMNS = {
@@ -581,6 +581,7 @@ class Project:
     FILES_COLUMNS_MAP = {key:i for i, key in enumerate(FILES_COLUMNS.keys())}
 
     def __init__(self, project_name: str, if_exists:str='skip'):
+        self.db_name = get_config_item(['database', 'postgres', 'db_name'])
         self.project_name = project_name
         self.ensure_database_exists()
         self.create(if_exists=if_exists)
