@@ -34,6 +34,7 @@ setup(
         'meshio>=5.3.4',
         'scipy>=1.11.3',
         'pyvista>=0.42.3',
+        'psycopg2>=2.9.9',
         ],
     packages = find_packages(),
     keywords = 'finite element method, thermal storage, simulation, optimization',
