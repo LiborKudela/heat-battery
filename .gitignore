@@ -1,9 +1,12 @@
+config.yaml
 __pycache__/
 /.vscode
 heat_battery.egg*
+*heat_battery_temp*
 /miscellaneous
 /data
 trial*
+.coverage
 *.msh
 *.ad
 *.stp

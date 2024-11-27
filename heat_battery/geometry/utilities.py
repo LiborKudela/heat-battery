@@ -17,9 +17,8 @@ def save_mesh_add_data(
         'jac_f':jac_f,
         }
     
-    if MPI.COMM_WORLD.rank == 0:
-        with open(add_data_file_path, 'wb') as fp:
-            cloudpickle.dump(add_data, fp)
+    with open(add_data_file_path, 'wb') as fp:
+        cloudpickle.dump(add_data, fp)
     return None
 
 def convert_to_legacy_fenics(msh_path):

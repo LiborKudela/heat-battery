@@ -42,11 +42,19 @@ class Experiment_v1(Simulation):
         probes = super().solve_steady(**kwargs)
         return probes
 
-    def solve_unsteady(self, Qc_t=None, T_amb_t=None, alpha_t=None, **kwargs):
+    def solve_unsteady(
+            self, 
+            Qc_t=None, 
+            T_amb_t=None, 
+            alpha_t=None, 
+            **kwargs
+        ):
         if Qc_t is not None:
+            obj: terms.UniformHeatSource
             obj = self.get_source_term("heated cartridge")
             obj.set_update('Qc', Qc_t)
         if T_amb_t is not None:
+            obj: terms.AmbientCooling
             obj = self.get_bc_term("outer_surface")
             obj.set_update('T_amb', T_amb_t)
             obj.set_update('alpha', alpha_t)

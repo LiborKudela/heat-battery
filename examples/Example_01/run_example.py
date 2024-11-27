@@ -19,18 +19,16 @@ def run():
     sim = Experiment_v1(
         geometry_dir=g_dir,
         model_name='mesh_2d',
-        result_dir=r_dir,
-        build_solvers=['unsteady'],
-        atol=1e-8,
-        rtol=1e-10,
     )
 
     # simulate 1000 seconds of sin heat source and save resutls from probes
     sim.solve_unsteady(
-        verbose=False,
+        verbose=True,
         t_max = 100.0,
         Qc_t=lambda t: 100+10*math.sin(2*math.pi*0.01*t),
-        T_amb_t=lambda t: 20,
+        T_amb_t=lambda t: 10,
+        result_dir=r_dir,
+        probes_file='unsteady.csv',
         )
 
 if __name__ == "__main__":

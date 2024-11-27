@@ -1,6 +1,7 @@
 from heat_battery.simulations.simulation_base import MPI, Simulation, fem
 from heat_battery.simulations.probing import FunctionSampler
 from heat_battery.simulations import terms
+import math
 
 class Experiment_v1(Simulation):
     def define_form_subdomain_terms(self):
@@ -33,6 +34,7 @@ class Experiment_v1(Simulation):
             return H
 
     def solve_steady(self, Qc=10, T_amb=20, alpha=6.3, **kwargs):
+        obj : terms.UniformHeatSource
         obj = self.get_source_term("heated cartridge")
         obj.set_steady_state_value('Qc', Qc)
 
@@ -42,8 +44,15 @@ class Experiment_v1(Simulation):
         probes = super().solve_steady(**kwargs)
         return probes
 
-    def solve_unsteady(self, Qc_t=None, T_amb_t=None, alpha_t=None, **kwargs):
+    def solve_unsteady(
+        self, 
+        Qc_t=lambda t: 100+10*math.sin(2*math.pi*0.01*t), 
+        T_amb_t=lambda t: 10.0, 
+        alpha_t=lambda t: 0.0, 
+        **kwargs
+    ):
         if Qc_t is not None:
+            obj : terms.UniformHeatSource
             obj = self.get_source_term("heated cartridge")
             obj.set_update('Qc', Qc_t)
         if T_amb_t is not None:

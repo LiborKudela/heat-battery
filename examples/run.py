@@ -1,5 +1,6 @@
 from mpi4py import MPI
 import os
+import traceback
 
 def print_r0(*args, **kwargs):
     # print only from rank zero when in MPI env.
@@ -26,9 +27,10 @@ def run_selected(dirs, is_main=False):
             run_single_example(d, is_main=is_main)
             print_r0(f"{d} finished successfully:")
             success.append(True)
-        except Exception as e:
+        except Exception as err:
             print_r0(f"Example {d} failed:")
-            print_r0(e)
+            traceback.print_exc()
+            print_r0(err)
             success.append(False)
     return success
 

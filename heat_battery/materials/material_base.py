@@ -180,8 +180,79 @@ class Lagrange_property(Material_property):
         fig.add_trace(go.Scatter(x=self.x_values, y=self.y_values, mode='markers', name="L - points"))
         return fig
 
+class Linked_material_property():
+    def __init__(self, domain, links=[], eval_func=None, unit=PropertyUnits.default, multiplier=1.0):
+        """
+        Linked material property is propertythat depends on other material
+        properties.
+
+        This class represents a material property that is calculated based on
+        one or more other properties. It allows for the creation of complex,
+        interdependent material characteristics.
+
+        Args:
+            domain: The domain over which the property is defined.
+            links (list): A list of other material properties that this property depends on.
+            eval_func (callable): A function that calculates this property's value based on
+                                  temperature and the linked properties.
+            unit (PropertyUnits): The unit of measurement for this property.
+            multiplier (float): A scaling factor applied to the property's value.
+
+        The `eval_func` should have the signature:
+        '--this part of docs is missing--'
+        """
+        self.domain = domain
+        self.links = links
+        self.eval_func = eval_func
+        self.unit = unit
+        self.multiplier = multiplier
+
+    def __call__(self, T):
+        return self.eval_func(T, self.links)
+
+class Linked_material_property_integral(Linked_material_property):
+    """
+    A special type of linked property that is the integral of another property 
+    from a given origin to the current temperature.
+
+    This class extends the `Linked_material_property` class by having predefined
+    `eval_func` that is the integral of a linked property from a specified origin 
+    temperature to the current temperature. This is useful for properties that
+    represent cumulative effects, such as specific enthalpy calculated from
+    specific heat capacity with reference temperature at the value of `origin`.
+
+    The value `origin` will be inserted to forms as fem.Constant, therefore its
+    value can be changed via method `set_origin` after instantiation of the
+    finite element forms.
+
+    Args:
+        domain: The domain over which the property is defined.
+        link: The property that is being integrated.
+        origin: The origin temperature from which the integration starts.
+        unit: The unit of measurement for this property.
+        multiplier: A scaling factor applied to the property's value.
+    """
+    def __init__(self, domain, link: Material_property, origin: float, unit=PropertyUnits.default, multiplier=1.0):
+        self.origin = fem.Constant(domain, PETSc.ScalarType(origin))
+
+        def integral(self, T):
+            # Integrate value of linked property from origin to T
+            e_offset = 0
+            for i in range(len(self.cp.fem_const.value)):
+                e_offset += self.origin**(i+1)/(i+1)*self.cp.fem_const[i]
+            e = -e_offset
+            for i in range(len(self.cp.fem_const.value)):
+                e += self.cp.fem_const[i]*T**(i+1)/(i+1)
+            return e*self.cp.multiplier
+        
+        super().__init__(domain, [link], integral, unit, multiplier)
+
+    def set_origin(self, origin):
+        self.origin.value = origin
+
 class Material():
     def __init__(self,
+                 domain,
                  k : Material_property, 
                  rho : Material_property, 
                  cp : Material_property,
@@ -190,7 +261,7 @@ class Material():
                  price=0.0,
                  name="Unspecified"):
         
-        self.h0_T_ref = h0_T_ref
+        self.h0_T_ref = fem.Constant(domain, PETSc.ScalarType(h0_T_ref))
         self.k = k
         self.rho = rho
         self.cp = cp
@@ -198,6 +269,7 @@ class Material():
         self.price = price
         self.name = name
 
+    #TODO: change this aproach to Linked_material_property_integral
     def h(self, T):
         # Enthalpy (cp integrated from h0_T_ref to T)
         e_offset = 0
@@ -207,6 +279,9 @@ class Material():
         for i in range(len(self.cp.fem_const.value)):
             e += self.cp.fem_const[i]*T**(i+1)/(i+1)
         return e*self.cp.multiplier
+    
+    def set_h0_T_ref(self, h0_T_ref):
+        self.h0_T_ref.value = h0_T_ref
 
     def get_property(self, property: str) -> Union[Polynomial_property, Lagrange_property]:
         "This alows getting property by name (string)"
@@ -301,6 +376,10 @@ class MaterialsSet():
 
     def __len__(self) -> int:
         return len(self.mats)
+    
+    def set_h0_T_ref(self, h0_T_ref):
+        for mat in self.mats:
+            mat.set_h0_T_ref(h0_T_ref)
 
     def plot_property(
         self, m: Optional[Union[int, str]] = None, property: str = "k"

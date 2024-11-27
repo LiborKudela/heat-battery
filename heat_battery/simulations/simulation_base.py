@@ -11,47 +11,38 @@ import dolfinx.fem.petsc
 import dolfinx.nls.petsc
 import plotly.graph_objects as go
 import plotly.express as px
+from ..config import get_config_item
 
 from .probing import Probe_writer
 from ..materials import MaterialsSet
-from ..utilities import load_data, ProgressBar
+from ..utilities import load_data_binary, ProgressBar
 
 class Simulation():
     def __init__(self,
-                geometry_dir='meshes/experiment', 
-                result_dir='results/experiment_test', 
-                model_name='mesh_2d',
-                T0=20,
-                T_guess=None, 
-                t_max=3600,
-                dt_start=0.01,
-                dt_min=0.01,
-                dt_max=60.0,
-                dt_ctrl_interval=(0.1, 0.25),
-                dt_xdmf=10,
-                atol=1e-10,
-                rtol=1e-12,
-                h0_T_ref=20,
-                build_solvers=[
-                    'derivative',
-                    'steady',
-                    'unsteady'],
-                ):
+        geometry_dir='meshes/experiment', 
+        model_name='mesh_2d',
+        build_solvers=[
+            'derivative',
+            'steady',
+            'unsteady'],
+        ):
+        """
+        Simulation class is used to build numerical finite element models.
+        Usualy it is not used directly, but rather through derived classes, 
+        which will have more specific functionality such as probes, external 
+        bondaries and complex Terms definitions. For more details on how to 
+        derive from this class see examples.
+
+        Args:
+            geometry_dir: Directory to load mesh data from
+            result_dir: Directory to save simulation results to
+            result_database: Name of the database to save results to
+            model_name: Name of the mesh files to load (without file extension)
+            build_solvers: List of solvers to build
+        """
  
         self.geometry_dir = geometry_dir
-        self.result_dir = result_dir
         self.model_name = model_name
-        self.T0 = T0
-        self.T_guess = T_guess or self.T0
-        self.t_max = t_max
-        self.dt_start = dt_start
-        self.dt_min = dt_min
-        self.dt_max = dt_max
-        self.dt_ctrl_interval = dt_ctrl_interval
-        self.dt_xdmf = dt_xdmf
-        self.atol = atol
-        self.rtol = rtol
-        self.h0_T_ref = h0_T_ref
 
         self.print_r0(f"Dolfinx version: {__version__}")
         self.load_geometry()
@@ -59,12 +50,14 @@ class Simulation():
         self.create_function_spaces()
         self.create_functions()
         self.calculate_volumes_of_subdomains()
+        self.calculate_areas_of_surfaces()
         self.create_form_constants()
         self.create_form_terms_presized_lists()
         self.define_form_subdomain_terms()
         self.resolve_form_terms_update_callbacks()
         self.resolve_form_terms_next_step_callbacks()
         self.resolve_form_terms_converged_callbacks()
+        self.resolve_form_terms_adaptation_callbacks()
 
         for s_type in build_solvers:
             if s_type == 'derivative':
@@ -100,14 +93,14 @@ class Simulation():
         self.geo_path = os.path.join(self.geometry_dir, self.model_name)
 
         # load metadata
-        self.geo_meta = load_data(f'{self.geo_path}.ad')
+        self.geo_meta = load_data_binary(f'{self.geo_path}.ad')
 
         # load domain
         self.dim = self.geo_meta['dim']
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
 
-        # instantiate material*args, **kwargssSet(self.domain, self.geo_meta['materials'])
-        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'], self.h0_T_ref)
+        # instantiate materials
+        self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
         self.subdomain_map = self.mats.key_map
 
         # boundary surface names defined in geometry metadata
@@ -132,22 +125,22 @@ class Simulation():
         self.T = fem.Function(self.V)
         self.T_v = ufl.TestFunction(self.V)
         self.T.name = "T"
-        self.T.x.array[:] = self.T_guess
+        self.T.x.array[:] = 20.0
 
         # temperature in previous time step
         self.T_n = fem.Function(self.V)
         self.T_n.name = "T_n"
-        self.T_n.x.array[:] = self.T0
+        self.T_n.x.array[:] = 20.0
 
         # temperature time dirivative at state T_n and previous time t_n
         self.dT = fem.Function(self.V)
         self.dT.name = "dT"
         self.dT.x.array[:] = 0.0
 
-        # temperature for interpolation (for equidistant time points)
-        self.T_xdmf = fem.Function(self.V)
-        self.T_xdmf.name = "T"
-        self.T_xdmf.x.array[:] = self.T0
+        # temperature temporary handlign
+        self.T_temp = fem.Function(self.V)
+        self.T_temp.name = "T"
+        self.T_temp.x.array[:] = 20.0
 
     def calculate_volumes_of_subdomains(self):
         self.V_subdomain = []
@@ -156,10 +149,25 @@ class Simulation():
             V = self.domain.comm.allreduce(V, op=MPI.SUM)
             self.V_subdomain.append(V)
 
+    def calculate_areas_of_surfaces(self):
+        self.A_area = []
+        for i, bc_name in enumerate(self.bcs.keys(), 1):
+            A = fem.assemble_scalar(fem.form(self.jac*self.ds(i)))
+            A = self.domain.comm.allreduce(A, op=MPI.SUM)
+            self.A_area.append(A)
+
+    def get_subdomain_volume(self, domain):
+        i = self.compute_subdomain_index(domain)
+        return self.V_subdomain[i]
+    
+    def get_surface_area(self, domain):
+        i = self.compute_boundary_index(domain)
+        return self.A_area[i]
+        
     def create_form_constants(self):
         # constants
         self.theta = 0.5
-        self.dt = fem.Constant(self.domain, PETSc.ScalarType((self.dt_start)))
+        self.dt = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
         self.t = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
 
@@ -221,11 +229,35 @@ class Simulation():
         for next_step_function in self.unsteady_term_next_step_callbacks:
             next_step_function()
 
+    def next_event(self):
+        return float("Inf")
+
     def converged_unsteady_form_terms(self):
         all_converged = True
         for converged_function in self.unsteady_term_converged_callbacks:
             all_converged *= converged_function()
         return all_converged
+
+    def predict_time_step_size(self):
+        return float('Inf')
+    
+    def get_unsteady_adaptive_time_step_size(self, dt_ctrl_interval):
+        # max T change in domain adaptation
+        diff = self.T.vector - self.T_n.vector
+        max_T_diff = np.abs(diff.array).max()
+        max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
+        if max_T_diff > dt_ctrl_interval[1]:
+            ref_T = 0.2*dt_ctrl_interval[0] + 0.8*dt_ctrl_interval[1]
+            new_dt = self.dt.value * (ref_T/max_T_diff)
+        elif max_T_diff < dt_ctrl_interval[0]:
+            new_dt = self.dt.value / 0.95
+        else:
+            new_dt = self.dt.value
+
+        # evaluate lowest dt from all form Terms
+        for adaptation_function in self.unsteady_term_adaptation_callbacks:
+            new_dt = min(new_dt, self.dt.value*adaptation_function())
+        return new_dt
 
     def define_form_subdomain_terms(self):
         pass
@@ -256,6 +288,10 @@ class Simulation():
         "Collects converged callbacks for all instances of Terms in unsteady form"
         self.unsteady_term_converged_callbacks = self.resolve_term_callbacks('converged')
 
+    def resolve_form_terms_adaptation_callbacks(self):
+        "Collects converged callbacks for all instances of Terms in unsteady form"
+        self.unsteady_term_adaptation_callbacks = self.resolve_term_callbacks('adaptation')
+
     def get_all_forcing_form_terms(self, T, t):
         Fd = 0
         for i, mat in enumerate(self.mats, 1):
@@ -279,6 +315,8 @@ class Simulation():
 
     def create_time_derivative_form_solver(self):
         self.Fd = 0.0
+        # TODO: complete and test this so we can use RK4 time projection before
+        #       Crank Nicolson step in unsteady sim
         for i, mat in enumerate(self.mats, 1):
             self.Fd += mat.rho(self.T_n)*mat.cp(self.T_n)*self.dT*self.T_v*self.jac*self.dx(i)
         self.Fd += self.get_all_forcing_form_terms(self.T_n, self.t_n)
@@ -322,6 +360,10 @@ class Simulation():
         
     def create_steady_probes(self, probes):
 
+        @probes.register_probe('local_timestamp', 's')
+        def local_timestamp():
+            return time.time()
+
         @probes.register_probe('t_cpu', 's')
         def t_cpu():
             return self.elapsed_steady
@@ -342,6 +384,10 @@ class Simulation():
 
     def create_unsteady_probes(self, probes):
 
+        @probes.register_probe('local_timestamp', 's')
+        def local_timestamp():
+            return time.time()
+
         @probes.register_probe('progress', '%')
         def progress():
             return 100*self.t.value/self.t_max
@@ -353,6 +399,12 @@ class Simulation():
         @probes.register_probe('t_remain', 's')
         def remain_t():
             return (self.t_max - self.t.value)/self.dt.value*self.ielapsed
+        
+        @probes.register_probe('t_remain_avg', 's')
+        def remain_t():
+            t_cpu = probes.get_value('t_cpu')
+            progress = probes.get_value('progress')
+            return t_cpu/(progress)*(100-progress)
         
         @probes.register_probe('t_sim', 's')
         def t_sim():
@@ -375,8 +427,12 @@ class Simulation():
             return self.unsteady_solver.krylov_solver.its
         
         @probes.register_probe('TERM_iter', '-', format='d')
-        def KSP_norm():
+        def Term_iter():
             return self.unsteady_term_its
+        
+        @probes.register_probe('total_iter', '-', format='d')
+        def Total_iter():
+            return self.unsteady_total_iter
         
         @probes.register_probe('ksp_norm', '-')
         def KSP_norm():
@@ -384,16 +440,14 @@ class Simulation():
         
         self.create_common_probes(probes)
 
-    def create_unsteady_probe_writer(self) -> Probe_writer:
+    def create_unsteady_probe_writer(self):
         # probe writer
-        result_dir = os.path.join(self.result_dir, f'{self.model_name}')
-        self.unsteady_probes = Probe_writer(result_dir, 'unsteady.csv')
+        self.unsteady_probes = Probe_writer()
         self.create_unsteady_probes(self.unsteady_probes)
     
-    def create_steady_probe_writer(self) -> Probe_writer:
+    def create_steady_probe_writer(self):
         # probe writer
-        result_dir = os.path.join(self.result_dir, f'{self.model_name}')
-        self.steady_probes = Probe_writer(result_dir, 'steady_probes.csv')
+        self.steady_probes = Probe_writer()
         self.create_steady_probes(self.steady_probes)
 
     def create_static_vtk_data(self):    
@@ -420,8 +474,8 @@ class Simulation():
         solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
         solver.convergence_criterion = "residual"
         solver.max_it = 30
-        solver.atol = self.atol
-        solver.rtol = self.rtol
+        solver.atol = 1e-6
+        solver.rtol = 1e-6
         opts = PETSc.Options()
         ksp = solver.krylov_solver
         pc = ksp.getPC()
@@ -438,17 +492,39 @@ class Simulation():
             self.T.x.array[:] = dT_guess
         self.r_derivative = self.derivative_sollver.solve(self.T)
 
-    def solve_steady(self, 
-        T_guess=None, xdmf_file=None, save_probes=False, 
-        verbose=False, close_probes=True):
-        t_start = time.time()
+    def solve_steady(
+        self,
+        T_guess=None,
+        result_dir=None,
+        xdmf_file=None,
+        save_probes=False,
+        verbose=False,
+        close_probes=True,
+        abs_tol=1e-6,
+        rel_tol=1e-6,
+        h0_T_ref=None,
+        ):
+
+        # set initial guess for the solver
         if T_guess is not None:
             self.T.x.array[:] = T_guess
 
+        # set materials zero enthalpy reference temperature
+        if h0_T_ref is not None:
+            self.mats.set_h0_T_ref(h0_T_ref)
+        else:
+            self.mats.set_h0_T_ref(20.0)
+
+        # set tolerances
+        self.steady_solver.atol = abs_tol
+        self.steady_solver.rtol = rel_tol
+
         #FIXME: add update for source_terms and bc_terms before simulation
         #FIXME: this should run in loop when the Terms are implicit in nature
+        #FIXME: this whole function will be unusable as of now, I focus on unsteady now!!! SORRY!
         self.r_steady = self.steady_solver.solve(self.T)
         
+        t_start = time.time()
         if MPI.COMM_WORLD.rank == 0:
             self.elapsed_steady = time.time() - t_start
 
@@ -462,169 +538,348 @@ class Simulation():
         self.steady_probes.write_probes_to_memory()
 
         if xdmf_file is not None:
-            xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, xdmf_file), "w")
+            xdmf = io.XDMFFile(self.domain.comm, os.path.join(result_dir, xdmf_file), "w")
             xdmf.write_mesh(self.domain)
             xdmf.write_function(self.T)
             xdmf.close()
 
+        # properly close all outputs
+        if xdmf_file is not None:
+            xdmf.close()
+
         if close_probes:
-            self.steady_probes.close()
+            self.steady_probes.close_all()
+            self.steady_probes.reset_printer()
 
         return self.steady_probes
 
     def solve_unsteady(self, 
-            T0=None, T_guess=None, t_max=100, 
-            verbose=True, xdmf_file=None, probes_file=None, close_probes=True,
-            force_explicit_terms=False, max_term_its=3, use_time_projection=True, 
-            call_back=lambda: None, call_back_each_t=None,
-            call_back_each_step=None):
+            T0=None,
+            T_guess=None,
+            h0_T_ref=None,
+            t_max=100,
+            dt_start=1e-3,
+            dt_min=1e-6,
+            dt_max=1,
+            dt_xdmf=0.1,
+            dt_ctrl_interval=(0.1, 0.25),
+            atol=1e-5,
+            rtol=1e-6,
+            verbose=True,
+            xdmf_file=None,
+            result_dir=None,
+            probes_file=None,
+            result_database=None,
+            project_name=None,
+            database_table=None,
+            close_probes=True,
+            probes_callbacks=[],
+            force_explicit_terms=False,
+            max_term_its=3,
+            use_time_projection=True,
+            call_backs=[],
+            call_back_each_t=None,
+            call_back_each_step=None,
+            custom_xdmf_trigger=None,
+            ):
+
+        """
+        This is the main method to run unstedy simulations. It handles the time 
+        steping with adaptive time steping, advances and converges all Terms and
+        writes out probes and domain data. It can write domain data (the solution) 
+        to XDMF files and probes data to text files and/or a SQL database.
+
+        Args:
+            T0 (float): initial temperature in domain
+            T_guess (np.ndarray): initial guess for the newton solver
+            h0_T_ref (float): reference temperature for enthalpy
+            t_max (float): maximum simulatated time
+            dt_start (float): initial time step size
+            dt_min (float): minimum time step size
+            dt_max (float): maximum time step size
+            dt_xdmf (float): time step for xdmf output
+            dt_ctrl_interval (tuple of floats): temperature interval for adaptive time step control
+            atol (float): absolute tolerance for the newton solver
+            rtol (float): relative tolerance for the newton solver
+            verbose (bool): print solver iterations
+            xdmf_file (str): name of the xdmf file for domain data
+            result_dir (str): directory for output files
+            probes_file (str): name of the probes file for probe data
+            result_database (str): name of the database for probe data
+            database_table (str): name of the database table for probe data
+            close_probes (bool): close probes file at the end of the simulation
+            force_explicit_terms (bool): force explicit evaluation of the terms
+            max_term_its (int): maximum number of term iterations to solve the terms
+            use_time_projection (bool): use time projection for initial guess evaluations
+            call_back (function): callback function called after specified iterations
+            call_back_each_t (float): trigger callback after simulations advances this many seconds
+            call_back_each_step (int): trigger callback after simulations advances this many steps
+            custom_xdmf_trigger (function): not implemented yet
+        """
 
         # set initial state of simulation
-        if T0 is not None:
+        if T0 is not None:    
             self.T_n.x.array[:] = T0
         else:
-            self.T_n.x.array[:] = self.T0
+            self.T_n.x.array[:] = 20.0
 
+        # set initial guess for the solver
         if T_guess is not None:
             self.T.x.array[:] = T_guess
+        elif T0 is not None:
+            self.T.x.array[:] = T0
         else:
-            self.T.x.array[:] = self.T_guess
-            
-        t_start = time.time()
+            self.T.x.array[:] = 20.0
+
+        # set materials zero enthalpy reference temperature
+        if h0_T_ref is not None:
+            self.mats.set_h0_T_ref(h0_T_ref)
+        else:
+            self.mats.set_h0_T_ref(20.0)
+
+        # set tolerances
+        self.unsteady_solver.atol = atol
+        self.unsteady_solver.rtol = rtol
+
+        self.dt.value = dt_start
+        in_event: bool = False
+        pre_event_dt : float = 0.0
         self.t.value = 0
+        self.t_n.value = self.t.value
         prev_callback_t = 0.0
         prev_callback_step = 0
-        self.t_n.value = self.t.value
         next_xdmf_t = 0.0
 
-        # initialize unsteady probes and print to stdout
+        # start stopwatch for total cpu time
+        t_start = time.time()
+
+        # set unsteady probes outputs locations
         if probes_file is not None:
-            self.unsteady_probes.set_result_file_name(probes_file)
+            assert result_dir is not None, "Result directory is required to set the probes file."
+            self.unsteady_probes.set_result_file(result_dir, probes_file)
+        if database_table is not None:
+            assert result_database is not None, "Result database is required to set the database table."
+            assert project_name is not None, "Project name is required to set the database table."
+            self.unsteady_probes.set_result_database_table(result_database, project_name, database_table)
+        if probes_callbacks is not None:
+            self.unsteady_probes.set_callbacks(probes_callbacks)
         self.unsteady_probes.evaluate_probes()
-        self.update_unsteady_form_terms(self.t_n)
+        self.update_unsteady_form_terms(self.t_n) #TODO: check automaticaly if this inner call calculates corectly and does not do divergence
 
         # open xdmf file for writing domain data
+        # TODO: make this full domain outputs part of ProbeWriter for more dynamic definitions
         if xdmf_file is not None:
-            xdmf = io.XDMFFile(self.domain.comm, os.path.join(self.result_dir, xdmf_file), "w")
+            file_path = os.path.join(result_dir, xdmf_file)
+            xdmf = io.XDMFFile(self.domain.comm, file_path, "w")
             xdmf.write_mesh(self.domain)
 
         if verbose:
-            self.unsteady_probes.pretty_string()
-        elif MPI.COMM_WORLD.rank == 0:
+            #self.unsteady_probes.pretty_string()
+            printer = self.print_r0
+            self.unsteady_probes.set_printer(printer)
+        else:
             pbar = ProgressBar(
                 desc = f"{self.__class__.__name__} unsteady simulation progress", 
                 update_cb=lambda : self.unsteady_probes.get_value('progress'),
                 )
+            printer = pbar.print_message
+            self.unsteady_probes.set_printer(printer)
 
         # time steping loop with time adaptation
         self.t_max = t_max
         stop_timesteping = False
         step = 0
         while self.t.value < self.t_max:
-            i_start = time.time()
+            i_start = time.time() # start stopwatch for cputime of one iteration
             step += 1
             success = False
             last_dt_min_atempt = False
 
             # Keep trying to solve for new time step
             self.unsteady_term_its = 1
-            while not success:
+            self.unsteady_total_iter = 0
+            while not success: # solving current time step
+                self.unsteady_total_iter += 1
+                
+                # advance time in form
                 if self.t_n.value + self.dt.value > self.t_max:
                     self.dt.value = self.t_max - self.t.value
                 self.t.value = self.t_n.value + self.dt.value
 
-                self.update_unsteady_form_terms(self.t)
+                # check if event ahead crossed over, if so update time in form
+                t_next_event = self.next_event()
+                if self.t.value > t_next_event:
+                    in_event = True
+                    pre_event_dt = self.dt.value
+                    self.dt.value = t_next_event - self.t_n.value
+                    self.t.value = self.dt.value
+                else:
+                    in_event = False
 
+                # Try to iteratively converge Terms withoud solving the PDE.
+                # This is a bit of a hack to reduce the number of Nonlinear
+                # solves. The idea is that the Terms might or might not be explicit,
+                # if they are explicit we can evaluate them exactly with only 
+                # one iteration (this will be detected automaticaly). If they are not
+                # explicit (meaning they do not depend only on the PDE solution T
+                # but also on oeach other) we can try to converge them with more
+                # iterations. We can also force the explicit evaluation even if they
+                # are not explicit (but this is likely to introduce consistency errors)
+                # and potentialy save some cpu time. Recomended safe aprooach is to 
+                # set `force_explicit_terms` to False.
+                for i in range(3): #TODO, study impact of the int in the range
+                    if not force_explicit_terms:
+                        self.update_unsteady_form_terms(self.t)
+                    if force_explicit_terms and self.converged_unsteady_form_terms():
+                        break
+                
+                # try to solve the PDE (most cpu intensive code is in this chunk!)
                 try:
                     self.r_unsteady = self.unsteady_solver.solve(self.T)
                 except Exception as e:
                     if MPI.COMM_WORLD.rank == 0:
-                        print(e)
-                        print(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 50%")
-                    self.dt.value *= 0.5 # halve the step after unexpected fail
+                        printer(e)
+                        #printer(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 30%")
+                    self.dt.value *= 0.7 # lower the step after unexpected fail
                     self.T.x.array[:] = self.T_n.x.array[:]
+                    self.unsteady_term_its = 1
+                    if self.dt.value < dt_min:
+                        stop_timesteping = True
+                        break
                     continue
+                    
+                # Checks if Terms converged, if not we have to resolve the PDE again
+                # because the data of PDE and the data of the Terms are inconsistent. 
+                # If it takes too many atempts, lower time step and tell loop it is
+                # not solving an event. If it was solving an event it will not be
+                # after it lowers the dt since the event was detected at later time
+                # point.
                 self.unsteady_probes.evaluate_probes()
-                
-                # converge any implicit Terms if needed
                 if not force_explicit_terms and not self.converged_unsteady_form_terms():
                     self.unsteady_term_its += 1
+                    if self.unsteady_term_its > max_term_its:
+                        self.dt.value *= 0.5
+                        self.dt.value = max(dt_min, self.dt.value)
+                        if self.dt.value == dt_min and not last_dt_min_atempt:
+                            last_dt_min_atempt = True
+                        elif last_dt_min_atempt:
+                            printer(f"Min dt is too large - Cannot converge Terms")
+                            stop_timesteping = True
+                            break
+                        self.unsteady_term_its = 1
+                        self.T.x.array[:] = self.T_n.x.array
+                        printer(f"convergence stepdown -> dt: {self.dt.value}")
+                        in_event = False
                     continue
-                high_term_its = self.unsteady_term_its >= max_term_its
-
-                # Time step adaptation:
-                diff = self.T.vector - self.T_n.vector
-                max_T_diff = np.abs(diff.array).max()
-                max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
-                if max_T_diff > self.dt_ctrl_interval[1]:
-                    self.dt.value *= 0.9
-                    self.dt.value = max(self.dt_min, self.dt.value)
-                    if self.dt.value == self.dt_min and not last_dt_min_atempt:
+                
+                # Now PDE and Terms are consistent, but we have to check if there
+                # is a variable that changed more than allowed by adaptation callbacks.
+                # If this lowers the time step we have to solve the PDE again because
+                # the solution is not valid anymore and inform the loop it is not solving
+                # event at that point. If the new dt is larger than the current dt we
+                # can continue since the solution is still valid and the increase in dt
+                # will affect next time step.
+                new_dt = self.get_unsteady_adaptive_time_step_size(dt_ctrl_interval)
+                if new_dt < self.dt.value:
+                    self.dt.value = new_dt
+                    if self.dt.value < dt_min and not last_dt_min_atempt:
+                        self.dt.value = dt_min
                         last_dt_min_atempt = True
                     elif last_dt_min_atempt:
-                        print(f"Min dt is too large - max_T_diff was {max_T_diff}")
+                        printer(f"Min dt is too large: dt <= {new_dt} required")
                         stop_timesteping = True
-                        break #stop loop that iterates on curent time step
+                        break
+                    self.unsteady_term_its = 1
+                    in_event = False
                     continue
-                elif max_T_diff < self.dt_ctrl_interval[0] and not high_term_its:
-                    self.dt.value /= 0.95
-                    self.dt.value = min(self.dt_max, self.dt.value)
-                elif high_term_its:
-                    self.dt.value *= 0.95
-                    self.dt.value = max(self.dt_min, self.dt.value)
+                elif new_dt > self.dt.value and not self.unsteady_term_its >= max_term_its:
+                    self.dt.value = new_dt
+                    self.dt.value = min(dt_max, self.dt.value)
+
+                # Now we check if it was solving event and if it was the dt could
+                # have been very small, so lets put back in the pre-event dt to
+                # keep the original step size and potentialy save some slow
+                # backgrowth of the time step to its original size.
+                if in_event:
+                    self.dt.value = pre_event_dt
+                    in_event = False
                 
-                success = True
+                success = True # stop the inner loop and write out all results
             
+            # if inner loop stoped but this flag was set, stop the outer loop because
+            # something went wrong and we need to stop the simulation completely.
+            # This can happen if time step is smaller than the minimum allowed or the
+            # solver failed too many times.
             if stop_timesteping:
-                print("Adaptive strategy triggered stop.")
-                break # stop main unsteady solver loop
+                self.print_r0("Adaptive strategy triggered stop.")
+                break
             
+            # Save the domain data in specified time points defined by dt_xdmf.
+            # This is a bit of a hack to save the domain data in specified time
+            # points using linear extrapolation without the need to solve the PDE
+            # at those points.
             denom_dt = self.t.value - self.t_n.value
             while next_xdmf_t <= self.t.value and xdmf_file is not None:
                 enum_dt = next_xdmf_t - self.t_n.value
-                self.T_xdmf.x.array[:] = self.T.x.array
-                self.T_xdmf.x.array[:] -= self.T_n.x.array
-                self.T_xdmf.x.array[:] *= enum_dt/denom_dt
-                self.T_xdmf.x.array[:] += self.T_n.x.array
-                xdmf.write_function(self.T_xdmf, next_xdmf_t)
-                next_xdmf_t += self.dt_xdmf
+                self.T_temp.x.array[:] = self.T.x.array
+                self.T_temp.x.array[:] -= self.T_n.x.array
+                self.T_temp.x.array[:] *= enum_dt/denom_dt
+                self.T_temp.x.array[:] += self.T_n.x.array
+                xdmf.write_function(self.T_temp, next_xdmf_t)
+                next_xdmf_t += dt_xdmf
             MPI.COMM_WORLD.Barrier()
 
-            self.T_n.x.array[:] = self.T.x.array
-            self.t_n.value = self.t.value
-            self.next_step_unsteady_form_terms()
-
+            # Set initial guess for next Newton solve using linear extrapolation.
+            # This might reduce NLS iterations and overall solve time.
+            # TODO: try using some cubic stuff insted of linear extrapolation.
             if use_time_projection:
-                self.T.x.array[:] -= self.T_n.x.array
-                self.T.x.array[:] *= self.dt.value/denom_dt
-                self.T.x.array[:] += self.T_n.x.array
+                self.T_temp.x.array[:] = self.T.x.array
+                self.T_temp.x.array[:] -= self.T_n.x.array
+                self.T_temp.x.array[:] *= self.dt.value/denom_dt
+                self.T_temp.x.array[:] += self.T_n.x.array
+                self.T_n.x.array[:] = self.T.x.array
+                self.t_n.value = self.t.value
+                self.next_step_unsteady_form_terms()
+                self.T.x.array[:] = self.T_temp.x.array
+            else:
+                self.T_n.x.array[:] = self.T.x.array
+                self.t_n.value = self.t.value
+                self.next_step_unsteady_form_terms()
 
+            # Compute how long everything took
             if MPI.COMM_WORLD.rank == 0:
                 self.elapsed = time.time() - t_start
                 self.ielapsed = time.time() - i_start
 
-            self.unsteady_probes.write_probes_to_file()
-            self.unsteady_probes.write_probes_to_memory()
+            # Write the probes (appending mode)
+            self.unsteady_probes.write_all_set_probes_outputs()
 
+            # Log step to terminal
             if verbose:
                 self.unsteady_probes.pretty_print()
             elif MPI.COMM_WORLD.rank == 0:
                 pbar.update()
 
+            # Trigger callback
             if (call_back_each_t is not None) and (self.t.value > prev_callback_t + call_back_each_t):
-                call_back()
+                for call_back in call_backs:
+                    call_back()
                 prev_callback_t += call_back_each_t
 
             if (call_back_each_step is not None) and (step > prev_callback_step + call_back_each_step):
-                call_back()
+                for call_back in call_backs:
+                    call_back()
                 prev_callback_step += call_back_each_step
 
+        # properly close all outputs
         if xdmf_file is not None:
             xdmf.close()
 
         if close_probes:
-            self.unsteady_probes.close()
+            self.unsteady_probes.close_all()
+            self.unsteady_probes.reset_printer()
 
+        # return the simulation results
         if MPI.COMM_WORLD.rank == 0:
             return self.unsteady_probes
 
@@ -684,11 +939,15 @@ class Simulation():
         for i, _T in enumerate(T):
             density_res = self.get_temperature_spectrum(T=_T, cell_tag=m+1)
             if MPI.COMM_WORLD.rank == 0:
-                fig.add_trace(go.Scatter(x=density_res[0],
-                                        y=density_res[1], 
-                                        mode='lines', 
-                                        name=f"T spectrum ({i})", 
-                                        yaxis='y2'))
+                fig.add_trace(
+                    go.Scatter(
+                        x=density_res[0],
+                        y=density_res[1], 
+                        mode='lines', 
+                        name=f"T spectrum ({i})", 
+                        yaxis='y2'
+                    )
+                )
                 fig.update_layout(     
                     yaxis2=dict(
                         title="Temperature spectrum [-]",
@@ -698,7 +957,16 @@ class Simulation():
     def probes_time_plot(self, *args, **kwargs):
         if MPI.COMM_WORLD.rank == 0:
             fig = px.line(self.unsteady_probes.df, *args, **kwargs)
-            fig.update_layout(uirevision="None")
+            fig.update_layout(
+                uirevision="None",
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=0.01,
+                    ),
+                margin=dict(l=20, r=20, t=20, b=20),
+                )
             return fig
 
     def domain_state_plot(self, T=None):

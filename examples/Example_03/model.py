@@ -193,9 +193,8 @@ class THW_twowire(Simulation):
         self.R_std = R_std
         res = self.solve_unsteady(**kwargs)
         if self.domain.comm.rank == 0:
-            result_dir = os.path.join(self.result_dir, f'{self.model_name}')
             res = self.calculate_lmbd(res.df)
-            res.to_csv(os.path.join(result_dir, 'LMBD_result.csv'))
+            res.to_csv(os.path.join(kwargs['result_dir'], 'LMBD_result.csv'))
             
     def plot_data(self):
         if self.domain.comm.rank == 0:

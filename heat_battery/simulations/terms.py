@@ -15,8 +15,53 @@ class AmbientCooling(Term):
 class UniformHeatSource(Term):
 
     def define_terms(self):
-        self.new_constant('Qc', 1.0)
-        self.set_update('Qc', lambda t: 1.0)
+        self.new_constant('Qc', 0.0)
+        self.set_update('Qc', lambda t: 0.0)
+        self.new_integral('Q_cumulative', 0.0, 'Qc')
+    
+    def __call__(self, T, x, t=None, domain=None):
+        i = self.sim.subdomain_map[domain]
+        Vc = self.sim.V_subdomain[i]
+        return self.get_constant('Qc', t)/Vc
+    
+class TemperatureLimitedUniformHeatSource(Term):
+
+    def define_terms(self):
+        self.T_limit = 100.0
+        self.T_limit_tol = 0.1
+        self.toggle_sens = 0.0001   
+
+        self.new_constant("toggle", 1.0)
+        self.set_update('toggle', self.toggle_update)
+
+        self.new_constant("Q_in", 0.0)
+        self.set_update('Q_in', lambda t: 0.0)
+        self.new_integral('Q_in_cumulative', 0.0, 'Q_in')
+
+        self.new_constant("T_probe", 0.0)
+        self.set_update('T_probe', lambda t: 0.0)
+
+        self.new_constant('Qc', 0.0)
+        self.set_update('Qc', self.Qc_update, prevent_override=True)
+        self.new_integral('Qc_cumulative', 0.0, 'Qc')
+
+    def set_T_limit(self, value):
+        self.T_limit = value
+
+    def set_sens(self, value):
+        self.toggle_sens = value
+
+    def toggle_update(self, t):
+        T_probe = self.fem_consts['T_probe'].value[0]
+        toggle_n = self.fem_consts['toggle'].value[1]
+        diff = self.T_limit - T_probe
+        diff = self.sim.dt.value*self.T_limit - self.get_integral_step('T_probe')
+        return sb.np.clip(toggle_n+diff*self.toggle_sens, 0, 1)
+    
+    def Qc_update(self, t):
+        toggle = self.fem_consts['toggle'].value[0]
+        Q_in = self.fem_consts['Q_in'].value[0]
+        return Q_in*toggle
     
     def __call__(self, T, x, t=None, domain=None):
         i = self.sim.subdomain_map[domain]
@@ -24,14 +69,8 @@ class UniformHeatSource(Term):
         return self.get_constant('Qc', t)/Vc
 
 class PIDControlledHeatSource(PIDTerm):
-    def __call__(self, T, x, t=None, domain=None):
-        i = self.sim.subdomain_map[domain]
-        Vc = self.sim.V_subdomain[i]
-        return self.get_constant('output', t)/Vc
-    
-    def converged(self):
-        d_diff  = self.fem_consts['diff'].value[0] - self.diff_update(self.sim.t.value)
-        return abs(d_diff) < 1e-2
+    """This is a typical PID term that is used to control power based on
+    temperature probe."""
 
 class SerialWiresResistiveHeating(Term):
     

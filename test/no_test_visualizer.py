@@ -1,8 +1,10 @@
 import unittest
 import numpy as np
 import plotly.graph_objects as go
-from heat_battery.data import Visualizer, pages
+from heat_battery.data import Visualizer
 import time
+
+from heat_battery.visualization import pages
 
 class TestVizualizer(unittest.TestCase):
     def setUp(self) -> None:

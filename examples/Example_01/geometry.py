@@ -1,7 +1,7 @@
 from heat_battery.simulations.simulation_base import MPI
 from heat_battery.materials import materials
 from heat_battery.geometry.utilities import convert_to_legacy_fenics
-from heat_battery.utilities import save_data
+from heat_battery.utilities import save_data_binary
 from inspect import getargspec
 from math import pi
 import gmsh
@@ -265,7 +265,7 @@ def build_geometry(
         if legacy_fenics:
             convert_to_legacy_fenics(gmsh_file)
 
-        save_data(add_data_file, add_data)
+        save_data_binary(add_data_file, add_data)
 
     MPI.COMM_WORLD.Barrier()
 

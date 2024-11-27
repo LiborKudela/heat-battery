@@ -92,6 +92,11 @@ class PassiveStorage(Simulation):
             value = fem.assemble_scalar(Tmean_cartridge)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
+        
+        pid_obj = self.get_source_term('heated cartridge')
+        @probes.register_probe('PID', '-')
+        def pid_vals():
+            return pid_obj.get_current_pid_values()
 
     def solve_steady(self, Qc=10, T_amb=20, xdmf_file=None, alpha=6.3):
         #FIXME: This will not work for currente version of PID type Term
@@ -110,15 +115,20 @@ class PassiveStorage(Simulation):
         )
 
     def solve_unsteady(self, 
-            T_pid_input_control=lambda t: 400.0,
-            T_amb_t=lambda t: 18.0,
-            alpha_t=lambda t: 2.5,
-            alpha_mem_t=lambda t: 1.0, 
-            pid=(100.0, 0.01, 100.0),
-            **kwargs):
+        T_pid_input_control=lambda t: 400.0,
+        T_amb_t=lambda t: 18.0,
+        alpha_t=lambda t: 2.5,
+        alpha_mem_t=lambda t: 1.0, 
+        pid=(100.0, 0.02, 100.0),
+        pid_ctrl_interval=(10.0, 30.0),
+        pid_power_lims = [0, float('Inf')],
+        **kwargs):
 
         obj = self.get_source_term("heated cartridge")
         obj.set_pid(*pid)
+        obj.set_converge_tol(1e-2)
+        obj.set_output_limits(pid_power_lims)
+        obj.set_ctrl_interval(pid_ctrl_interval)
         obj.set_reference(T_pid_input_control)
         obj.set_probe(lambda t: self.unsteady_probes.get_value('Tc_avg'))
 
