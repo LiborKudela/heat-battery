@@ -1,5 +1,6 @@
 import unittest
 import math
+from heat_battery.config import setup_local_config_path
 from heat_battery.simulations.postgresql_project import Project, generate_jobs
 from heat_battery.simulations import sweep
 from examples.Example_01.geometry import build_geometry
@@ -8,6 +9,13 @@ from examples.Example_01.model import Experiment_v1
 class TestPostgresqlProject(unittest.TestCase):
     def setUp(self) -> None:
         self.project = Project('test_project_X', if_exists='override')
+
+        try:
+            setup_local_config_path('config.yaml')
+            print(f"Running config database tests with config.yaml in cwd")
+        except:
+            setup_local_config_path('.github/github_test_config.yaml')
+            print(f"Running config database tests in Github Actions with .github/github_test_config.yaml")
     
     def test_jobs_equivalence(self):
         p_inputs = sweep.ParameterGrid(dict(

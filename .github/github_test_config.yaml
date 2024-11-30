@@ -1,0 +1,12 @@
+user: 
+    username: Github Actions
+
+database:
+    use_engine: postgresql
+    
+    postgres:
+        db_name: heat_battery
+        user: postgres
+        password: dummy_password
+        host: 127.0.0.1
+        port: 5432

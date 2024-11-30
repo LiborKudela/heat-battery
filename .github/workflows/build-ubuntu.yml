@@ -44,6 +44,11 @@ jobs:
         sudo apt install fenicsx
         echo "Install finnished!!"
 
+    - name: Install and setup PostgreSQL
+      run: |
+        sudo apt install postgresql
+        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
+
     - name: Test dolfinx import
       run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
 

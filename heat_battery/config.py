@@ -6,6 +6,14 @@ GLOBAL_CONFIG_FILE_PATH = os.path.join(this_file_dir, "base_config.yaml")
 LOCAL_CONFIG_FILE_PATH = os.path.join(os.getcwd(), "config.yaml")
 MAX_CONFIG_DEPTH = 10
 
+def setup_global_config_path(config_path: str) -> None:
+    global GLOBAL_CONFIG_FILE_PATH
+    GLOBAL_CONFIG_FILE_PATH = config_path
+
+def setup_local_config_path(config_path: str) -> None:
+    global LOCAL_CONFIG_FILE_PATH
+    LOCAL_CONFIG_FILE_PATH = config_path
+
 def merge_configs(
         base_config:dict, 
         update_config:dict, 
@@ -65,8 +73,6 @@ def get_current_config() -> dict:
         global_config = merge_configs(global_config, local_config)
     return global_config
 
-CONFIG = get_current_config()
-
 def assert_config_feature_enabled(feature_path: list[str], error_msg: str) -> None:
     """
     Asserts that a configuration feature is enabled, if not raises a ValueError.
@@ -74,7 +80,7 @@ def assert_config_feature_enabled(feature_path: list[str], error_msg: str) -> No
     Args:
         feature_path (list[str]): Path to the feature in the configuration file.
     """
-    value = CONFIG
+    value = get_current_config()
     for key in feature_path:
         value = value[key]
     assert isinstance(value, bool), (
@@ -92,7 +98,7 @@ def assert_config_value_set(value_path: list[str], error_msg: str) -> None:
         value_path (list[str]): Path to the value in the configuration file.
         error_msg (str): Error message to raise if the value is not set.
     """
-    value = CONFIG
+    value = get_current_config()
     for key in value_path:
         value = value[key]
     if value is None:   
@@ -117,7 +123,7 @@ def get_config_item(
         Any: Value or remaining dictionary at the path of config.
     """
 
-    value = CONFIG
+    value = get_current_config()
     for i, key in enumerate(value_path):
         if i < len(value_path) - 1 and not isinstance(value[key], dict):
             raise ValueError(
