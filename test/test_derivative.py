@@ -32,7 +32,7 @@ class TestDerivative(unittest.TestCase):
 
         u1 = dolfinx.fem.Function(V)
         boundary_facets = dolfinx.mesh.locate_entities_boundary(mesh, fdim, left)
-        with u1.vector.localForm() as loc:
+        with u1.x.petsc_vec.localForm() as loc:
             loc.set(0)
         bc1 = dolfinx.fem.dirichletbc(u1, dolfinx.fem.locate_dofs_topological(V, fdim, boundary_facets))
 

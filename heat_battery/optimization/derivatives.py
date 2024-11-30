@@ -129,13 +129,13 @@ class Point_wise_lsq_objective:
                 self.true_values_map.append(i)
     
     def assemble_adjoint_rhs_vector(self):
-        with self.b.vector.localForm() as b_loc:
+        with self.b.x.petsc_vec.localForm() as b_loc:
             b_loc.set(0)
         for i in range(len(self.points)):
             # contribution to dJdu of single point
             value = -(self.f.eval(self.points[i], self.cells[i])[0]-self.true_values[self.true_values_map[i]])
             self.b.x.array[self.dofs[i]] += self.sensitivities[i]*value
-        return self.b.vector
+        return self.b.x.petsc_vec
 
     def eval_points(self):
         values = []
@@ -195,7 +195,7 @@ class AdjointDerivative:
         b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         dolfinx.fem.petsc.set_bc(b, self.bcs)
 
-        self.adjoint_solver.solve(b, self.lmbda.vector)
+        self.adjoint_solver.solve(b, self.lmbda.x.petsc_vec)
         self.lmbda.x.scatter_forward()
         return self.lmbda
 
@@ -221,7 +221,7 @@ class AdjointDerivative:
             self.dFdk[i].ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
             
             # add dFdk*lmbda
-            dJdk[i] += self.dFdk[i].dot(self.lmbda.vector)
+            dJdk[i] += self.dFdk[i].dot(self.lmbda.x.petsc_vec)
             
         return dJdk
 
@@ -278,7 +278,7 @@ class ForwardDerivative_dudk:
             self.dFdk[i].ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
             dolfinx.fem.petsc.set_bc(self.dFdk[i], self.bcs)
 
-            self.grad_solver.solve(-self.dFdk[i], self.dudki.vector)
+            self.grad_solver.solve(-self.dFdk[i], self.dudki.x.petsc_vec)
             self.dudki.x.scatter_forward()
 
             if self.p_coords is not None:

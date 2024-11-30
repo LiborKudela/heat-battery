@@ -243,7 +243,7 @@ class Simulation():
     
     def get_unsteady_adaptive_time_step_size(self, dt_ctrl_interval):
         # max T change in domain adaptation
-        diff = self.T.vector - self.T_n.vector
+        diff = self.T.x.petsc_vec - self.T_n.x.petsc_vec
         max_T_diff = np.abs(diff.array).max()
         max_T_diff = self.domain.comm.allreduce((max_T_diff), op=MPI.MAX)
         if max_T_diff > dt_ctrl_interval[1]:
