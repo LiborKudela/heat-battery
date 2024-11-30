@@ -25,8 +25,9 @@ class Term():
            'no_update' specifies if it should have set update callback.
            Warrning will be produces if inconsistency is detected.
         """
-        assert (self.fem_consts.get(name) is not None, 
-            f"Constant with name {name} already declared. Chose different name")
+        assert (self.fem_consts.get(name) is None), (
+            f"Constant with name {name} already declared. Chose different name"
+        )
 
         self.fem_consts[name] = sb.fem.Constant(self.sim.domain, sb.PETSc.ScalarType((value, value)))
         self.fem_consts_steady[name] = sb.fem.Constant(self.sim.domain, sb.PETSc.ScalarType(value))

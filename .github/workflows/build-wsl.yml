@@ -1,5 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# This workflow is equivalent to build-ubuntu.yml but for WSL
 
 name: WSL-Ubuntu 
 
@@ -69,6 +68,24 @@ jobs:
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: pip3 freeze
 
-    - name: Test with unittest
+    - name: Install, start and configure PostgreSQL server
       shell: wsl-bash_Ubuntu-22.04 {0}
-      run: python3 -m unittest discover -v -s ./test  -p 'test_*.py'
+      run: |
+        sudo apt install -y postgresql postgresql-contrib
+        sudo systemctl start postgresql.service
+        sudo pg_isready
+        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
+        sudo pg_isready
+
+    - name: Install coverage.py
+      shell: wsl-bash_Ubuntu-22.04 {0}
+      run: pip3 install coverage
+
+    - name: Test with unittest and record coverage
+      shell: wsl-bash_Ubuntu-22.04 {0}
+      run: coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
+
+    - name: Show coverage report
+      shell: wsl-bash_Ubuntu-22.04 {0}
+      run: >
+        echo "Code coverage: $(coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
