@@ -8,10 +8,14 @@ MAX_CONFIG_DEPTH = 10
 
 def setup_global_config_path(config_path: str) -> None:
     global GLOBAL_CONFIG_FILE_PATH
+    if not os.path.exists(config_path):
+        raise ValueError(f"Global config file not found at {config_path}")
     GLOBAL_CONFIG_FILE_PATH = config_path
 
 def setup_local_config_path(config_path: str) -> None:
     global LOCAL_CONFIG_FILE_PATH
+    if not os.path.exists(config_path):
+        raise ValueError(f"Local config file not found at {config_path}")
     LOCAL_CONFIG_FILE_PATH = config_path
 
 def merge_configs(
