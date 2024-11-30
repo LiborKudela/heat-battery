@@ -57,6 +57,15 @@ jobs:
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
 
+    - name: Install, start and configure PostgreSQL server
+      shell: wsl-bash_Ubuntu-22.04 {0}
+      run: |
+        sudo apt install -y postgresql postgresql-contrib
+        sudo systemctl start postgresql.service
+        sudo pg_isready
+        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
+        sudo pg_isready
+  
     - name: Install HeatBattery via setup.py
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
@@ -66,15 +75,6 @@ jobs:
     - name: Show version of installed packages
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: pip3 freeze
-
-    - name: Install, start and configure PostgreSQL server
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: |
-        sudo apt install -y postgresql postgresql-contrib
-        sudo systemctl start postgresql.service
-        sudo pg_isready
-        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
-        sudo pg_isready
 
     - name: Install coverage.py
       shell: wsl-bash_Ubuntu-22.04 {0}
