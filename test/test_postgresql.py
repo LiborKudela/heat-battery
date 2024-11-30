@@ -8,8 +8,7 @@ from examples.Example_01.model import Experiment_v1
 
 class TestPostgresqlProject(unittest.TestCase):
     def setUp(self) -> None:
-        self.project = Project('test_project_X', if_exists='override')
-
+        
         try:
             setup_local_config_path('config.yaml')
             print(f"Running config database tests with config.yaml in cwd")
@@ -17,6 +16,7 @@ class TestPostgresqlProject(unittest.TestCase):
             setup_local_config_path('.github/github_test_config.yaml')
             print(f"Running config database tests in Github Actions with .github/github_test_config.yaml")
     
+        self.project = Project('test_project_X', if_exists='override')
     def test_jobs_equivalence(self):
         p_inputs = sweep.ParameterGrid(dict(
             mesh_p = sweep.ParameterGrid(dict(
