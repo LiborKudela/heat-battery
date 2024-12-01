@@ -76,10 +76,6 @@ jobs:
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: pip3 freeze
 
-    # - name: Test with unittest and record coverage
-    #   shell: wsl-bash_Ubuntu-22.04 {0}
-    #   run: python3 -m unittest discover -v -s ./test  -p 'test_a_importing.py'
-
-    # - name: Test with unittest and record coverage
-    #   shell: wsl-bash_Ubuntu-22.04 {0}
-    #   run: exit
+    - name: Test with unittest and record coverage
+      shell: wsl-bash_Ubuntu-22.04 {0}
+      run: python3 -m unittest test.test_a_importing.TestExamples.test_selected_examples
