@@ -443,7 +443,12 @@ class Project:
             else:
                 cur.execute(query)
             rows = cur.fetchall()
-            rows = [[row[0], row[1].tobytes(), row[2], row[3]] for row in rows]
+            rows = [{
+                'file_name': row[0], 
+                'data': row[1].tobytes(), 
+                'type': row[2], 
+                'sha256': row[3]
+                } for row in rows]
         return rows
     
     def get_files(
@@ -501,7 +506,8 @@ class Project:
 
                 # files table data
                 for row in job.source_files_data:
-                    hashable_row = tuple(row)
+                    print_rank_0(row)
+                    hashable_row = tuple(row.values())
                     if hashable_row not in unique_source_files_rows:
                         unique_source_files_rows.add(hashable_row)
 

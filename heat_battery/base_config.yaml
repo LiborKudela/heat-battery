@@ -32,7 +32,7 @@ database:
         allow_drop_table: false
 
     sqlite:
-        path: heat_battery.db
+        base_dir: null
         allow_create_database: false
         allow_drop_database: false
         allow_drop_table: false

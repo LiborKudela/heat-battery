@@ -96,8 +96,8 @@ class Job:
         if self.is_local():
             result = None
         else:
-            result = self.project._get_remote_node_name_query(self['signature'])
-        return MPI.COMM_WORLD.bcast(result, root=0)
+            result = self.project.get_remote_node_name(self['signature'])
+        return result
 
     def set_remote_node_name(
             self, 
@@ -114,14 +114,11 @@ class Job:
             )
     
     def get_status(self):
-        if MPI.COMM_WORLD.rank == 0:
-            if self.is_local():
-                result = self.data['status']
-            else:
-                result = self.project.get_status(self['signature'])
+        if self.is_local():
+            result = self.data['status']
         else:
-            result = None
-        return MPI.COMM_WORLD.bcast(result, root=0)
+            result = self.project.get_status(self['signature'])
+        return result
     
     def set_status(self, status:str):
         if self.is_local():
@@ -137,7 +134,7 @@ class Job:
             result = self.data['error_log']
         else:
             result = self.project.get_error_log(self['signature'])
-        return MPI.COMM_WORLD.bcast(result, root=0)
+        return result
 
     def set_error_log(self, error_log:str):
         if self.is_local():

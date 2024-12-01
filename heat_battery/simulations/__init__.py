@@ -6,3 +6,4 @@ from .sweep import ParameterGrid, ParameterList, NoNumericalEffect, ParameterEva
 
 
 from .postgresql_project import Project
+from .jobs import Job, new_jobs_generator, generate_jobs

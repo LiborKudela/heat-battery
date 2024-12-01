@@ -8,20 +8,6 @@ from ..config import (
     get_config_item,
 )
 
-def assert_db_feature_enabled(feature: str):
-    error_msg = (
-        f"{feature} is disabled in the configuration file for safety reasons.\n"
-        f"Please enable it in local configuration file 'config.yaml'."
-    )
-    assert_config_feature_enabled(['database', 'postgres', feature], error_msg)
-
-def assert_db_config_value_set(value: str):
-    error_msg = (
-        f"{value.capitalize()} not set in the configuration file.\n"
-        "Please set it in local configuration file 'config.yaml'."
-    )
-    assert_config_value_set(['database', 'postgres', value], error_msg)
-
 def get_postgres_credentials():
     creds_entries = [
         f"user={get_config_item(['database', 'postgres', 'user'])}",
@@ -76,8 +62,6 @@ class SingleConnection:
     
     def putconn(self, conn):
         pass
-
-
 
 class DBConnection:
     DB_CONN_POOL = None

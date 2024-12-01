@@ -86,6 +86,15 @@ jobs:
           echo "Directory not found"
         fi
 
+    - name: Report free memory
+      run: free -h
+
+    # - name: Clear cache
+    #   run: sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+
+    # - name: Report free memory after cache clear
+    #   run: free -h
+
     - name: Test with unittest and record coverage
       run: coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
 
