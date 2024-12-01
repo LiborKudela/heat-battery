@@ -60,7 +60,7 @@ jobs:
     - name: Install, start and configure PostgreSQL server
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
-        sudo apt install -y postgresql postgresql-contrib
+        sudo apt install -y postgresql postgresql-contrib libpq-dev
         sudo service postgresql start
         sudo pg_isready
         sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
