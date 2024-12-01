@@ -25,9 +25,11 @@ jobs:
     - name: Initialize WSL
       shell: powershell
       run: |
+        wsl --install --no-distribution
+        wsl --update
         wsl --install -d Ubuntu-22.04 --no-launch
         wsl --set-default Ubuntu-22.04
-        wsl --update
+        wsl --list --verbose
         
     - name: Check Python3 version and add pip3
       run: |
