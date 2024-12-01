@@ -103,14 +103,6 @@ jobs:
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: free -h
 
-    - name: Clear cache
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
-
-    - name: Report free memory after cache clear
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: free -h
-
     - name: Test with unittest and record coverage
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: python3 examples/run.py --example="Example_01"

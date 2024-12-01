@@ -383,6 +383,36 @@ class Project:
         self._reset_all_statuses_query(new_status=new_status)
 
     @only_rank_0
+    def _reset_uncompleted_jobs_status_query(
+        self,
+        new_status:str='SCHEDULED',
+        inactivity_minutes:int=5,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        commit = conn is None
+        with DBConnection() if commit else conn as conn:
+            query = sql.SQL(
+                "UPDATE {} SET "
+                "status = %s, "
+                "progress = 0.0, "
+                "active_node_address = 'UNASSIGNED', "
+                "error_log = 'Cleared due to inactivity' "
+
+                "WHERE status LIKE 'RUNNING%%' "                 # says running
+                "AND last_updated < NOW() - INTERVAL '%s minutes'" # but is not actualy running
+            )
+            query = query.format(
+                self.get_jobs_table_sql_identifier(),
+            )
+            cur = conn.cursor()
+            cur.execute(query, (new_status, inactivity_minutes))
+            if commit:
+                conn.commit()
+ 
+    def reset_uncompleted_jobs_status(self, new_status:str='SCHEDULED'):
+        self._reset_uncompleted_jobs_status_query(new_status=new_status)
+
+    @only_rank_0
     def _add_files_query(
         self, 
         files_rows:list, 
@@ -506,7 +536,6 @@ class Project:
 
                 # files table data
                 for row in job.source_files_data:
-                    print_rank_0(row)
                     hashable_row = tuple(row.values())
                     if hashable_row not in unique_source_files_rows:
                         unique_source_files_rows.add(hashable_row)
@@ -677,26 +706,6 @@ class Project:
         res = self._get_job_query(signature=signature)
         return MPI.COMM_WORLD.bcast(res, root=0)
 
-    @only_rank_0
-    def _reset_uncompleted_jobs_status_query(
-        self,
-        new_status:str='SCHEDULED',
-        conn:psycopg2.extensions.connection=None,
-    ):
-        commit = conn is None
-        with DBConnection() if commit else conn as conn:
-            query = sql.SQL("UPDATE {} SET status = %s WHERE status != 'COMPLETED' AND last_updated < NOW() - INTERVAL '10 minutes'")
-            query = query.format(
-                self.get_jobs_table_sql_identifier(),
-            )
-            cur = conn.cursor()
-            cur.execute(query, (new_status, ))
-            if commit:
-                conn.commit()
-
-    def reset_uncompleted_jobs_status(self, new_status:str='SCHEDULED'):
-        self._reset_uncompleted_jobs_status_query(new_status=new_status)
-
     # @only_rank_0
     # def _get_interupted_jobs_query(self, conn:psycopg2.extensions.connection=None):
     #     with DBConnection() if conn is None else conn as conn:
@@ -722,9 +731,13 @@ class Project:
             res = cur.fetchall()
         return res
     
-    def get_result_table_names(self):
+    def get_result_table_names(self, as_dataframe:bool=False):
         res = self._get_result_table_names_query()
-        return MPI.COMM_WORLD.bcast(res, root=0)
+        res = MPI.COMM_WORLD.bcast(res, root=0)
+        if as_dataframe:
+            return pd.DataFrame(res, columns=['table_name'])
+        else:
+            return res
     
     @only_rank_0
     def _get_result_table_query(
