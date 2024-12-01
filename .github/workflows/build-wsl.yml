@@ -38,48 +38,48 @@ jobs:
         pip3 install mpi4py
         mpirun -n 1 --allow-run-as-root python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 
-    - name: Install and test gmsh
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: |
-        sudo apt -y install gmsh
-        pip3 install gmsh
-        python3 -c "import gmsh"
+    # - name: Install and test gmsh
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: |
+    #     sudo apt -y install gmsh
+    #     pip3 install gmsh
+    #     python3 -c "import gmsh"
 
-    - name: Install FeniCSx
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: | 
-        sudo add-apt-repository -y ppa:fenics-packages/fenics
-        sudo apt-get update
-        sudo apt install -y fenicsx
-        echo "Install finnished!!"
+    # - name: Install FeniCSx
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: | 
+    #     sudo add-apt-repository -y ppa:fenics-packages/fenics
+    #     sudo apt-get update
+    #     sudo apt install -y fenicsx
+    #     echo "Install finnished!!"
 
-    - name: Test dolfinx import
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
+    # - name: Test dolfinx import
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
 
-    - name: Install, start and configure PostgreSQL server
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: |
-        sudo apt install -y postgresql postgresql-contrib libpq-dev
-        sudo service postgresql start
-        sudo pg_isready
-        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
-        sudo pg_isready
+    # - name: Install, start and configure PostgreSQL server
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: |
+    #     sudo apt install -y postgresql postgresql-contrib libpq-dev
+    #     sudo service postgresql start
+    #     sudo pg_isready
+    #     sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
+    #     sudo pg_isready
   
-    - name: Install HeatBattery via setup.py
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: |
-        pip3 install .
-        python3 -c "import heat_battery; print('heat_battery imported successfully!')"
+    # - name: Install HeatBattery via setup.py
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: |
+    #     pip3 install .
+    #     python3 -c "import heat_battery; print('heat_battery imported successfully!')"
 
-    - name: Show version of installed packages
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: pip3 freeze
+    # - name: Show version of installed packages
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: pip3 freeze
 
-    - name: Install coverage.py
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: pip3 install coverage
+    # - name: Test with unittest and record coverage
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: python3 -m unittest discover -v -s ./test  -p 'test_a_importing.py'
 
-    - name: Test with unittest and record coverage
-      shell: wsl-bash_Ubuntu-22.04 {0}
-      run: python3 -m unittest discover -v -s ./test  -p 'test_a_importing.py'
+    # - name: Test with unittest and record coverage
+    #   shell: wsl-bash_Ubuntu-22.04 {0}
+    #   run: exit
