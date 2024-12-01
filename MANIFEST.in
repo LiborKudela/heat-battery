@@ -1,2 +1,2 @@
-recursive-include heat_battery/base_config.yaml
+include heat_battery/base_config.yaml
 recursive-include heat_battery/visualization/assets *

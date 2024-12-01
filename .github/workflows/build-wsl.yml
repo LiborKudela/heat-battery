@@ -76,6 +76,27 @@ jobs:
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: pip3 freeze
 
+    - name: Show files in dist-packages for heat_battery
+      run: |
+        PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+        echo "Files in /usr/local/lib/python${PY_VERSION}/dist-packages/heat_battery/*:"
+        if [ -d "/usr/local/lib/python${PY_VERSION}/dist-packages/heat_battery" ]; then
+          ls -l /usr/local/lib/python${PY_VERSION}/dist-packages/heat_battery/*
+        else
+          echo "Directory not found"
+        fi
+
+    - name: Show files in site-packages for heat_battery
+      run: |
+        USERNAME=$(whoami)
+        PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+        echo "Files in /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/heat_battery/*:"
+        if [ -d "/home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/heat_battery" ]; then
+          ls -l /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/heat_battery/*
+        else
+          echo "Directory not found"
+        fi
+
     - name: Test with unittest and record coverage
       shell: wsl-bash_Ubuntu-22.04 {0}
       run: python3 examples/run.py --example="Example_01"
