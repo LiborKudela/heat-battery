@@ -25,9 +25,17 @@ jobs:
     - name: Initialize WSL
       shell: powershell
       run: |
+        # Install WSL
         wsl --install
         wsl --update
-        wsl --install -d Ubuntu-22.04 --no-launch
+        
+        # Install Ubuntu using winget
+        winget install Canonical.Ubuntu.2204
+        
+        # Wait a bit for the installation to complete
+        Start-Sleep -Seconds 30
+        
+        # Set as default and verify
         wsl --set-default Ubuntu-22.04
         wsl --list --verbose
         
