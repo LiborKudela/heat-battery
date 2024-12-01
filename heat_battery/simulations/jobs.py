@@ -171,7 +171,10 @@ class Job:
             print(f"Group_dir: {main_dir}")
             os.makedirs(main_dir, exist_ok=True)
             for row in self.source_files_data:
-                file_name, data, file_type, signature = row
+                file_name = row['file_name']
+                data = row['data']
+                #file_type = row['file_type']
+                #signature = row['sha256']
 
                 print(f"Writing file {file_name}...", end='')
                 file_name = os.path.join(main_dir, file_name)
