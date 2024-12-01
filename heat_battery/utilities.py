@@ -17,6 +17,16 @@ def test_package():
     #TODO: make this proper
     return 0
 
+def only_rank_0(f):
+    def wrapper(*args, **kwargs):
+        if MPI.COMM_WORLD.rank == 0:
+            return f(*args, **kwargs)
+    return wrapper
+
+def print_rank_0(*args, **kwargs):
+    if MPI.COMM_WORLD.rank == 0:
+        print(*args, **kwargs)
+
 def save_data_binary(
         filepath:str, 
         data:any, 

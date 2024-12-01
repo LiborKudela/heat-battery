@@ -1,7 +1,8 @@
 import unittest
 import math
 from heat_battery.config import setup_local_config_path
-from heat_battery.simulations.postgresql_project import Project, generate_jobs
+from heat_battery.simulations.postgresql_project import Project
+from heat_battery.simulations.jobs import generate_jobs
 from heat_battery.simulations import sweep
 from examples.Example_01.geometry import build_geometry
 from examples.Example_01.model import Experiment_v1

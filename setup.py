@@ -12,7 +12,7 @@ setup(
     version = '0.0.1',
     description = 'FEM simulation/optimization of solid thermal storages',
     package_data={},
-    include_package_data=False,
+    include_package_data=True,
     long_description = long_description,
     long_description_content_type = 'text/markdown',
     url='https://github.com/LiborKudela/heat-battery',
