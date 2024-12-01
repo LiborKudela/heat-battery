@@ -77,6 +77,7 @@ jobs:
       run: pip3 freeze
 
     - name: Show files in dist-packages for heat_battery
+      shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
         PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
         echo "Files in /usr/local/lib/python${PY_VERSION}/dist-packages/heat_battery/*:"
@@ -87,6 +88,7 @@ jobs:
         fi
 
     - name: Show files in site-packages for heat_battery
+      shell: wsl-bash_Ubuntu-22.04 {0}
       run: |
         USERNAME=$(whoami)
         PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
