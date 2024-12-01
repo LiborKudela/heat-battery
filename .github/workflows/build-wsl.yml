@@ -78,4 +78,4 @@ jobs:
 
     - name: Test with unittest and record coverage
       shell: wsl-bash_Ubuntu-22.04 {0}
-      run: python3 test/test_a_importing.py
+      run: python3 examples/run.py --example="Example_01"
