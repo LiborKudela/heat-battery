@@ -293,7 +293,7 @@ class Project:
     ):
         commit = conn is None
         with DBConnection() if commit else conn as conn:
-            query = sql.SQL("UPDATE {} SET status = %s WHERE signature = %s")
+            query = sql.SQL("UPDATE {} SET status = %s, last_updated = NOW() WHERE signature = %s")
             query = query.format(
                 self.get_jobs_table_sql_identifier(),
             )
@@ -398,7 +398,7 @@ class Project:
                 "active_node_address = 'UNASSIGNED', "
                 "error_log = 'Cleared due to inactivity' "
 
-                "WHERE status LIKE 'RUNNING%%' "                 # says running
+                "WHERE status LIKE 'RUNNING - %%' "                # says running
                 "AND last_updated < NOW() - INTERVAL '%s minutes'" # but is not actualy running
             )
             query = query.format(
@@ -743,9 +743,6 @@ class Project:
     def _get_result_table_query(
         self, 
         signature:str,
-        skip_first_n_rows:int=None,
-        read_first_n_rows:int=None,
-        read_last_n_rows:int=None,
     ):
         with DBConnection() as conn:
 
@@ -765,7 +762,7 @@ class Project:
             cols = [col[0] for col in cur.fetchall()]
 
             # get rows
-            query = sql.SQL("SELECT * FROM {} ")
+            query = sql.SQL("SELECT * FROM {}")
             query = query.format(
                 sql.Identifier(self.project_name, f'res_{signature}'),
             )
