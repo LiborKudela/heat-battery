@@ -24,7 +24,7 @@ Help() {
 
 # Show help if no arguments or -h/--help
 if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    show_help
+    Help
     exit 0
 fi
 
