@@ -31,6 +31,7 @@ fi
 # update system
 sudo apt update
 sudo apt install build-essential
+sudo apt install python3-pip
 echo "System updated!"
 
 # install openmpi
