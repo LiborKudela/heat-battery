@@ -396,9 +396,9 @@ class Project:
                 "status = %s, "
                 "progress = 0.0, "
                 "active_node_address = 'UNASSIGNED', "
-                "error_log = 'Cleared due to inactivity' "
+                #"error_log = 'Cleared due to inactivity' "
 
-                "WHERE status LIKE 'RUNNING - %%' "                # says running
+                "WHERE (status LIKE 'RUNNING - %%' OR status = 'FAILED') " # says running
                 "AND last_updated < NOW() - INTERVAL '%s minutes'" # but is not actualy running
             )
             query = query.format(
