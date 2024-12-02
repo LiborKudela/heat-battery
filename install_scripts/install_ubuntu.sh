@@ -30,18 +30,18 @@ fi
 
 # update system
 sudo apt update
-sudo apt install build-essential
-sudo apt install python3-pip
+sudo apt install build-essential -y
+sudo apt install python3-pip -y
 echo "System updated!"
 
 # install openmpi
-sudo apt install openmpi-bin openmpi-doc libopenmpi-dev
+sudo apt install openmpi-bin openmpi-doc libopenmpi-dev -y
 pip3 install mpi4py
 mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 echo "OpenMPI installed!"
 
 # install gmsh
-sudo apt install gmsh
+sudo apt install gmsh -y
 pip3 install gmsh
 python3 -c "import gmsh"
 echo "Gmsh installed!"
@@ -49,12 +49,12 @@ echo "Gmsh installed!"
 # install fenicsx
 sudo add-apt-repository ppa:fenics-packages/fenics
 sudo apt update
-sudo apt install fenicsx
+sudo apt install fenicsx -y
 echo "Fenicsx installed!"
 python3 -c "import dolfinx; print(f'dolfinx version: {dolfinx.__version__}')"
 
 # install libpg for worker nodes
-sudo apt install libpg-dev
+sudo apt install libpq-dev -y
 
 # ask for password for postgres user
 if [ "$install_postgres" = "true" ]; then
@@ -65,7 +65,7 @@ if [ "$install_postgres" = "true" ]; then
         exit 1
     fi
     if [ "$postgres_password" != "" ]; then
-        sudo apt install postgresql postgresql-contrib
+        sudo apt install postgresql postgresql-contrib -y
         if command -v systemctl >/dev/null 2>&1; then
             sudo systemctl start postgresql.service
         elif command -v service >/dev/null 2>&1; then
