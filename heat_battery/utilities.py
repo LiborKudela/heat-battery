@@ -24,6 +24,9 @@ def only_rank_0(f):
     return wrapper
 
 def print_rank_0(*args, **kwargs):
+    for arg in args:
+        if isinstance(arg, object):
+            args = (str(arg), ) + args[1:]
     if MPI.COMM_WORLD.rank == 0:
         print(*args, **kwargs)
 
