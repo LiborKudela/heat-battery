@@ -53,6 +53,9 @@ sudo apt install fenicsx
 echo "Fenicsx installed!"
 python3 -c "import dolfinx; print(f'dolfinx version: {dolfinx.__version__}')"
 
+# install libpg for worker nodes
+sudo apt install libpg-dev
+
 # ask for password for postgres user
 if [ "$install_postgres" = "true" ]; then
     read -p "Enter password for postgres user: " postgres_password
@@ -62,7 +65,7 @@ if [ "$install_postgres" = "true" ]; then
         exit 1
     fi
     if [ "$postgres_password" != "" ]; then
-        sudo apt install postgresql postgresql-contrib libpq-dev
+        sudo apt install postgresql postgresql-contrib
         if command -v systemctl >/dev/null 2>&1; then
             sudo systemctl start postgresql.service
         elif command -v service >/dev/null 2>&1; then
