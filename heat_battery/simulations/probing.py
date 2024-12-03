@@ -250,6 +250,8 @@ class Probe_writer:
     @safe_query
     def write_probes_row_to_database(self):
         if MPI.COMM_WORLD.rank == 0:
+            if self.conn.closed > 0: # check if connection is closed
+                self.conn = get_single_db_connection(self.result_database)
             cur = self.conn.cursor()
             cur.execute(self.insert_query, self.chained_values)
             self.conn.commit()
@@ -257,7 +259,7 @@ class Probe_writer:
     def write_probes_to_database_table(self):
         # automatically initialise table if not already done
         if not self.is_database_table_initialized:
-            self.initialize_database_table()
+            self.initialize_database_table()    
 
         # append row to database table
         self.write_probes_row_to_database()
