@@ -108,15 +108,15 @@ class DBConnection:
                     f"Valid values are 'threaded_pool' and 'simple_pool'. "
                     f"Got {get_config_item(['database', 'postgres', 'connection_method'])}."
                 )
-            
+
+MAX_REPEAT_QUERY_ATTEMPTS = 10 # number of attempts
+MAX_REPEAT_QUERY_DELAY = 32    # seconds            
 def safe_query(func):
     #TODO: add loggin here per project
     """
     Retry a query a few times with debouncing if it fails due to a connection error.
     """
     def wrapper(*args, **kwargs):
-        MAX_DELAY = 32
-        MAX_ATTEMPTS = 5
         delay = 1
         attempts = 0
         while True:
@@ -125,9 +125,9 @@ def safe_query(func):
             except psycopg2.Error as e:
                 traceback.print_exc()
                 time.sleep(delay)
-                delay = min(2*delay, MAX_DELAY)
+                delay = min(2*delay, MAX_REPEAT_QUERY_DELAY)
                 attempts += 1
-                if attempts > MAX_ATTEMPTS:
+                if attempts > MAX_REPEAT_QUERY_ATTEMPTS:
                     raise Exception(f"Too many attempts to perform: {func.__name__}!")
                 continue
     return wrapper

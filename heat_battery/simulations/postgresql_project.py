@@ -20,6 +20,8 @@ from ..database.postgresql_connection import (
 )
 from ..config import get_config_item
 
+MAX_WAIT_BEFORE_INTERRUPTED = 600 # seconds
+
 @only_rank_0
 def _create_database_query(if_exists:str='skip'):
     conn = get_single_db_connection('postgres')
@@ -419,7 +421,7 @@ class Project:
     def _reset_uncompleted_jobs_status_query(
         self,
         new_status:str='INTERRUPTED',
-        inactivity_minutes:int=5,
+        inactivity_minutes:int=MAX_WAIT_BEFORE_INTERRUPTED,
         conn:psycopg2.extensions.connection=None,
     ):
         commit = conn is None
@@ -430,7 +432,7 @@ class Project:
                 "active_node_address = 'UNASSIGNED' "
                 #"error_log = 'Cleared due to inactivity' "
                 "WHERE (status LIKE 'RUNNING - %%' OR status = 'FAILED') " # says running
-                "AND last_updated < NOW() - INTERVAL '%s minutes'" # but is not actualy running
+                "AND last_updated < NOW() - INTERVAL '%s seconds'" # but is not actualy running
             )
             query = query.format(
                 self.get_jobs_table_sql_identifier(),

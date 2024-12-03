@@ -149,16 +149,10 @@ class Job:
             )
 
     def update_progress(self, probes):
-        for i in range(10):
-            try:
-                self.project.update_progress(
-                    signature=self['signature'],
-                    progress=probes.get_value('progress'),
-                )
-                break
-            except Exception as e:
-                print(e)
-                time.sleep(1)
+        self.project.update_progress(
+            signature=self['signature'],
+            progress=probes.get_value('progress'),
+        )
 
     @only_rank_0
     def prepare_files_for_execution(self, overwrite:bool=False):
@@ -238,24 +232,45 @@ if __name__ == "__main__":
     def run(self):
         org_status = self.get_status()
         org_remote_node_name = self.get_remote_node_name()
-        if org_remote_node_name == 'UNASSIGNED':
+        if 'SCHEDULED' in org_status:
+            if org_remote_node_name == 'UNASSIGNED':
+                print_rank_0(
+                    f"Job {self.data['signature']} has not been assigned to any "
+                    "node before, assigning current worker to it..."
+                )
+                self.set_remote_node_name(self.get_local_worker_id())
+            else:
+                print_rank_0(
+                    f"Job {self.data['signature']} is SCHEDULED but already "
+                    f"assigned to different node {org_remote_node_name}!"
+                    "Skipping this job..."
+                )
+                return None
+        elif 'FAILED' in org_status:
             print_rank_0(
-                f"Job {self.data['signature']} is not running, assigning "
-                "current worker to it..."
+                f"Job {self.data['signature']} has FAILED previously, "
+                "assigning current worker to it to try again..."
             )
             self.set_remote_node_name(self.get_local_worker_id())
-        else:
+        elif 'INTERRUPTED' in org_status:
             print_rank_0(
-                f"Job {self.data['signature']} is already running on "
-                f"{org_remote_node_name}!"
+                f"Job {self.data['signature']} has been INTERRUPTED previously, "
+                "assigning current worker to it to try again..."
+            )
+            self.set_remote_node_name(self.get_local_worker_id())
+        elif 'RUNNING' in org_status:
+            print_rank_0(
+                f"Job {self.data['signature']} is already RUNNING on "
+                f"{org_remote_node_name}! This can happen when there is delay "
+                "between job being requested and actual call to run(). Skipping this job..."
             )
             return None
-
-        if org_status not in ['SCHEDULED', 'FAILED']:
+        else:
             self.set_remote_node_name(None)
             raise ValueError(
-                f"Job {self.data['signature']} has not 'SCHEDULED' or 'FAILED' "
-                "status, cannot run it safely!"
+                f"Job {self.data['signature']} has wierd status: {org_status}! "
+                f"or wierd remote node name: {org_remote_node_name}! "
+                "Please report this bug as it is unexpected!"
             )
         
         self.set_status('RUNNING - FILE PREPARATION')
