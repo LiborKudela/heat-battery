@@ -13,7 +13,11 @@ from .jobs import Job
 import psycopg2
 import psycopg2.sql as sql
 from psycopg2.extras import execute_values
-from ..database.postgresql_connection import DBConnection, get_single_db_connection
+from ..database.postgresql_connection import (
+    DBConnection, 
+    get_single_db_connection, 
+    safe_query
+)
 from ..config import get_config_item
 
 @only_rank_0
@@ -86,6 +90,7 @@ class Project:
         _create_database_query(if_exists='skip')
 
     @only_rank_0
+    @safe_query
     def _exists_query(self, conn:psycopg2.extensions.connection=None):
         with DBConnection() if conn is None else conn as conn:
             query = sql.SQL(
@@ -100,6 +105,7 @@ class Project:
         return self._exists_query()
 
     @only_rank_0
+    @safe_query
     def _drop_query(
         self,
         fail_if_not_exists: bool = False,
@@ -129,11 +135,11 @@ class Project:
         self._drop_query(fail_if_not_exists=fail_if_not_exists, cascade=cascade)
 
     @only_rank_0
+    @safe_query
     def _create_query(
         self,
         conn:psycopg2.extensions.connection = None,
         if_exists: str = 'skip',
-
         ):
 
         commit = conn is None
@@ -189,6 +195,7 @@ class Project:
         self._create_query(if_exists=if_exists)
 
     @only_rank_0
+    @safe_query
     def _get_info_query(self, conn:psycopg2.extensions.connection=None):
         with DBConnection() if conn is None else conn as conn:
 
@@ -223,6 +230,7 @@ class Project:
         return res
     
     @only_rank_0
+    @safe_query
     def _get_remote_node_name_query(
             self,
             signature:str, 
@@ -242,6 +250,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
     
     @only_rank_0
+    @safe_query
     def _set_remote_node_name_query(
             self,
             signature:str,
@@ -264,6 +273,7 @@ class Project:
         )
 
     @only_rank_0
+    @safe_query
     def _get_status_query(
         self,
         signature:str,
@@ -285,6 +295,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
     
     @only_rank_0
+    @safe_query
     def _set_status_query(
         self, 
         signature:str,
@@ -305,7 +316,25 @@ class Project:
     def set_status(self, signature:str, status:str):
         self._set_status_query(signature=signature, status=status)
 
+
     @only_rank_0
+    @safe_query
+    def _get_last_updated_query(self, signature:str, conn:psycopg2.extensions.connection=None):
+        commit = conn is None
+        with DBConnection() if commit else conn as conn:
+            query = sql.SQL("SELECT last_updated FROM {} WHERE signature = %s")
+            query = query.format(self.get_jobs_table_sql_identifier())
+            cur = conn.cursor()
+            cur.execute(query, (signature,))
+            result = cur.fetchone()[0]
+        return result
+    
+    def get_last_updated(self, signature:str):
+        res = self._get_last_updated_query(signature=signature)
+        return MPI.COMM_WORLD.bcast(res, root=0)
+
+    @only_rank_0
+    @safe_query
     def _get_error_log_query(
         self, 
         signature:str,
@@ -325,6 +354,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
     
     @only_rank_0
+    @safe_query
     def _set_error_log_query(
         self, 
         signature:str,
@@ -344,6 +374,7 @@ class Project:
         self._set_error_log_query(signature=signature, error_log=error_log)
 
     @only_rank_0
+    @safe_query
     def _update_progress_query(
         self, 
         signature:str,
@@ -363,8 +394,9 @@ class Project:
         self._update_progress_query(signature=signature, progress=progress)
 
     @only_rank_0
+    @safe_query
     def _reset_all_statuses_query(
-        self, 
+        self,   
         new_status:str='SCHEDULED',
         conn:psycopg2.extensions.connection=None,
     ):
@@ -383,9 +415,10 @@ class Project:
         self._reset_all_statuses_query(new_status=new_status)
 
     @only_rank_0
+    @safe_query
     def _reset_uncompleted_jobs_status_query(
         self,
-        new_status:str='SCHEDULED',
+        new_status:str='INTERRUPTED',
         inactivity_minutes:int=5,
         conn:psycopg2.extensions.connection=None,
     ):
@@ -394,7 +427,6 @@ class Project:
             query = sql.SQL(
                 "UPDATE {} SET "
                 "status = %s, "
-                "progress = 0.0, "
                 "active_node_address = 'UNASSIGNED' "
                 #"error_log = 'Cleared due to inactivity' "
                 "WHERE (status LIKE 'RUNNING - %%' OR status = 'FAILED') " # says running
@@ -408,10 +440,11 @@ class Project:
             if commit:
                 conn.commit()
  
-    def reset_uncompleted_jobs_status(self, new_status:str='SCHEDULED'):
+    def reset_uncompleted_jobs_status(self, new_status:str='INTERRUPTED'):
         self._reset_uncompleted_jobs_status_query(new_status=new_status)
 
     @only_rank_0
+    @safe_query
     def _add_files_query(
         self, 
         files_rows:list, 
@@ -437,6 +470,7 @@ class Project:
         self._add_files_query(files_rows=files_rows)
 
     @only_rank_0
+    @safe_query
     def _check_files_exist_query(self, signatures:list[str], conn):
         with DBConnection() as conn:
             query = sql.SQL("SELECT EXISTS (SELECT 1 FROM {} WHERE signature IN %s)")
@@ -453,6 +487,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
 
     @only_rank_0
+    @safe_query
     def _get_files_query(
         self, 
         conn:psycopg2.extensions.connection = None, 
@@ -493,6 +528,7 @@ class Project:
             return rows
     
     @only_rank_0
+    @safe_query
     def _add_jobs_query(
             self, 
             jobs:list,
@@ -548,6 +584,8 @@ class Project:
     def add_jobs(self, jobs):
         self._add_jobs_query(jobs=jobs)
 
+    @only_rank_0
+    @safe_query
     def _add_meshes_query(
         self,
         dir:str,
@@ -574,6 +612,7 @@ class Project:
         self._add_meshes_query(dir=dir, names=names)
 
     @only_rank_0
+    @safe_query
     def _get_meshes_query(
         self, 
         dir:str,
@@ -602,6 +641,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
     
     @only_rank_0
+    @safe_query
     def _check_meshes_exist_query(
         self, 
         names:list[str], 
@@ -623,6 +663,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
     
     @only_rank_0
+    @safe_query
     def _get_jobs_query(
         self, 
         conn:psycopg2.extensions.connection=None, 
@@ -653,13 +694,18 @@ class Project:
             return [Job(dict(zip(Job.COLUMNS.keys(), row)), [], self) for row in jobs_rows]  
 
     @only_rank_0
+    @safe_query
     def _get_next_scheduled_job_query(
         self, 
         conn:psycopg2.extensions.connection=None,
         ):
         with DBConnection() if conn is None else conn as conn:
             query = sql.SQL(
-                "SELECT * FROM {} WHERE status = 'SCHEDULED' OR status LIKE 'FAILED%%' ORDER BY priority ASC LIMIT 1"
+                "SELECT * FROM {} WHERE "
+                "status = 'SCHEDULED' OR "
+                "status LIKE 'FAILED%%' OR "
+                "status = 'INTERRUPTED' "
+                "ORDER BY priority ASC LIMIT 1"
             )  
             query = query.format(
                 self.get_jobs_table_sql_identifier(),
@@ -680,6 +726,7 @@ class Project:
         return res
 
     @only_rank_0
+    @safe_query
     def _get_job_query(
         self, 
         signature:str, 
@@ -722,13 +769,14 @@ class Project:
     #     return MPI.COMM_WORLD.bcast(res, root=0)
 
     @only_rank_0
+    @safe_query
     def _get_result_table_names_query(self):
         with DBConnection() as conn:
             query = sql.SQL("SELECT table_name FROM information_schema.tables WHERE table_schema = %s AND table_name LIKE 'res\_%%'")
             cur = conn.cursor()
             cur.execute(query, (self.project_name, ))
             res = cur.fetchall()
-        return res
+        return [row[0] for row in res]
     
     def get_result_table_names(self, as_dataframe:bool=False):
         res = self._get_result_table_names_query()
@@ -739,6 +787,7 @@ class Project:
             return res
     
     @only_rank_0
+    @safe_query
     def _get_result_table_query(
         self, 
         signature:str,
@@ -761,7 +810,7 @@ class Project:
             cols = [col[0] for col in cur.fetchall()]
 
             # get rows
-            query = sql.SQL("SELECT * FROM {}")
+            query = sql.SQL("SELECT * FROM {} ORDER BY progress ASC")
             query = query.format(
                 sql.Identifier(self.project_name, f'res_{signature}'),
             )
@@ -782,8 +831,54 @@ class Project:
             return pd.DataFrame(columns=cols, data=rows)
         else:
             return res
+        
+    @only_rank_0
+    @safe_query
+    def _upload_result_table_query(
+        self, 
+        signature:str, 
+        df:pd.DataFrame, 
+        conn:psycopg2.extensions.connection=None,
+        ):
+        commit = conn is None
+        with DBConnection() if commit else conn as conn:
+            query = sql.SQL("CREATE TABLE IF NOT EXISTS {} ({})")
+            query = query.format(
+                sql.Identifier(self.project_name, f'res_{signature}'),
+                sql.SQL(', ').join(
+                    sql.SQL("{} {}").format(
+                        sql.Identifier(col),
+                        sql.SQL("FLOAT")
+                    ) for col in df.columns
+                )
+            )
+            cur = conn.cursor()
+            cur.execute(query)
+
+            # insert data
+            insert_query = sql.SQL("INSERT INTO {} ({}) VALUES %s")
+            insert_query = insert_query.format(
+                sql.Identifier(self.project_name, f'res_{signature}'),
+                sql.SQL(', ').join(
+                    sql.SQL("{}").format(
+                        sql.Identifier(col)
+                    ) for col in df.columns
+                ),
+            )
+            execute_values(cur, insert_query, df.values, page_size=100000)
+
+            if commit:
+                conn.commit()
+
+    def upload_result_table(
+            self, 
+            signature:str, 
+            df:pd.DataFrame, 
+        ):
+        self._upload_result_table_query(signature=signature, df=df)
 
     @only_rank_0
+    @safe_query
     def _clean_files_query(
         self, 
         conn:psycopg2.extensions.connection=None, 
@@ -809,6 +904,8 @@ class Project:
     def __repr__(self):
         return f"Project(name={self.project_name})"
 
+@only_rank_0
+@safe_query
 def _list_remote_projects_query(conn:psycopg2.extensions.connection=None):
     with DBConnection() if conn is None else conn as conn:
         query = sql.SQL(

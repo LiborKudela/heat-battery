@@ -3,6 +3,10 @@ from typing import Callable
 import os
 import importlib
 import socket
+import time
+import json
+import datetime
+import pandas as pd
 
 from ..geometry.cached_builder import CachedGeometryBuilder
 from .sweep import ParameterGrid
@@ -18,7 +22,6 @@ from ..utilities import (
     print_rank_0,
 )
 from ..config import get_config_item
-
 class Job:
     TABLE_NAME = 'jobs'
     COLUMNS= {
@@ -146,10 +149,16 @@ class Job:
             )
 
     def update_progress(self, probes):
-        self.project.update_progress(
-            signature=self['signature'],
-            progress=probes.get_value('progress'),
-        )
+        for i in range(10):
+            try:
+                self.project.update_progress(
+                    signature=self['signature'],
+                    progress=probes.get_value('progress'),
+                )
+                break
+            except Exception as e:
+                print(e)
+                time.sleep(1)
 
     @only_rank_0
     def prepare_files_for_execution(self, overwrite:bool=False):
@@ -394,7 +403,7 @@ def new_jobs_generator(
             created_by=created_by,
             insert_datetime="UNDEFINED",
             last_updated='UNDEFINED',
-            signature=p_input['SIGNATURE'][1:20],
+            signature=p_input['SIGNATURE'][0:20],
             priority=p_input['PRIORITY'],
             p_inputs=p_input,
             runner=runner,
@@ -421,3 +430,42 @@ def generate_jobs(
         p_grid: ParameterGrid, 
     ):
     return list(new_jobs_generator(sim_class, mesh_builder, runner, group_name, p_grid))
+
+def job_from_legacy_folder(
+        legacy_folder:str,
+        needs_colums=[]):
+    # load sim_p
+    unsteady_data = json.load(open(os.path.join(legacy_folder, 'unsteady.meta'), 'r'))
+    mesh_data = json.load(open(os.path.join(legacy_folder, 'mesh.meta'), 'r'))
+    build_data = json.load(open(os.path.join(legacy_folder, 'build.meta'), 'r'))
+
+    sim_p = build_data.copy()
+    sim_p.update(unsteady_data)
+    mesh_p = mesh_data.copy()
+
+    res_file_name = os.path.join(legacy_folder, 'unsteady.csv')
+    df_res = pd.read_csv(res_file_name)
+    progress = df_res.iloc[-1]['progress']
+
+    data = {
+        'group_name': 'Legacy',
+        'group_signature': build_data['model_name'].split('-')[0][:10],
+        'created_by': get_config_item(['user', 'username']),
+        'insert_datetime': str(datetime.datetime.now(datetime.timezone.utc)),
+        'last_updated': str(datetime.datetime.now(datetime.timezone.utc)),
+        'signature': legacy_folder.split(os.sep)[-1][:20],
+        'priority': 0,
+        'p_inputs': {
+            'sim_p': sim_p,
+            'mesh_p': mesh_p,
+            'res_file_name': os.path.join(legacy_folder, 'unsteady.csv'),
+            'SIGNATURE': legacy_folder.split(os.sep)[-1],
+        },
+        'runner': 'solve_unsteady',
+        'required_source_files': [],
+        'status': 'COMPLETED',
+        'progress': progress,
+        'active_node_address': 'UNASSIGNED',
+        'error_log': '',
+    }
+    return Job(data, {}, None)
