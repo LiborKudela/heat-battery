@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 from psycopg2 import sql
-from ..database.postgresql_connection import get_single_db_connection
+from ..database.postgresql_connection import get_single_db_connection, safe_query
 from ..config import get_config_item
 
 class FunctionSampler:
@@ -194,6 +194,7 @@ class Probe_writer:
             self.writer.writerow(header_names)
         self.is_file_initialized = True
 
+    @safe_query
     def initialize_database_table(self):
 
         if MPI.COMM_WORLD.rank == 0:
@@ -246,16 +247,20 @@ class Probe_writer:
             if self.flush:
                 self.file.flush()
 
+    @safe_query
+    def write_probes_row_to_database(self):
+        if MPI.COMM_WORLD.rank == 0:
+            cur = self.conn.cursor()
+            cur.execute(self.insert_query, self.chained_values)
+            self.conn.commit()
+
     def write_probes_to_database_table(self):
         # automatically initialise table if not already done
         if not self.is_database_table_initialized:
             self.initialize_database_table()
 
         # append row to database table
-        if MPI.COMM_WORLD.rank == 0:
-            cur = self.conn.cursor()
-            cur.execute(self.insert_query, self.chained_values)
-            self.conn.commit()
+        self.write_probes_row_to_database()
 
     def write_probes_to_memory(self):
         # automatically initialise memory if not already done
