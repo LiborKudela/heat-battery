@@ -21,7 +21,16 @@ jobs:
 
     - name: Check Python3 version
       run: python3 --version
-    
+
+    - name: Check required software
+      run: |
+        if ! command -v git &> /dev/null; then
+          sudo apt install git
+        fi`
+        if ! command -v cmake &> /dev/null; then
+          sudo apt install cmake
+        fi
+
     - name: Install and test OpenMPI
       run: | 
         sudo apt-get update
@@ -43,13 +52,35 @@ jobs:
         sudo apt install fenicsx
         echo "Install finnished!!"
 
+    - name: Install ADIOS2 from source
+      run: |
+        org_wd=$(pwd)
+        git clone https://github.com/ornladios/ADIOS2.git
+        cd ADIOS2
+        mkdir build
+        cd build
+        cmake .. -DADIOS2_BUILD_EXAMPLES=ON
+        make -j$(nproc)
+        sudo make install
+        sudo ldconfig
+        pip3 install adios4dolfinx
+        python3 -c "import adios4dolfinx; print(f'adios4dolfinx version {adios4dolfinx.__version__}')"
+        cd $org_wd
+        rm -rf ADIOS2
+        rm -rf build
+
     - name: Install, start and configure PostgreSQL server
       run: |
         sudo apt install postgresql postgresql-contrib
+        sudo apt install acl
         sudo systemctl start postgresql.service
         sudo pg_isready
         sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
         sudo pg_isready
+        psql --version
+        sudo apt install postgresql-plpython3-14
+        sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
+        sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
 
     - name: Test dolfinx import
       run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
@@ -88,12 +119,6 @@ jobs:
 
     - name: Report free memory
       run: free -h
-
-    # - name: Clear cache
-    #   run: sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
-
-    # - name: Report free memory after cache clear
-    #   run: free -h
 
     - name: Test with unittest and record coverage
       run: coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
