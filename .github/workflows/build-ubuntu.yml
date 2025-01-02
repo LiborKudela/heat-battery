@@ -59,8 +59,6 @@ jobs:
         make -j$(nproc)
         sudo make install
         sudo ldconfig
-        pip3 install adios4dolfinx
-        python3 -c "import adios4dolfinx; print(f'adios4dolfinx version {adios4dolfinx.__version__}')"
         cd $org_wd
         rm -rf ADIOS2
         rm -rf build
@@ -105,6 +103,10 @@ jobs:
         else
           echo "Directory not found"
         fi
+
+    - name: Test adios2 import
+      run: |
+        python3 -c "import adios2"
 
     - name: Install, start and configure PostgreSQL server
       run: |
