@@ -22,12 +22,6 @@ jobs:
     - name: Check Python3 version
       run: python3 --version
 
-    - name: List python3 packages direstories
-      run: |
-        USERNAME=$(whoami)
-        ls -l /home/${USERNAME}/.local/lib
-        ls -l /usr/local/lib
-
     - name: Check required software
       run: |
         sudo apt update
@@ -70,6 +64,47 @@ jobs:
         cd $org_wd
         rm -rf ADIOS2
         rm -rf build
+
+    - name: Show files in dist-packages for adios2 in python3.x
+      run: |
+        PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+        echo "Files in /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/*:"
+        if [ -d "/usr/local/lib/python${PY_VERSION}/dist-packages/adios2" ]; then
+          ls -l /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/*
+        else
+          echo "Directory not found"
+        fi
+
+    - name: Show files in site-packages for adios2 in python3.x
+      run: |
+        USERNAME=$(whoami)
+        PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+        echo "Files in /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2/*:"
+        if [ -d "/home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2" ]; then
+          ls -l /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2/*
+        else
+          echo "Directory not found"
+        fi
+
+    - name: Show files in dist-packages for adios2 in python3
+      run: |
+
+        echo "Files in /usr/local/lib/python3/dist-packages/adios2/*:"
+        if [ -d "/usr/local/lib/python3/dist-packages/adios2" ]; then
+          ls -l /usr/local/lib/python3/dist-packages/adios2/*
+        else
+          echo "Directory not found"
+        fi
+
+    - name: Show files in site-packages for adios2 in python3
+      run: |
+        USERNAME=$(whoami)
+        echo "Files in /home/${USERNAME}/.local/lib/python$3/site-packages/adios2/*:"
+        if [ -d "/home/${USERNAME}/.local/lib/python3/site-packages/adios2" ]; then
+          ls -l /home/${USERNAME}/.local/lib/python3/site-packages/adios2/*
+        else
+          echo "Directory not found"
+        fi
 
     - name: Install, start and configure PostgreSQL server
       run: |
