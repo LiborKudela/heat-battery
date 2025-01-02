@@ -22,6 +22,12 @@ jobs:
     - name: Check Python3 version
       run: python3 --version
 
+    - name: List python3 packages direstories
+      run: |
+        USERNAME=$(whoami)
+        ls -l /home/${USERNAME}/.local/lib/python*
+        ls -l /usr/local/lib/python*
+
     - name: Check required software
       run: |
         sudo apt update
