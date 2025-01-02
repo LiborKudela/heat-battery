@@ -114,7 +114,7 @@ jobs:
           echo "Creating directory /usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
           mkdir -p /usr/local/lib/python${PY_VERSION}/dist-packages/adios2
           echo "Copying files to /usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
-          cp -r /usr/local/local/lib/python${PY_VERSION}/dist-packages/adios2/* /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/
+          sudo cp -r /usr/local/local/lib/python${PY_VERSION}/dist-packages/adios2/* /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/
           sudo ldconfig
           echo "List other packages that might be present in the wrong directory:"
           ls -l /usr/local/local/lib/python${PY_VERSION}/dist-packages/*
