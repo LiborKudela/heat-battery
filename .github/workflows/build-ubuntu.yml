@@ -25,8 +25,8 @@ jobs:
     - name: List python3 packages direstories
       run: |
         USERNAME=$(whoami)
-        ls -l /home/${USERNAME}/.local/lib/python*
-        ls -l /usr/local/lib/python*
+        ls -l /home/${USERNAME}/.local/lib
+        ls -l /usr/local/lib
 
     - name: Check required software
       run: |
