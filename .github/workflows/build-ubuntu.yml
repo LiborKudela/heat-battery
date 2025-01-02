@@ -67,9 +67,9 @@ jobs:
     - name: Show files in dist-packages for adios2 in python3.x
       run: |
         PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
-        echo "Files in /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/*:"
-        if [ -d "/usr/local/lib/python${PY_VERSION}/dist-packages/adios2" ]; then
-          ls -l /usr/local/lib/python${PY_VERSION}/dist-packages/adios2/*
+        echo "Files in /usr/local/lib/python${PY_VERSION}/dist-packages/:"
+        if [ -d "/usr/local/lib/python${PY_VERSION}/dist-packages" ]; then
+          ls -l /usr/local/lib/python${PY_VERSION}/dist-packages/*
         else
           echo "Directory not found"
         fi
@@ -78,9 +78,9 @@ jobs:
       run: |
         USERNAME=$(whoami)
         PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
-        echo "Files in /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2/*:"
-        if [ -d "/home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2" ]; then
-          ls -l /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/adios2/*
+        echo "Files in /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/:"
+        if [ -d "/home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages" ]; then
+          ls -l /home/${USERNAME}/.local/lib/python${PY_VERSION}/site-packages/*
         else
           echo "Directory not found"
         fi
@@ -88,9 +88,9 @@ jobs:
     - name: Show files in dist-packages for adios2 in python3
       run: |
 
-        echo "Files in /usr/local/lib/python3/dist-packages/adios2/*:"
-        if [ -d "/usr/local/lib/python3/dist-packages/adios2" ]; then
-          ls -l /usr/local/lib/python3/dist-packages/adios2/*
+        echo "Files in /usr/local/lib/python3/dist-packages/:"
+        if [ -d "/usr/local/lib/python3/dist-packages/" ]; then
+          ls -l /usr/local/lib/python3/dist-packages/*
         else
           echo "Directory not found"
         fi
@@ -98,9 +98,9 @@ jobs:
     - name: Show files in site-packages for adios2 in python3
       run: |
         USERNAME=$(whoami)
-        echo "Files in /home/${USERNAME}/.local/lib/python3/site-packages/adios2/*:"
-        if [ -d "/home/${USERNAME}/.local/lib/python3/site-packages/adios2" ]; then
-          ls -l /home/${USERNAME}/.local/lib/python3/site-packages/adios2/*
+        echo "Files in /home/${USERNAME}/.local/lib/python3/site-packages/:"
+        if [ -d "/home/${USERNAME}/.local/lib/python3/site-packages" ]; then
+          ls -l /home/${USERNAME}/.local/lib/python3/site-packages/*
         else
           echo "Directory not found"
         fi
@@ -112,7 +112,7 @@ jobs:
         if [ -d "/usr/local/local/lib/${PY_VERSION}/dist-packages/adios2" ]; then
           ls -l /usr/local/local/lib/${PY_VERSION}/dist-packages/adios2/*
           echo "Moving files to /usr/local/lib/${PY_VERSION}/dist-packages/adios2"
-          mv /usr/local/local/lib/${PY_VERSION}/dist-packages/adios2/* /usr/local/lib/${PY_VERSION}/dist-packages/adios2/
+          cp -r /usr/local/local/lib/${PY_VERSION}/dist-packages/adios2/* /usr/local/lib/${PY_VERSION}/dist-packages/adios2/
           sudo ldconfig
         else
           echo "Directory not found"
