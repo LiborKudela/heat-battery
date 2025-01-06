@@ -12,11 +12,12 @@ database:
         password: null
         host: null
         port: 5432
-        connection_method: simple_pool
+        connection_method: threaded_pool
         min_pool_size: 1
         max_pool_size: 10
         only_rank0_send_queries: true
         verbosity: 0
+        bin_files_folder_prefix: null
 
         # Features that are disabled below, prevent the query in question from
         # being sent to the database from the python API. Next to the primary

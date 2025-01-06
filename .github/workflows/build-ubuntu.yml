@@ -19,23 +19,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+
+    - name: Update system packages
+      run: | 
+        sudo apt-get update
+        sudo apt-get upgrade
+        sudo apt-get install build-essential
+        sudo ap-get install git cmake
+
+    - name: Install and test OpenMPI
+      run: | 
+        sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
+        pip3 install mpi4py
+        mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
+
     - name: Check Python3 version
       run: |
         python3 --version
         which python3
-
-    - name: Check required software
-      run: |
-        sudo apt update
-        sudo apt install -y git cmake
-
-    - name: Install and test OpenMPI
-      run: | 
-        sudo apt-get update
-        sudo apt install build-essential
-        sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
-        pip3 install mpi4py
-        mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"
 
     - name: Install and test gmsh
       run: |
@@ -128,14 +129,14 @@ jobs:
 
     - name: Install, start and configure PostgreSQL server
       run: |
-        sudo apt install postgresql postgresql-contrib
-        sudo apt install acl
+        sudo apt-get install postgresql postgresql-contrib
+        sudo apt-get install acl
         sudo systemctl start postgresql.service
         sudo pg_isready
         sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
         sudo pg_isready
         psql --version
-        sudo apt install postgresql-plpython3-14
+        sudo apt-get install postgresql-plpython3-14
         sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
         sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
 
