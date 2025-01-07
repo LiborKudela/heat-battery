@@ -147,14 +147,15 @@ rm -rf build-adios2
 echo "ADIOS2 installed!"
 
 # install libpg for worker nodes
+echo "Installing libpq-dev (needed by worker nodes)!"
 sudo apt install libpq-dev $auto_yes
-echo "libpq-dev installed (needed by worker nodes)!"
+echo "libpq-dev installed!"
 
 # ask for password for postgres user
 if [ "$install_postgres" = "true" ]; then
     echo "POSTGRES server packages will be installed now!"
     sudo apt install postgresql postgresql-contrib $auto_yes
-    sudo apt install postgresql-plpython3-14 $auto_yes
+    sudo apt install postgresql-plpython3-14 $auto_yes || echo 'postgresql-plpython3-14 install failed - skipping...'
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
 

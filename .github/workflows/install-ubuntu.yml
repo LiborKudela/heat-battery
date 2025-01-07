@@ -23,4 +23,4 @@ jobs:
       run: |
         config_ppass=$(cat .github/github_test_config.yaml | grep -oP '(?<=password: )[^ ]+')
         config_hbdir=$(cat .github/github_test_config.yaml | grep -oP '(?<=bin_files_folder_prefix: )[^ ]+')
-        sudo bash install_scripts/install_ubuntu.sh -y -p -ppass $config_ppass -ppassc $config_ppass -hbdir $config_hbdir
+        sudo bash install_scripts/install_ubuntu.sh -y -p -ppass ${config_ppass} -ppassc ${config_ppass} -hbdir ${config_hbdir}
