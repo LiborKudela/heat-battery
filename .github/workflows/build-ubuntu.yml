@@ -27,7 +27,7 @@ jobs:
         sudo apt install build-essential
         sudo apt install git cmake
 
-    #postgresql-14=14.15-0ubuntu0.22.04.1
+    #sudo apt install postgresql-plpython3=14.15-1.pgdg22.04+1
     - name: Install, start and configure PostgreSQL server
       run: |
         sudo apt list --installed | grep postgresql-14
@@ -39,7 +39,6 @@ jobs:
         sudo pg_isready
         psql --version
         sudo apt list --installed | grep postgresql-plpython3-14 || echo "first grep postgresql-plpython3-14 exited with 1"
-        sudo apt install postgresql-plpython3=14.15-1.pgdg22.04+1
         sudo apt list --installed | grep postgresql-plpython3-14 || echo "second grep postgresql-plpython3-14 exited with 1"
         sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
         sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
