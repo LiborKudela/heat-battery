@@ -40,7 +40,7 @@ jobs:
         psql --version
         sudo apt list --installed | grep postgresql-plpython3-14 || echo "first grep postgresql-plpython3-14 exited with 1"
         sudo apt list --installed | grep postgresql-plpython3-14 || echo "second grep postgresql-plpython3-14 exited with 1"
-        sudo mkdir heat_nattery_data
+        sudo mkdir heat_battery_data
         sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
         sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
 
