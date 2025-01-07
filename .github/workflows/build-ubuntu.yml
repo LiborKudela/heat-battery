@@ -38,8 +38,9 @@ jobs:
         sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
         sudo pg_isready
         psql --version
-        sudo apt list --installed | grep postgresql-plpython3-14
-        sudo apt install postgresql-plpython3-14 || sudo apt install postgresql-plpython3 || sudo apt install postgresql-plpython3=14.15-0ubuntu0.22.04.1
+        sudo apt list --installed | grep postgresql-plpython3-14 || echo "first grep postgresql-plpython3-14 exited with 1"
+        sudo apt install postgresql-plpython3=14.15-1.pgdg22.04+1
+        sudo apt list --installed | grep postgresql-plpython3-14 || echo "second grep postgresql-plpython3-14 exited with 1"
         sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
         sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
 
