@@ -27,6 +27,22 @@ jobs:
         sudo apt-get install build-essential
         sudo apt-get install git cmake
 
+    #postgresql-14=14.15-0ubuntu0.22.04.1
+    - name: Install, start and configure PostgreSQL server
+      run: |
+        sudo apt-get list --installed | grep postgresql-14
+        sudo apt-get install postgresql-14 postgresql-contrib
+        sudo apt-get install acl
+        sudo systemctl start postgresql.service
+        sudo pg_isready
+        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
+        sudo pg_isready
+        psql --version
+        sudo apt-get list --installed | grep postgresql-plpython3-14
+        sudo apt-get install postgresql-plpython3-14 || sudo apt-get install postgresql-plpython3 || sudo apt-get install postgresql-plpython3=14.15-0ubuntu0.22.04.1
+        sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
+        sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
+
     - name: Install and test OpenMPI
       run: | 
         sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
@@ -126,20 +142,6 @@ jobs:
     - name: Test adios2 import
       run: |
         python3 -c "import adios2"
-
-      #postgresql-14=14.15-0ubuntu0.22.04.1
-    - name: Install, start and configure PostgreSQL server
-      run: |
-        sudo apt-get install postgresql-14=14.15-0ubuntu0.22.04.1 postgresql-contrib
-        sudo apt-get install acl
-        sudo systemctl start postgresql.service
-        sudo pg_isready
-        sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password 'dummy_password';"
-        sudo pg_isready
-        psql --version
-        sudo apt-get install postgresql-plpython3-14 || sudo apt-get install postgresql-plpython3
-        sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
-        sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx ./heat_battery_data/
 
     - name: Test dolfinx import
       run: python3 -c "import dolfinx; from dolfinx import __version__; print(f'Python is OK, dolfinx version {__version__}')"
