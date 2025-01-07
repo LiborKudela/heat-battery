@@ -1,0 +1,26 @@
+name: Ubuntu install
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+  
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Make install script executable
+      run: chmod +x install_scripts/install_ubuntu.sh
+
+    - name: Run install script
+      run: |
+        config_ppass=$(cat .github/github_test_config.yml | grep -oP '(?<=password: )[^ ]+')
+        config_hbdir=$(cat .github/github_test_config.yml | grep -oP '(?<=bin_files_folder_prefix: )[^ ]+')
+        sudo bash install_scripts/install_ubuntu.sh -y -p -ppass $config_ppass -ppassc $config_ppass -hbdir $config_hbdir
