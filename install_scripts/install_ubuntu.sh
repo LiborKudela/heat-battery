@@ -163,6 +163,7 @@ sudo apt install cmake $auto_yes
 sudo apt install git $auto_yes
 sudo apt install python3-dev $auto_yes
 sudo apt install python3-pip $auto_yes
+sudo apt install tree $auto_yes
 echo "Build-essential and python3-pip installed!"
 
 # get python3 version and current working directory
@@ -216,7 +217,7 @@ if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')";
     p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
     echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
     sudo mkdir -p ${p3_corect_dir}
-    ls -l lib/
+    tree
     sudo cp -r lib/python3/dist-packages/adios2/* ${p3_corect_dir}/ || sudo cp -r lib/python${PY_VERSION}/dist-packages/adios2/* ${p3_corect_dir}/
     sudo ldconfig
     echo "Trying again python import again..."
