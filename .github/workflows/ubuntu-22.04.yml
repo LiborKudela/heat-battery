@@ -1,0 +1,38 @@
+name: Ubuntu install
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+  
+permissions:
+  contents: read
+
+jobs:
+  install_and_unittest:
+
+    runs-on: ubuntu-22.04
+   
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Make install script executable
+      run: chmod +x install_scripts/install_ubuntu.sh
+
+    - name: Install script
+      run: |
+        config_ppass=$(cat .github/github_test_config.yaml | grep -oP '(?<=password: )[^ ]+')
+        config_ppassc=$(echo ${config_ppass})
+        config_hbdir=$(cat .github/github_test_config.yaml | grep -oP '(?<=bin_files_folder_prefix: )[^ ]+')
+        bash install_scripts/install_ubuntu.sh -y -p --ppass ${config_ppass} --ppassc ${config_ppassc} --hbdir ${config_hbdir}
+
+    - name: Install coverage
+      run: pip3 install coverage
+
+    - name: Run unittest
+      run: |
+        python3 -m coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
+
+    - name: Coverage report
+      run: >
+        echo "Code coverage: $(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
