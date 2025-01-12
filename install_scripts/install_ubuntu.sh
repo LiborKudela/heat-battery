@@ -216,7 +216,8 @@ if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')";
     p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
     echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
     sudo mkdir -p ${p3_corect_dir}
-    sudo cp -r lib/python3/dist-packages/adios2/* ${p3_corect_dir}/
+    ls -l lib/
+    sudo cp -r lib/python3/dist-packages/adios2/* ${p3_corect_dir}/ || sudo cp -r lib/python${PY_VERSION}/dist-packages/adios2/* ${p3_corect_dir}/
     sudo ldconfig
     echo "Trying again python import again..."
     if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
