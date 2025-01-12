@@ -216,13 +216,29 @@ if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')";
 
     p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
     echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
-    sudo mkdir -p ${p3_corect_dir}
-    tree
-    sudo cp -r lib/python3/dist-packages/adios2/* ${p3_corect_dir}/ || sudo cp -r lib/python${PY_VERSION}/dist-packages/adios2/* ${p3_corect_dir}/
+    paths=(
+        "lib/python${PY_VERSION}/dist-packages/adios2" 
+        "local/lib/python${PY_VERSION}/dist-packages/adios2"
+        "lib/python3/dist-packages/adios2"
+        "local/lib/python3/dist-packages/adios2" 
+    )
+    for src_path in "${paths[@]}"; do
+        echo "Checking python package at path: $src_path"
+        if [ -d "$src_path" ]; then
+            echo "Python package data FOUND at $src_path"
+            echo "Copying adios2 bindings from $src_path to ${p3_corect_dir}"
+            sudo mkdir -p ${p3_corect_dir}
+            sudo cp -r "$src_path"/* ${p3_corect_dir}/
+            break
+        else
+            echo "Python package data NOT FOUND at $src_path"
+        fi
+    done
     sudo ldconfig
     echo "Trying again python import again..."
     if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
-        echo "Python adios2 import test has failed - exiting..."
+        tree
+        echo "Python adios2 import test has failed, see tree of build-adios2 directory above - exiting..."
         exit 1
     fi
 fi
