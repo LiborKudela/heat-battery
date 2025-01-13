@@ -4,6 +4,8 @@ __pycache__/
 heat_battery.egg*
 *heat_battery_temp*
 /miscellaneous
+/structured_test
+/bin
 /data
 trial*
 .coverage
@@ -14,3 +16,4 @@ trial*
 
 # ignore Example_05 it is not completed
 /examples/Example_05
+/examples/Example_06

@@ -5,9 +5,11 @@ from dolfinx import geometry
 import numpy as np
 import pandas as pd
 import os
+import shutil
+import tempfile
 
 from psycopg2 import sql
-from ..database.postgresql_connection import get_single_db_connection, safe_query
+from ..database.postgresql_connection import get_single_db_connection, debounced_query, DBConnection
 from ..config import get_config_item
 
 class FunctionSampler:
@@ -64,6 +66,348 @@ class UnitPrettyPrinter:
             alt_name = ""
         return f"{value*10**(-thousands):{self.format}}[{alt_name}{self.base_name}]"
 
+class ProbeWriteDestination:
+    def __init__(self):
+        pass
+
+    def initialize(self):
+        pass
+
+    def write_row(self, values):
+        pass
+
+    def close(self):
+        pass
+
+    def set_printer(self, printer):
+        self.printer = printer
+
+    def reset_printer(self):
+        self.printer = print
+
+class MemoryProbeWriteDestination(ProbeWriteDestination):
+    def __init__(self):
+        self.df = pd.DataFrame()
+        self.is_initialized = False
+        self.printer = print
+
+    @staticmethod
+    def from_dict(d):
+        return MemoryProbeWriteDestination()
+
+    def initialize(self, header_names):
+        if self.is_initialized:
+            raise ValueError("MemoryProbeWriteDestination already initialized.")
+
+        if MPI.COMM_WORLD.rank == 0:
+            self.df = pd.DataFrame(columns=header_names)
+        self.is_initialized = True
+
+    def write_row(self, values):
+        self.df.loc[len(self.df)] = values
+
+    def close(self):
+        pass
+
+class CSVFileProbeWriteDestination(ProbeWriteDestination):
+    def __init__(
+            self,
+            result_dir: os.PathLike | str, 
+            file_name: os.PathLike | str, 
+            flush: bool = True
+        ):
+        self.result_dir = result_dir
+        self.file_name = file_name
+        self.flush = flush
+        self.is_initialized = False
+        self.printer = print
+
+    @staticmethod
+    def from_dict(d: dict):
+        REQUIRED_KEYS = ['result_dir', 'file_name']
+        for key in REQUIRED_KEYS:
+            if key not in d:
+                raise ValueError(f"Missing required key: {key}.")
+        return CSVFileProbeWriteDestination(
+            result_dir=d.get('result_dir'),
+            file_name=d.get('file_name'),
+            flush=d.get('flush'),
+        )
+
+    def initialize(
+            self, 
+            header_names: list[str],
+            mode: str = 'w',
+        ):
+        assert mode in ['w', 'a'], "Mode must be 'w' or 'a'."
+        if self.is_initialized:
+            raise ValueError("CSVFileProbeWriteDestination already initialized.")
+        if MPI.COMM_WORLD.rank == 0:
+            if not os.path.exists(self.result_dir):
+                self.printer(f"Making new result directory: {self.result_dir}")
+                os.makedirs(self.result_dir)
+            result_file_path = os.path.join(self.result_dir, self.file_name)
+            if os.path.exists(result_file_path):
+                self.printer(f"Probe file already exists: {result_file_path}. Overwriting.")
+            self.file = open(result_file_path, mode, newline='')
+            self.printer(f"New probe file opened: {self.file}")
+            self.writer = csv.writer(self.file)
+            if mode == 'w':
+                self.writer.writerow(header_names)
+        self.is_initialized = True
+
+    def write_row(
+            self, 
+            values: list[float]
+        ):
+        if MPI.COMM_WORLD.rank == 0:
+            self.writer.writerow(values)
+            if self.flush:
+                self.file.flush()
+
+    def close(self):
+        if MPI.COMM_WORLD.rank == 0:
+            self.file.close()
+
+class DatabaseProbeWriteDestination(ProbeWriteDestination):
+    def __init__(
+            self,
+            result_database: str,
+            project_name: str,
+            table_name: str
+        ):
+        self.result_database = result_database
+        self.project_name = project_name
+        self.table_name = table_name
+        self.printer = print
+        self.is_initialized = False
+
+    @staticmethod
+    def from_dict(d: dict):
+        REQUIRED_KEYS = ['result_database', 'project_name', 'table_name']
+        for key in REQUIRED_KEYS:
+            if key not in d:
+                raise ValueError(f"Missing required key: {key}.")
+        
+        return DatabaseProbeWriteDestination(
+            result_database=d.get('result_database'),
+            project_name=d.get('project_name'),
+            table_name=d.get('table_name'),
+        )
+
+    @debounced_query
+    def _initialize_query(
+        self, 
+        header_names: list[str],
+        mode: str = 'w',
+    ):
+        assert mode in ['w', 'a'], "Mode must be 'w' or 'a'."
+        if MPI.COMM_WORLD.rank == 0:
+            self.conn = get_single_db_connection(self.result_database)
+            prefix = get_config_item(['database', 'postgres', 'bin_files_folder_prefix'])
+            self.res_prefix = os.path.join(prefix, self.project_name, 'results')
+            self.binary_file_name = os.path.join(self.res_prefix, f'{self.table_name}.hbres')
+
+            # check if file exists
+            query = sql.SQL("SELECT {}.check_file_exists(%s)")
+            query = query.format(sql.Identifier(self.project_name))
+            cur = self.conn.cursor()
+            cur.execute(query, (self.binary_file_name,))
+            res = cur.fetchone()[0]
+            if res:
+                self.printer(f"Probe binary file {self.binary_file_name} already exists in database. Overwriting.")
+            else:
+                self.printer(f"Creating new probe binary file in database: {self.binary_file_name}.")
+
+            # binary file header data
+            col_names = header_names
+            col_names_bytes = bytes('\n'.join(col_names), 'utf-8')
+            n_cols_bytes = np.int64(len(col_names)).tobytes()
+            n_cols_names_bytes = np.int64(len(col_names_bytes)).tobytes()
+            header_bytes = n_cols_bytes + n_cols_names_bytes + col_names_bytes
+
+            if mode == 'w':
+                query = sql.SQL("SELECT {}.write_bytes_to_file(%s, %s)")
+                query = query.format(sql.Identifier(self.project_name))
+                cur = self.conn.cursor()
+                cur.execute(query, (self.binary_file_name, header_bytes))  
+            
+                # write colums to job table
+                query = sql.SQL("UPDATE {} SET {} = %s")
+                query = query.format(
+                    sql.Identifier(self.project_name, 'jobs'),
+                    sql.Identifier('probe_columns'),
+                )
+                cur = self.conn.cursor()
+                cur.execute(query, (header_names,))
+                self.conn.commit()
+            elif mode == 'a':
+                # check that colums agree
+                query = sql.SQL("SELECT column_name FROM information_schema.columns WHERE table_name = %s")
+                query = query.format(sql.Identifier(self.project_name, 'jobs'))
+                cur = self.conn.cursor()
+                cur.execute(query, (self.binary_file_name,))
+                res = cur.fetchall()
+                if res != header_names:
+                    raise ValueError(
+                        "Column names of ProbeWriter do not agree with existing "
+                        "file in Database. \n"
+                        f"Columns in database: {len(res)} columns -> {res}\n"
+                        f"Columns in ProbeWriter: {len(header_names)} columns -> {header_names}\n"
+                        "Aborting since this is critical error."
+                    )
+
+            self.insert_query = sql.SQL(f"SELECT {self.project_name}.append_bytes_to_file('{self.binary_file_name}', %s)")
+
+    def initialize(
+        self, 
+        header_names: list[str],
+        mode: str = 'w',
+    ):
+        if self.is_initialized:
+            raise ValueError("DatabaseProbeWriteDestination already initialized.")
+        self._initialize_query(header_names)
+        self.is_initialized = True
+
+    @debounced_query
+    def _write_row_query(
+        self, 
+        values: list[float]
+    ):
+        if MPI.COMM_WORLD.rank == 0:
+            if self.conn.closed > 0: # check if connection is closed
+                self.conn = get_single_db_connection(self.result_database)
+            cur = self.conn.cursor()
+            bytes_row = np.array(values, dtype=np.float64).tobytes()
+            cur.execute(self.insert_query, (bytes_row,))
+            self.conn.commit()
+
+    def write_row(
+        self, 
+        values: list[float]
+    ):
+        self._write_row_query(values)
+
+    def close(self):
+        if hasattr(self, 'conn'):
+            self.conn.close()
+            self.printer(f"Database connection closed.")
+        self.is_initialized = False
+
+def parse_probe_destinations(d):
+    assert isinstance(d, dict), "Probe destinations must be a dictionary."
+    assert 'type' in d, "Probe destinations must have a 'type' key."
+    ALOWED_TYPES = ['memory', 'csv', 'database']
+
+    assert d['type'] in ALOWED_TYPES, f"Unknown probe destination type: {d['type']}. Allowed types: {ALOWED_TYPES}."
+    if d['type'] == 'memory':
+        return MemoryProbeWriteDestination.from_dict(d)
+    elif d['type'] == 'csv':
+        return CSVFileProbeWriteDestination.from_dict(d)
+    elif d['type'] == 'database':
+        return DatabaseProbeWriteDestination.from_dict(d)
+    
+class CheckpointDestination:
+    def __init__(self, path):
+        self.path = path
+
+    def get_temp_dir(self):
+        return self.path
+
+    def check_unpacked_checkpoint(self):
+        if MPI.COMM_WORLD.rank == 0:
+            if os.path.isdir(self.path):
+                # check the ADIOS2 stuff
+                if os.path.isdir(os.path.join(self.path, 'function')):
+                    for item in ['data.0', 'md.0', 'md.idx', 'profiling.json']:
+                        item_path = os.path.join(self.path, 'function', item)
+                        if not os.path.isfile(item_path):
+                            return False
+                        
+                # check the data of terms and local
+                if not os.path.isfile(os.path.join(self.path, 'data.pickle')):
+                    return False
+                else:
+                    return True # valid checkpoint
+            else:
+                return False
+            
+    def check_destination(self):
+        return self.check_unpacked_checkpoint()
+
+    def archive_checkpoint(self):
+        pass
+
+    def unpack_checkpoint(self):
+        pass
+
+class ArchiveCheckpointDestination(CheckpointDestination):
+    def __init__(self, archive_path, temp_dir, format='zip'):
+        self.archive_path = archive_path
+        self.temp_dir = temp_dir
+        self.format = format
+
+    def get_temp_dir(self):
+        return self.temp_dir
+
+    def check_destination(self):
+        return os.path.exists(self.archive_path)
+
+    def archive_checkpoint(self):
+        self.check_unpacked_checkpoint()
+        if MPI.COMM_WORLD.rank == 0:
+            shutil.make_archive(
+                base_name=self.archive_path,
+                format=self.format,
+                root_dir=self.temp_dir
+            )
+
+    def unpack_checkpoint(self):
+        if MPI.COMM_WORLD.rank == 0:
+            shutil.unpack_archive(
+                filename=self.archive_path,
+                extract_dir=self.temp_dir,
+                format=self.format
+            )
+        self.check_unpacked_checkpoint()
+
+    def check_destination(self):
+        return os.path.isfile(self.archive_path)
+
+# class DatabaseCheckpointDestination(CheckpointDestination):
+#     def __init__(self, db_name, project_name, table_name, format='zip'):
+#         self.db_name = db_name
+#         self.project_name = project_name
+#         self.table_name = table_name
+#         self.format = format
+#         self.temp_dir = os.path.join(get_config_item(['database', 'postgres', 'res_folder_prefix']), 'checkpoint')
+
+#     def check_destination(self):
+#         return False 
+
+#     @debounced_query
+#     def _archive_checkpoint_query(
+#             self, 
+#             checkpoint_dir: str
+#         ):
+#         self.check_unpacked_checkpoint()
+#         if MPI.COMM_WORLD.rank == 0:   
+#             shutil.make_archive(
+#                 base_name=os.path.join(self.temp_dir, self.table_name),
+#                 format=self.format,
+#                 root_dir=checkpoint_dir
+#             )
+#             with DBConnection() as conn:
+#                 query = sql.SQL("UPDATE {} SET {} = %s")
+
+#     def unpack_checkpoint(self, checkpoint_dir):
+#         if MPI.COMM_WORLD.rank == 0:
+#             shutil.unpack_archive(
+#                 filename=self.path,
+#                 extract_dir=checkpoint_dir,
+#                 format=self.format
+#             )
+        
 class Probe_writer:
     def __init__(self, flush=True):
         self.names = []
@@ -74,49 +418,49 @@ class Probe_writer:
         self.descriptions = []
         self.units = []
         self.name_map = {}
-        self.result_dir = None
-        self.file_name = None
-        self.result_database = None
-        self.table_name = None
-        self.project_name = None
-        self.is_file_initialized = False
-        self.is_database_table_initialized = False
-        self.is_memory_initialized = False
-        self.flush = flush
+        self.is_initialized = False
+        self.destinations = []
         self.printer = print
 
     def set_printer(self, printer):
         self.printer = printer
+        if self.is_initialized:
+            printer(
+                "WARNING: Changing ProbeWriter printer after initialization. This happens when you call "
+                "set_printer() after calling initialize() method.")
+        for destination in self.destinations:
+            destination.set_printer(self.printer)
 
-    def set_result_file(
-        self, 
-        result_dir: os.PathLike | str, 
-        file_name: os.PathLike | str
-        ) -> None:
-        assert not self.is_file_initialized, "Cannot change result file after initialisation."
-        if result_dir is not None and file_name is not None:
-            self.result_dir = result_dir
-            self.file_name = file_name
+    def add_destination(self, destination):
+        if self.is_initialized:
+            raise ValueError(
+                "Cannot add destination after initialization. This happens when "
+                "you call add_destination() after calling initialize() method.")
+        if isinstance(destination, dict):
+            self.destinations.append(parse_probe_destinations(destination))
+        elif isinstance(destination, ProbeWriteDestination):
+            self.destinations.append(destination)
         else:
-            raise ValueError("One of the required parameters is set to None.")
+            raise ValueError(f"Unknown probe destination type: {type(destination)}.")
 
-    def set_result_database_table(
-        self, 
-        result_database: os.PathLike | str, 
-        project_name: os.PathLike | str, 
-        table_name: os.PathLike | str
-        ) -> None:
-        assert not self.is_database_table_initialized, "Cannot change database output after initialisation."
-        if result_database is not None and project_name is not None and table_name is not None:
-            self.result_database = result_database
-            self.project_name = project_name
-            self.table_name = table_name
+    def initialize(self):
+        if self.is_initialized:
+            raise ValueError(
+                "ProbeWriter already initialized. This happens when you call "
+                "initialize() more than once before properly closing the "
+                "ProbeWriter.")
+        self.evaluate_probes() #to get sizes of the individual values
+        for destination in self.destinations:
+            destination.initialize(self.chain_names())
+        self.is_initialized = True
 
     def set_callbacks(self, callbacks):
         self.callbacks = callbacks
 
     def reset_printer(self):
         self.printer = print
+        for destination in self.destinations:
+            destination.reset_printer()
     
     def print_r0(self, str):
         if MPI.COMM_WORLD.rank == 0:
@@ -177,111 +521,13 @@ class Probe_writer:
                  values_chain.append(value)
         return values_chain
 
-    def initialize_result_file(self):
-        if MPI.COMM_WORLD.rank == 0:
-            assert self.result_dir is not None, "Result directory must be set before initialising a file."
-            assert self.file_name is not None, "File name must be set before initialising a file."
-            if not os.path.exists(self.result_dir):
-                self.print_r0(f"Making new result directory: {self.result_dir}")
-                os.makedirs(self.result_dir)
-            result_file_path = os.path.join(self.result_dir, self.file_name)
-            if os.path.exists(result_file_path):
-                self.print_r0(f"Probe file already exists: {result_file_path}. Overwriting.")
-            self.file = open(result_file_path, 'w', newline='')
-            self.print_r0(f"New probe file opened: {self.file}")
-            self.writer = csv.writer(self.file)
-            header_names = self.chain_names()
-            self.writer.writerow(header_names)
-        self.is_file_initialized = True
-
-    @safe_query
-    def initialize_database_table(self):
-
-        if MPI.COMM_WORLD.rank == 0:
-            assert self.result_database is not None, "Database must be set before initialising a database table."
-            assert self.project_name is not None, "Project name must be set before initialising a database table."
-            assert self.table_name is not None, "Table name must be set before initialising a database table."
-
-            column_specs = [
-                sql.SQL("{} REAL").format(sql.Identifier(name))
-                for name in self.chain_names()
-            ]
-
-            query = sql.SQL(
-                "CREATE TABLE IF NOT EXISTS {} ({})"
-            )
-            query = query.format(
-                sql.Identifier(self.project_name, self.table_name),
-                sql.SQL(', ').join(column_specs)
-            )
-            self.print_r0(f"Creating new result table: {self.table_name} in project: {self.project_name} in database: {self.result_database}.")
-            self.conn = get_single_db_connection(self.result_database)
-            cur = self.conn.cursor()
-            cur.execute(query)
-            self.conn.commit()
-
-            self.insert_query = sql.SQL(
-                "INSERT INTO {} ({}) VALUES ({})"
-            )
-            self.insert_query = self.insert_query.format(
-                sql.Identifier(self.project_name, self.table_name),
-                sql.SQL(', ').join([sql.Identifier(name) for name in self.chain_names()]),
-                sql.SQL(', ').join([sql.SQL('%s')]*len(self.chain_names()))
-            )
-        self.is_database_table_initialized = True
-
-    def initialize_memory(self):
-        if MPI.COMM_WORLD.rank == 0:
-            header_names = self.chain_names()
-            self.df = pd.DataFrame(columns=header_names)
-        self.is_memory_initialized = True
-    
-    def write_probes_to_file(self):
-        # automatically initialise file if not already done
-        if not self.is_file_initialized:
-            self.initialize_result_file()
-
-        # append row to file
-        if MPI.COMM_WORLD.rank == 0:
-            self.writer.writerow(self.chained_values)
-            if self.flush:
-                self.file.flush()
-
-    @safe_query
-    def write_probes_row_to_database(self):
-        if MPI.COMM_WORLD.rank == 0:
-            if self.conn.closed > 0: # check if connection is closed
-                self.conn = get_single_db_connection(self.result_database)
-            cur = self.conn.cursor()
-            cur.execute(self.insert_query, self.chained_values)
-            self.conn.commit()
-
-    def write_probes_to_database_table(self):
-        # automatically initialise table if not already done
-        if not self.is_database_table_initialized:
-            self.initialize_database_table()    
-
-        # append row to database table
-        self.write_probes_row_to_database()
-
-    def write_probes_to_memory(self):
-        # automatically initialise memory if not already done
-        if not self.is_memory_initialized:
-            self.initialize_memory()
-
-        # append row to dataframe
-        if MPI.COMM_WORLD.rank == 0:
-            self.df.loc[len(self.df)] = self.chained_values
-
     def write_all_set_probes_outputs(self):
-        if (self.result_dir is not None 
-                and self.file_name is not None):
-                self.write_probes_to_file()
-        if (self.result_database is not None 
-                and self.project_name is not None 
-                and self.table_name is not None):
-            self.write_probes_to_database_table()
-        self.write_probes_to_memory()
+        if not self.is_initialized:
+            raise ValueError(
+                "ProbeWriter not initialized. This happens when you call "
+                "write_all_set_probes_outputs() before calling initialize() method.")
+        for destination in self.destinations:
+            destination.write_row(self.chained_values) 
         for callback in self.callbacks:
             callback(self)
 
@@ -318,27 +564,13 @@ class Probe_writer:
     def pretty_print(self):
         self.print_r0(self.pretty_string())
 
-    def close_result_file(self):
-        if MPI.COMM_WORLD.rank == 0:
-            if hasattr(self, 'file'):
-                self.file.close()
-                self.print_r0(f"Probe file closed: {self.file}")
-        self.is_file_initialized = False
-
-    def close_database_connection(self):
-        if hasattr(self, 'conn'):
-            self.conn.close()
-            self.print_r0(f"Database connection closed.")
-        self.is_database_table_initialized = False
-
-    def close_all(self):
-        self.close_result_file()
-        self.close_database_connection()
-
-    def head(self):
-        return self.df.head()
-
-    def __str__(self):
-        return str(self.df)
+    def close(self):
+        if not self.is_initialized:
+            raise ValueError(
+                "ProbeWriter not initialized. This happens when you call "
+                "close() before calling initialize() method.")
+        for destination in self.destinations:
+            destination.close()
+        self.is_initialized = False
 
 

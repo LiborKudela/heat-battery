@@ -1,6 +1,6 @@
-[![build-ubuntu20.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml)  
-[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)  
-[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)  
+[![build-ubuntu20.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml)(Python3.8)  
+[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)(Python3.10)  
+[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)(Python3.12)  
 
 
 ## Battery included heat equation solver for solid heat storages

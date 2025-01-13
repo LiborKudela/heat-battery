@@ -12,10 +12,13 @@ import dolfinx.nls.petsc
 import plotly.graph_objects as go
 import plotly.express as px
 from ..config import get_config_item
+import adios4dolfinx
+from pathlib import Path
+import datetime
 
 from .probing import Probe_writer
 from ..materials import MaterialsSet
-from ..utilities import load_data_binary, ProgressBar
+from ..utilities import save_data_binary, load_data_binary, ProgressBar, save_data_json, load_data_json
 
 class Simulation():
     def __init__(self,
@@ -406,6 +409,10 @@ class Simulation():
             progress = probes.get_value('progress')
             return t_cpu/(progress)*(100-progress)
         
+        @probes.register_probe('t_timestamp', 's')
+        def t_timestamp():
+            return self.timestamp_start + self.t.value
+        
         @probes.register_probe('t_sim', 's')
         def t_sim():
             return float(self.t.value)
@@ -496,6 +503,8 @@ class Simulation():
         self,
         T_guess=None,
         result_dir=None,
+        probe_destinations=[],
+        probes_callbacks=[],
         xdmf_file=None,
         save_probes=False,
         verbose=False,
@@ -519,6 +528,15 @@ class Simulation():
         self.steady_solver.atol = abs_tol
         self.steady_solver.rtol = rel_tol
 
+        # set unsteady probes outputs locations
+        if probe_destinations:
+            for destination in probe_destinations:
+                self.steady_probes.add_destination(destination)
+        self.steady_probes.initialize()
+
+        if probes_callbacks is not None:
+            self.steady_probes.set_callbacks(probes_callbacks)
+
         #FIXME: add update for source_terms and bc_terms before simulation
         #FIXME: this should run in loop when the Terms are implicit in nature
         #FIXME: this whole function will be unusable as of now, I focus on unsteady now!!! SORRY!
@@ -533,9 +551,7 @@ class Simulation():
         if verbose:
             self.steady_probes.pretty_print()
 
-        if save_probes:
-            self.steady_probes.write_probes_to_file()
-        self.steady_probes.write_probes_to_memory()
+        self.steady_probes.write_all_set_probes_outputs()
 
         if xdmf_file is not None:
             xdmf = io.XDMFFile(self.domain.comm, os.path.join(result_dir, xdmf_file), "w")
@@ -547,9 +563,8 @@ class Simulation():
         if xdmf_file is not None:
             xdmf.close()
 
-        if close_probes:
-            self.steady_probes.close_all()
-            self.steady_probes.reset_printer()
+        self.steady_probes.close()
+        self.steady_probes.reset_printer()
 
         return self.steady_probes
 
@@ -568,11 +583,7 @@ class Simulation():
             verbose=True,
             xdmf_file=None,
             result_dir=None,
-            probes_file=None,
-            result_database=None,
-            project_name=None,
-            database_table=None,
-            close_probes=True,
+            probe_destinations=[],
             probes_callbacks=[],
             force_explicit_terms=False,
             max_term_its=3,
@@ -581,6 +592,11 @@ class Simulation():
             call_back_each_t=None,
             call_back_each_step=None,
             custom_xdmf_trigger=None,
+            load_initial_checkpoint=None,
+            checkpoint_dir=None,
+            checkpoint_dt=None,
+            checkpoint_callbacks=[],
+            datetime_start=None,
             ):
 
         """
@@ -616,58 +632,75 @@ class Simulation():
             call_back_each_step (int): trigger callback after simulations advances this many steps
             custom_xdmf_trigger (function): not implemented yet
         """
+        if load_initial_checkpoint is None:
+            # set initial state of simulation
+            if T0 is not None:    
+                self.T_n.x.array[:] = T0
+            else:
+                self.T_n.x.array[:] = 20.0
 
-        # set initial state of simulation
-        if T0 is not None:    
-            self.T_n.x.array[:] = T0
-        else:
-            self.T_n.x.array[:] = 20.0
+            # set initial guess for the solver
+            if T_guess is not None:
+                self.T.x.array[:] = T_guess
+            elif T0 is not None:
+                self.T.x.array[:] = T0
+            else:
+                self.T.x.array[:] = 20.0
 
-        # set initial guess for the solver
-        if T_guess is not None:
-            self.T.x.array[:] = T_guess
-        elif T0 is not None:
-            self.T.x.array[:] = T0
-        else:
-            self.T.x.array[:] = 20.0
+            # set materials zero enthalpy reference temperature
+            if h0_T_ref is not None:
+                self.mats.set_h0_T_ref(h0_T_ref)
+            else:
+                self.mats.set_h0_T_ref(20.0)
 
-        # set materials zero enthalpy reference temperature
-        if h0_T_ref is not None:
-            self.mats.set_h0_T_ref(h0_T_ref)
-        else:
-            self.mats.set_h0_T_ref(20.0)
+            self.dt.value = dt_start
+            in_event: bool = False
+            pre_event_dt : float = 0.0
+            self.t.value = 0
+            self.t_n.value = self.t.value
+            prev_callback_t = 0.0
+            prev_callback_step = 0
+            next_xdmf_t = 0.0
+            prev_checkpoint_t = 0.0
+        elif True: #os.path.isfile(Path(load_initial_checkpoint).with_suffix('.bp')) and os.path.isfile(Path(load_initial_checkpoint).with_suffix('.json')):
+            # set initial state of simulation from checkpoint
+            # this function wills set the terms constants inplace.
+            # some local data need to be handled by the caller manually.
+            local_data = self.load_unsteady_checkpoint(load_initial_checkpoint)
+            in_event: bool = local_data["in_event"]
+            pre_event_dt : float = local_data["pre_event_dt"]
+            prev_callback_t = local_data["prev_callback_t"]
+            prev_callback_step = local_data["prev_callback_step"]
+            next_xdmf_t = local_data["next_xdmf_t"]
+            prev_checkpoint_t = local_data["prev_checkpoint_t"]
 
         # set tolerances
         self.unsteady_solver.atol = atol
         self.unsteady_solver.rtol = rtol
 
-        self.dt.value = dt_start
-        in_event: bool = False
-        pre_event_dt : float = 0.0
-        self.t.value = 0
-        self.t_n.value = self.t.value
-        prev_callback_t = 0.0
-        prev_callback_step = 0
-        next_xdmf_t = 0.0
+        if datetime_start is not None:
+            self.timestamp_start = datetime.datetime.strptime(datetime_start, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
+        else:
+            self.datetime_start = 0.0
 
         # start stopwatch for total cpu time
         t_start = time.time()
 
         # set unsteady probes outputs locations
-        if probes_file is not None:
-            assert result_dir is not None, "Result directory is required to set the probes file."
-            self.unsteady_probes.set_result_file(result_dir, probes_file)
-        if database_table is not None:
-            assert result_database is not None, "Result database is required to set the database table."
-            assert project_name is not None, "Project name is required to set the database table."
-            self.unsteady_probes.set_result_database_table(result_database, project_name, database_table)
+        if probe_destinations:
+            for destination in probe_destinations:
+                self.unsteady_probes.add_destination(destination)
+        self.unsteady_probes.initialize()
+        
         if probes_callbacks is not None:
             self.unsteady_probes.set_callbacks(probes_callbacks)
+
         self.unsteady_probes.evaluate_probes()
         self.update_unsteady_form_terms(self.t_n) #TODO: check automaticaly if this inner call calculates corectly and does not do divergence
 
         # open xdmf file for writing domain data
         # TODO: make this full domain outputs part of ProbeWriter for more dynamic definitions
+        # TODO: check if adios4dolfinx can be used for this instead of io.XDMFFile
         if xdmf_file is not None:
             file_path = os.path.join(result_dir, xdmf_file)
             xdmf = io.XDMFFile(self.domain.comm, file_path, "w")
@@ -712,7 +745,7 @@ class Simulation():
                     in_event = True
                     pre_event_dt = self.dt.value
                     self.dt.value = t_next_event - self.t_n.value
-                    self.t.value = self.dt.value
+                    self.t.value = self.t_n.value + self.dt.value
                 else:
                     in_event = False
 
@@ -778,7 +811,7 @@ class Simulation():
                 # the solution is not valid anymore and inform the loop it is not solving
                 # event at that point. If the new dt is larger than the current dt we
                 # can continue since the solution is still valid and the increase in dt
-                # will affect next time step.
+                # will affect the solution at the next time step not the current one.
                 new_dt = self.get_unsteady_adaptive_time_step_size(dt_ctrl_interval)
                 if new_dt < self.dt.value:
                     self.dt.value = new_dt
@@ -832,6 +865,7 @@ class Simulation():
             # Set initial guess for next Newton solve using linear extrapolation.
             # This might reduce NLS iterations and overall solve time.
             # TODO: try using some cubic stuff insted of linear extrapolation.
+            #       it might save some NLS its.
             if use_time_projection:
                 self.T_temp.x.array[:] = self.T.x.array
                 self.T_temp.x.array[:] -= self.T_n.x.array
@@ -860,7 +894,7 @@ class Simulation():
             elif MPI.COMM_WORLD.rank == 0:
                 pbar.update()
 
-            # Trigger callback
+            # Trigger callbacks
             if (call_back_each_t is not None) and (self.t.value > prev_callback_t + call_back_each_t):
                 for call_back in call_backs:
                     call_back()
@@ -871,17 +905,139 @@ class Simulation():
                     call_back()
                 prev_callback_step += call_back_each_step
 
+            # Save checkpoint if required
+            if checkpoint_dt is not None and (self.t.value >= prev_checkpoint_t + checkpoint_dt):
+                local_data = {
+                    "prev_callback_t": prev_callback_t,
+                    "prev_callback_step": prev_callback_step,
+                    "next_xdmf_t": next_xdmf_t,
+                    "prev_checkpoint_t": prev_checkpoint_t,
+                    "in_event": in_event,
+                    "pre_event_dt": pre_event_dt,
+                }
+                assert local_data["in_event"] == False, "Checkpoint should not be saved in event"
+                prev_checkpoint_t += checkpoint_dt
+                self.save_unsteady_checkpoint(checkpoint_dir, local_data=local_data)
+                for call_back in checkpoint_callbacks:
+                    call_back()
+
         # properly close all outputs
         if xdmf_file is not None:
             xdmf.close()
 
-        if close_probes:
-            self.unsteady_probes.close_all()
-            self.unsteady_probes.reset_printer()
+        self.unsteady_probes.close()
+        self.unsteady_probes.reset_printer()
 
-        # return the simulation results
-        if MPI.COMM_WORLD.rank == 0:
-            return self.unsteady_probes
+        # # return the simulation results
+        # if MPI.COMM_WORLD.rank == 0:
+        #     return self.unsteady_probes
+
+    def save_unsteady_checkpoint(self, checkpoint_dir, local_data=None):
+
+        function_folder = Path(checkpoint_dir, "functions")
+        data_file = Path(checkpoint_dir, "data").with_suffix(".pickle")
+        metadata_file = Path(checkpoint_dir, "metadata").with_suffix(".json")
+        # save function of temperature T_n
+        adios4dolfinx.write_function_on_input_mesh( 
+            function_folder, 
+            self.T_n, 
+            mode=adios4dolfinx.adios2_helpers.adios2.Mode.Write,
+            time=self.t_n.value, 
+            name="Temperature_n",
+        )
+
+        # save function of temperature T_n
+        adios4dolfinx.write_function_on_input_mesh( 
+            function_folder, 
+            self.T, 
+            mode=adios4dolfinx.adios2_helpers.adios2.Mode.Append,
+            time=self.t.value, 
+            name="Temperature",
+        )
+
+        # get simulations constants
+        data = {}
+        data["t_n"] = self.t_n.value
+        data["t"] = self.t.value
+        data["dt"] = self.dt.value
+        data["h0_T_ref"] = self.mats[0].h0_T_ref.value
+        data["q_source_data"] = [None]*len(self.q_source) 
+        data["bcs_terms_data"] = [None]*len(self.bcs_terms)
+        data["local_data"] = {}
+        if local_data is not None:
+            for key, value in local_data.items():
+                data["local_data"][key] = value
+
+        # get source Terms data
+        for i, term in enumerate(self.q_source):
+            if term is not None:
+                data[f"q_source_data"][i] = term.get_checkpoint_data()
+
+        # get boundary Terms data
+        for i, term in enumerate(self.bcs_terms):
+            if term is not None:
+                data[f"bcs_terms_data"][i] = term.get_checkpoint_data()
+
+        # save data
+        save_data_binary(data_file, data)
+
+        # save metadata
+        metadata = {
+            "progress": self.unsteady_probes.get_value('progress'),
+            "local_timestamp": datetime.datetime.now().isoformat(),
+        }
+        save_data_json(metadata_file, metadata)
+
+    def load_unsteady_checkpoint(self, checkpoint_dir):
+        function_folder = Path(checkpoint_dir, "functions")
+        data_file = Path(checkpoint_dir, "data").with_suffix(".pickle")
+        metadata_file = Path(checkpoint_dir, "metadata").with_suffix(".json")
+
+        # load simulations constants
+        data = load_data_binary(data_file)
+        self.t_n.value = data["t_n"]
+        self.t.value = data["t"]
+        self.dt.value = data["dt"]
+        self.mats.set_h0_T_ref(data["h0_T_ref"])
+
+        # load metadata
+        # metadata = load_data_json(metadata_file)
+
+        # load source Terms data
+        for i, term in enumerate(self.q_source):
+            if term is not None:
+                if data[f"q_source_data"][i] is not None:
+                    term.load_checkpoint_data(data[f"q_source_data"][i])
+                else:
+                    mats_names = [mat.name for mat in self.mats]
+                    raise ValueError(f"No data for source term[{i}]({mats_names[i]}) in checkpoint")
+
+        # load boundary Terms data
+        for i, term in enumerate(self.bcs_terms):
+            if term is not None:
+                if data[f"bcs_terms_data"][i] is not None:
+                    term.load_checkpoint_data(data[f"bcs_terms_data"][i])
+                else:
+                    bcs_names = list(self.bcs.keys())
+                    raise ValueError(f"No data for boundary term[{i}]({bcs_names[i]}) in checkpoint")
+                
+        # load function of temperature data
+        adios4dolfinx.read_function(
+            function_folder, 
+            self.T_n, 
+            time=self.t_n.value, 
+            name="Temperature_n",
+        )
+
+        # load function of temperature data
+        adios4dolfinx.read_function(
+            function_folder, 
+            self.T, 
+            time=self.t.value, 
+            name="Temperature",
+        )
+
+        return data["local_data"]
 
     def get_temperature_range(self, cell_tag=None):
         'This method must run on all rank to work properly'
@@ -985,3 +1141,4 @@ class Simulation():
                 grid.set_active_scalars("T")
                 data[i] = grid
         return data
+

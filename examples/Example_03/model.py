@@ -3,6 +3,7 @@ from heat_battery.simulations.probing import FunctionSampler
 from heat_battery.simulations import terms
 import plotly.graph_objects as go
 import plotly.express as px
+import pandas as pd
 import os
 
 class THW_twowire(Simulation):
@@ -160,19 +161,20 @@ class THW_twowire(Simulation):
             q_flow = self.domain.comm.allreduce((q_flow), op=MPI.SUM)
             return q_flow
 
-    def calculate_lmbd(self, res):
+    def calculate_lmbd(self, csv_file_path, output_file_path):
         if self.domain.comm.rank == 0:
-            res['t_sim_log'] = np.log(res['t_sim'])
-            res['der_R'] = res[f'long_R'].diff()/res['t_sim_log'].diff()
+            df = pd.read_csv(csv_file_path)
+            df['t_sim_log'] = np.log(df['t_sim'])
+            df['der_R'] = df[f'long_R'].diff()/df['t_sim_log'].diff()
             for i in range(len(self.T_probes_coords)):
-                res[f'der_{i}'] = res[f'T[{i}]'].diff()/res['t_sim_log'].diff()
-                res[f'2nd_der_{i}'] = res[f'der_{i}'].diff()/res['t_sim_log'].diff()
-                res[f'2nd_der_{i}_rolling'] = res[f'2nd_der_{i}'].rolling(3).mean()
-                res[f'abs_der_{i}'] = res[f'der_{i}'].abs()
-                res[f'lmbd_{i}'] = res['ql']/(4*np.pi*res[f'der_{i}'])
-            res[f'der_imag_TfR'] = res[f'imag_TfR'].diff()/res['t_sim_log'].diff()
-            res[f'lmbd_imag_TfR'] = res['ql']/(4*np.pi*res[f'der_imag_TfR'])
-            return res
+                df[f'der_{i}'] = df[f'T[{i}]'].diff()/df['t_sim_log'].diff()
+                df[f'2nd_der_{i}'] = df[f'der_{i}'].diff()/df['t_sim_log'].diff()
+                df[f'2nd_der_{i}_rolling'] = df[f'2nd_der_{i}'].rolling(3).mean()
+                df[f'abs_der_{i}'] = df[f'der_{i}'].abs()
+                df[f'lmbd_{i}'] = df['ql']/(4*np.pi*df[f'der_{i}'])
+            df[f'der_imag_TfR'] = df[f'imag_TfR'].diff()/df['t_sim_log'].diff()
+            df[f'lmbd_imag_TfR'] = df['ql']/(4*np.pi*df[f'der_imag_TfR'])
+            df.to_csv(output_file_path)
 
     def run_experiment(self,
             T_amb_t=lambda t: 20, 
@@ -191,45 +193,42 @@ class THW_twowire(Simulation):
         self.unsteady_probes.evaluate_probes()
         self.imag_R0 = self.unsteady_probes.get_value('imag_R')
         self.R_std = R_std
-        res = self.solve_unsteady(**kwargs)
-        if self.domain.comm.rank == 0:
-            res = self.calculate_lmbd(res.df)
-            res.to_csv(os.path.join(kwargs['result_dir'], 'LMBD_result.csv'))
+        df = self.solve_unsteady(**kwargs)
             
     def plot_data(self):
         if self.domain.comm.rank == 0:
             fig = go.Figure()
             if not hasattr(self.probes, 'df'):
                 return fig
-            res = self.probes.df.copy()
-            res = self.calculate_lmbd(res)
+            df = self.probes.df.copy()
+            df = self.calculate_lmbd(df)
 
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['t_sim'], mode='lines', name='t_sim'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['dt'], mode='lines', name='dt'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['lmbd_imag_TfR'], mode='lines', name='lmbd_imag_TfR'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['long_R'], mode='lines', name='long_R'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['imag_TfR'], mode='lines', name='imag_TfR'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['der_R'], mode='lines', name='der_R'))
-            fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['U_b'], mode='lines', name='U_b'))
-            # fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['U_b_noisy'], mode='lines', name='U_b'))
-            # fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res['U_std'], mode='lines', name='U_std'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['t_sim'], mode='lines', name='t_sim'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['dt'], mode='lines', name='dt'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['lmbd_imag_TfR'], mode='lines', name='lmbd_imag_TfR'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['long_R'], mode='lines', name='long_R'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['imag_TfR'], mode='lines', name='imag_TfR'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['der_R'], mode='lines', name='der_R'))
+            fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['U_b'], mode='lines', name='U_b'))
+            # fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['U_b_noisy'], mode='lines', name='U_b'))
+            # fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df['U_std'], mode='lines', name='U_std'))
             for i in range(len(self.T_probes_coords)):
-                fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res[f'lmbd_{i}'], mode='lines', name=f'lmbd_{i}'))
-                fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res[f'der_{i}'], mode='lines', name=f'der_{i}'))
-                fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res[f'2nd_der_{i}'], mode='lines', name=f'2nd_der_{i}'))
-                fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res[f'2nd_der_{i}_rolling'], mode='lines', name=f'2nd_der_{i}_rolling'))
-                fig.add_trace(go.Scatter(x=res['t_sim_log'], y=res[f'T[{i}]'], mode='lines', name=f'T[{i}]'))
+                fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df[f'lmbd_{i}'], mode='lines', name=f'lmbd_{i}'))
+                fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df[f'der_{i}'], mode='lines', name=f'der_{i}'))
+                fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df[f'2nd_der_{i}'], mode='lines', name=f'2nd_der_{i}'))
+                fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df[f'2nd_der_{i}_rolling'], mode='lines', name=f'2nd_der_{i}_rolling'))
+                fig.add_trace(go.Scatter(x=df['t_sim_log'], y=df[f'T[{i}]'], mode='lines', name=f'T[{i}]'))
             fig.update_layout(uirevision="sellected_data")
             return fig
         
-    def plot_all_results(self):
+    def plot_all_dfults(self):
         if self.domain.comm.rank == 0:
             fig = go.Figure()
             if not hasattr(self.probes, 'df'):
                 return fig
-            res = self.probes.df.copy()
-            res = res.set_index('t_sim')
-            fig = px.line(res)
+            df = self.probes.df.copy()
+            df = df.set_index('t_sim')
+            fig = px.line(df)
             fig.update_layout(uirevision="all_data")
             return fig
 

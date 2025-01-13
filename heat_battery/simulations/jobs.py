@@ -20,19 +20,31 @@ from ..utilities import (
     resolve_files_dependencies,
     only_rank_0,
     print_rank_0,
+    load_data_json,
 )
 from ..config import get_config_item
+SIGNATURE_LENGTH = 20
+GROUP_SIGNATURE_LENGTH = 20
+
 class Job:
     TABLE_NAME = 'jobs'
     COLUMNS= {
         'group_name': 'TEXT',
         'group_signature': 'TEXT',
+        'group_priority': 'INTEGER',
         'signature': 'TEXT UNIQUE',
         'created_by': 'TEXT',
         'insert_datetime': 'TIMESTAMP WITH TIME ZONE',
         'last_updated': 'TIMESTAMP WITH TIME ZONE',
+        'last_checkpoint_date': 'TIMESTAMP WITH TIME ZONE',
+        'last_checkpoint_progress': 'FLOAT',
+        'checkpoint_data':'BYTEA',
+        'remaining_time': 'INTEGER',
+        'elapsed_time': 'INTEGER',
         'priority': 'INTEGER',
         'p_inputs': 'JSONB',
+        'output': 'JSONB',
+        'probe_columns': 'TEXT[]',
         'runner': 'TEXT',
         'required_source_files': 'TEXT[]',
         'status': 'TEXT',
@@ -152,6 +164,17 @@ class Job:
         self.project.update_progress(
             signature=self['signature'],
             progress=probes.get_value('progress'),
+            remaining_time=probes.get_value('t_remain_avg'),
+            elapsed_time=probes.get_value('t_cpu'),
+        )
+
+    def update_checkpoint(self):
+        temp_dir = get_config_item(['local_temp_dir'])
+        main_dir = os.path.join(temp_dir, self['group_signature'])
+        checkpoint_dir = os.path.join(main_dir, 'checkpoints', f"{self['signature']}")
+        self.project.add_checkpoint(
+            signature=self['signature'],
+            checkpoint_dir=checkpoint_dir,
         )
 
     @only_rank_0
@@ -232,6 +255,7 @@ if __name__ == "__main__":
     def run(self):
         org_status = self.get_status()
         org_remote_node_name = self.get_remote_node_name()
+        try_load_checkpoint = False
         if 'SCHEDULED' in org_status:
             if org_remote_node_name == 'UNASSIGNED':
                 print_rank_0(
@@ -247,12 +271,14 @@ if __name__ == "__main__":
                 )
                 return None
         elif 'FAILED' in org_status:
+            try_load_checkpoint = True
             print_rank_0(
                 f"Job {self.data['signature']} has FAILED previously, "
                 "assigning current worker to it to try again..."
             )
             self.set_remote_node_name(self.get_local_worker_id())
         elif 'INTERRUPTED' in org_status:
+            try_load_checkpoint = True
             print_rank_0(
                 f"Job {self.data['signature']} has been INTERRUPTED previously, "
                 "assigning current worker to it to try again..."
@@ -280,6 +306,7 @@ if __name__ == "__main__":
         temp_dir = get_config_item(['local_temp_dir'])
         main_dir = os.path.join(temp_dir, self['group_signature'])
         try:
+            # import required simulation related code/objects
             print_rank_0("Importing modules...")
             self.set_status('RUNNING - IMPORTING MODULES')
             rel_main_dir = ".".join(os.path.relpath(main_dir, start=original_cwd).split(os.sep))
@@ -319,28 +346,94 @@ if __name__ == "__main__":
                 print_rank_0("    Uploading new mesh to database...")
                 self.set_status('RUNNING - UPLOADING MESH')
                 self.project.add_meshes(dir=geometry_dir, names=[model_name])
-
+            else:
+                print_rank_0("    Mesh already exists in the database...")
+            # instantiate simulation in memory
             self.set_status('RUNNING - LOADING SIMULATION')
-            sim = sim_class(geometry_dir=geometry_dir, model_name=model_name)
+            checkpoint_dir = os.path.join(main_dir, 'checkpoints', f"{self['signature']}")
+            if try_load_checkpoint:
+                ckpnt_exists = self.project.check_checkpoint_exist(signature=self['signature'])
+                if ckpnt_exists:
+                    # download checkpoint from the database
+                    self.project.get_checkpoint(
+                        signature=self['signature'], 
+                        checkpoint_dir=checkpoint_dir,
+                    )
+                    
+                    print_rank_0(
+                        f"Checkpoint for job {self['signature']} pulled successfully!"
+                    )
+                    # read local checkpoint metadata
+                    local_metadata = load_data_json(os.path.join(checkpoint_dir, 'metadata.json'))
 
-            self.set_status('RUNNING - SIMULATION')
-            sim_p = self['p_inputs']['sim_p']
+                    # read remote checkpoint metadata
+                    remote_metadata = self.project.get_checkpoint_info(signature=self['signature'])
+                    check_keys = ['last_checkpoint_progress', 'last_checkpoint_date']
+                    
+                    if remote_metadata['progress'] != local_metadata['progress']:
+                        print_rank_0(
+                            f"WARNING: Checkpoint progress mismatch!\n"
+                            f"DB: {remote_metadata['progress']}\n"
+                            f"File: {local_metadata['progress']}\n"
+                            "This should be investigated as it may indicate a "
+                            "bug in the checkpoint upload/download process! "
+                            "Please report this bug!"
+                        )
+
+                    print_rank_0(f"Checkpoint metadata: {remote_metadata}")
+                    load_initial_checkpoint = checkpoint_dir
+                else:
+                    print_rank_0(
+                        f"Checkpoint for job {self['signature']} does not exist "
+                        f"in the database even though the job was marked as "
+                        f"{org_status}! Skipping checkpoint loading..."
+                    )
+                    load_initial_checkpoint = None
+            else:
+                load_initial_checkpoint = None
+            sim = sim_class(geometry_dir=geometry_dir, model_name=model_name)
+            sim_p = self['p_inputs']['sim_p'] # get runner arguments
+
+            # set probes destination to the database
+            sim_p['probe_destinations'] = [
+                {
+                    'type': 'database',
+                    'result_database': self.project.db_name,
+                    'project_name': self.project.project_name,
+                    'table_name': f"{self['signature']}",
+                }
+            ]
             if 'probes_callbacks' not in sim_p:
                 sim_p['probes_callbacks'] = []
             sim_p['probes_callbacks'].append(self.update_progress)
+
+            # set checkpoint updater
+            if 'checkpoint_dt' in sim_p:
+                
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                sim_p['checkpoint_dir'] = checkpoint_dir
+                sim_p['load_initial_checkpoint'] = load_initial_checkpoint
+                if 'checkpoint_callbacks' not in sim_p:
+                    sim_p['checkpoint_callbacks'] = []
+                sim_p['checkpoint_callbacks'].append(self.update_checkpoint)
+
+            # run simulation with runner arguments
+            self.set_status('RUNNING - SIMULATION')
             runner = getattr(sim, self['runner'])
             runner(**sim_p)
+
+            # set job status to completed
             self.set_status('COMPLETED')
             self.set_remote_node_name(None)
+
         except Exception as e:
             print_rank_0(f"Job {self.data['signature']} failed with error:")
             import traceback
             error_log = traceback.format_exc()
             print_rank_0(error_log)
             self.set_status('FAILED')
+            self.set_remote_node_name(None)
             self.set_error_log(error_log)
-        finally:
-            os.chdir(original_cwd)  
 
     def get_probes_data(self, as_dataframe:bool=False):
         if self.is_local():
@@ -353,6 +446,7 @@ def new_jobs_generator(
         mesh_builder: Callable,
         runner: str,
         group_name: str,
+        group_priority: int,
         p_grid: ParameterGrid, 
     ):
     assert issubclass(sim_class, Simulation), f"Expected Simulation, got {type(sim_class)}"
@@ -414,13 +508,21 @@ def new_jobs_generator(
 
         job_row = dict(
             group_name=group_name,
-            group_signature=p_input['GROUP_SIGNATURE'][:10],
+            group_signature=p_input['GROUP_SIGNATURE'][:GROUP_SIGNATURE_LENGTH],
+            group_priority=group_priority,
             created_by=created_by,
             insert_datetime="UNDEFINED",
             last_updated='UNDEFINED',
-            signature=p_input['SIGNATURE'][0:20],
+            last_checkpoint_date=None,
+            last_checkpoint_progress=None,
+            checkpoint_data=None,
+            remaining_time=0,
+            elapsed_time=0,
+            signature=p_input['SIGNATURE'][:SIGNATURE_LENGTH],
             priority=p_input['PRIORITY'],
             p_inputs=p_input,
+            output='{}',
+            probe_columns=[],
             runner=runner,
             required_source_files=[sfr['sha256'] for sfr in source_files_rows],
             status='SCHEDULED',
@@ -441,10 +543,11 @@ def generate_jobs(
         sim_class: type[Simulation], 
         mesh_builder: Callable,
         runner: str,
-        group_name: str,
+        group_name: str,    
+        group_priority: int,
         p_grid: ParameterGrid, 
     ):
-    return list(new_jobs_generator(sim_class, mesh_builder, runner, group_name, p_grid))
+    return list(new_jobs_generator(sim_class, mesh_builder, runner, group_name, group_priority, p_grid))
 
 def job_from_legacy_folder(
         legacy_folder:str,
@@ -460,15 +563,25 @@ def job_from_legacy_folder(
 
     res_file_name = os.path.join(legacy_folder, 'unsteady.csv')
     df_res = pd.read_csv(res_file_name)
+    try:
+        df_res.drop(columns=['t_remain_avg'], inplace=True)
+    except:
+        pass
     progress = df_res.iloc[-1]['progress']
 
     data = {
         'group_name': 'Legacy',
-        'group_signature': build_data['model_name'].split('-')[0][:10],
+        'group_signature': build_data['model_name'].split('-')[0],
+        'group_priority': 0,
         'created_by': get_config_item(['user', 'username']),
         'insert_datetime': str(datetime.datetime.now(datetime.timezone.utc)),
         'last_updated': str(datetime.datetime.now(datetime.timezone.utc)),
-        'signature': legacy_folder.split(os.sep)[-1][:20],
+        'last_checkpoint_date': None,
+        'last_checkpoint_progress': None,
+        'checkpoint_data': None,
+        'signature': legacy_folder.split(os.sep)[-1],
+        'remaining_time': None,
+        'elapsed_time': None,
         'priority': 0,
         'p_inputs': {
             'sim_p': sim_p,
@@ -476,6 +589,8 @@ def job_from_legacy_folder(
             'res_file_name': os.path.join(legacy_folder, 'unsteady.csv'),
             'SIGNATURE': legacy_folder.split(os.sep)[-1],
         },
+        'output': json.dumps({'key': 'value'}),
+        'probe_columns': df_res.columns.tolist(),
         'runner': 'solve_unsteady',
         'required_source_files': [],
         'status': 'COMPLETED',

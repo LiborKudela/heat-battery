@@ -28,8 +28,12 @@ def run():
         t_max = 1000.0,
         Qc_t=lambda t: 100+100*math.sin(2*math.pi*0.001*t),
         T_amb_t=lambda t: 20,
-        result_dir=r_dir,
-        probes_file='unsteady.csv',
+        probe_destinations=[{
+            'type': 'csv',
+            'file_name': 'unsteady.csv',
+            'result_dir': r_dir,
+            'flush': True,
+        }],
         atol=1e-8,
         rtol=1e-10,
         )

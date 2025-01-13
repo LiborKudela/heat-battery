@@ -28,7 +28,12 @@ def run():
         Qc_t=lambda t: 100+10*math.sin(2*math.pi*0.01*t),
         T_amb_t=lambda t: 10,
         result_dir=r_dir,
-        probes_file='unsteady.csv',
+        probe_destinations=[{
+            'type': 'csv',
+            'file_name': 'unsteady.csv',
+            'result_dir': r_dir,
+            'flush': True,
+        }],
         )
 
 if __name__ == "__main__":

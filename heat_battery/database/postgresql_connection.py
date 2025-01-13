@@ -111,10 +111,11 @@ class DBConnection:
 
 MAX_REPEAT_QUERY_ATTEMPTS = 10 # number of attempts
 MAX_REPEAT_QUERY_DELAY = 32    # seconds            
-def safe_query(func):
-    #TODO: add loggin here per project
+def debounced_query(func):
+    #TODO: add logging here per project
     """
-    Retry a query a few times with debouncing if it fails due to a connection error.
+    Retry a query a few times with debouncing if it fails due to a connection 
+    error or something of that sort.
     """
     def wrapper(*args, **kwargs):
         delay = 1

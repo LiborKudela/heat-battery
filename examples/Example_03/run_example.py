@@ -25,8 +25,12 @@ def run():
         P=0.12,
         R_std=1.0,
         verbose=False,
-        result_dir=r_dir,
-        probes_file='unsteady.csv',
+        probe_destinations=[{
+            'type': 'csv',
+            'file_name': 'unsteady.csv',
+            'result_dir': r_dir,
+            'flush': True,
+        }],
         dt_min=0.00000001,
         dt_start=0.0000001,
         dt_max=10.0,
@@ -34,6 +38,12 @@ def run():
         atol=1e-10,
         rtol=1e-12,
         )
+    
+    sim.calculate_lmbd(
+        csv_file_path=os.path.join(r_dir, 'unsteady.csv'),
+        output_file_path=os.path.join(r_dir, 'LMBD_result.csv'),
+    )
+
     
 if __name__ == "__main__":
     run()
