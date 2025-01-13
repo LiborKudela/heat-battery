@@ -113,7 +113,7 @@ def build_geometry_from_stepfile(
         print("Closing GMSH session")
         gmsh.finalize()
 
-        spec = inspect.getargspec(build_geometry_from_stepfile).args
+        spec = inspect.getfullargspec(build_geometry_from_stepfile).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
 

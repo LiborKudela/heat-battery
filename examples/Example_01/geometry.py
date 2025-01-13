@@ -2,7 +2,7 @@ from heat_battery.simulations.simulation_base import MPI
 from heat_battery.materials import materials
 from heat_battery.geometry.utilities import convert_to_legacy_fenics
 from heat_battery.utilities import save_data_binary
-from inspect import getargspec
+from inspect import getfullargspec
 from math import pi
 import gmsh
 import os
@@ -248,7 +248,7 @@ def build_geometry(
                     y = coords[2]
                     probe_set[probe_name] = [r, y, 0.0]
 
-        spec = getargspec(build_geometry).args
+        spec = getfullargspec(build_geometry).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
 

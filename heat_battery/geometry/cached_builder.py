@@ -10,10 +10,10 @@ class CachedGeometryBuilder:
         self.project = project
         self.proccesing_list = []
 
-        spec = inspect.getargspec(func).args
+        spec = inspect.getfullargspec(func).args
         assert 'dir' in spec, "The builder needs 'dir' key argument"
         assert 'name' in spec, "The builder needs 'name' key argument"
-        spec_defaults = inspect.getargspec(func).defaults
+        spec_defaults = inspect.getfullargspec(func).defaults
         self.default_call_data = dict(zip(spec, spec_defaults))
 
         self.source_hash = hash_data(inspect.getsource(func))

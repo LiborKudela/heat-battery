@@ -3,15 +3,17 @@ from ..utilities import hash_data, load_data_binary, save_data_binary
 import inspect
 import os
 from mpi4py import MPI
+from ..config import get_config_item
 
 #TODO check if pv database name for sellected locations is smart or not
 # locations (latitute[°], longitude[°], altitude[ft])
 locations = {
     'Brno-FME': (49.22465761983221, 16.574647060135998, 966), # Faculty of mechanical engineering in Brno, Czech republic
 }
+#TODO: add renewable.ninja fetcher (can estimate hourly heating/cooling demand)
 
 class CachedMeteoDataLoader:
-    def __init__(self, cache_dir='meteo_data'):
+    def __init__(self, cache_dir='wheather'):
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
         self.temp_air_day_mean_methods = {
@@ -40,7 +42,7 @@ class CachedMeteoDataLoader:
         """This function fetches data for photovoltaic system placed in a 'location'
         with maximum time-span given in the 'pvgis' database"""
 
-        spec = inspect.getargspec(self.fetch_hourly).args
+        spec = inspect.getfullargspec(self.fetch_hourly).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
         call_data.pop('self')
@@ -117,7 +119,7 @@ class CachedMeteoDataLoader:
         photovoltaic system placed in a 'location' with maximum time-span 
         given in the 'pvgis' database"""
 
-        spec = inspect.getargspec(self.fetch_tmy).args
+        spec = inspect.getfullargspec(self.fetch_tmy).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
         call_data.pop('self')
