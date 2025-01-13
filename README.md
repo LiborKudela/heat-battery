@@ -1,5 +1,6 @@
-[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
-[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
+[![build-ubuntu20.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml)  
+[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)  
+[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)  
 
 
 ## Battery included heat equation solver for solid heat storages
@@ -13,73 +14,64 @@ A python package for thermal storage simulation and optimisation based on finite
 - [Examples](#examples)
 
 # Installation
-### You will need a linux environment!
-If you have Ubuntu/Debian system you can skip to step 2. If you use Windows, read the folowing paragraph.
-
-It is recomended to use Debian/Linux. If you wish to install under Windows you
-will need to install Windows subsystem for Linux (WSL) first. Select a Ubuntu
-distribution. You can find the details
-[here](#https://learn.microsoft.com/en-us/windows/wsl/install). The open new
-terminal with the WSL distrubution and proceed with the following steps.
-
-### 1. Install and test a MPI environment such as OpenMPI
+### Ubuntu installation
+First clone this repository:
 ```bash
-sudo apt-get update 
-sudo apt install build-essential 
-sudo apt-get install openmpi-bin openmpi-doc libopenmpi-dev
-pip3 install mpi4py
-mpirun -n 5 python3 -c "print('This message should repeat five times.')"
+git clone https://github.com/LiborKudela/heat-battery.git
 ```
-You can read more information on MPI instalation [here](#https://webpages.charlotte.edu/abw/coit-grid01.uncc.edu/ParallelProgSoftware/Software/OpenMPIInstall.pdf).
-
-### 2. Install gmsh for mesh generation
+The most convenient way to install the package is to use the installation script.  
+Run the script with --help option to see the installation options.
 ```bash
-sudo apt update
-sudo apt install gmsh
-pip3 install gmsh
-python3 -c "import gmsh"
+bash install_scripts/install_ubuntu.sh --help
 ```
 
-### 3. Install latest release version of FEniCSx
+The two most common combinations are:
+#### Worker installation:
 ```bash
-sudo add-apt-repository ppa:fenics-packages/fenics
-sudo apt update
-sudo apt install fenicsx
-python3 -c "import dolfinx"
+bash install_scripts/install_ubuntu.sh -y
 ```
-You can read detailed instructions [here](#https://fenicsproject.org/download/#:~:text=The%20easiest%20way%20to%20install%20FEniCSx%20on%20Debian%20or%20Ubuntu%20Linux%20is%20via%20apt%3A).
-
-### 4. Install latest release versio of HeatBattery:
-You can use pypi repo (:warning: not functional yet, I did not decide on LICENCSE yet)
+#### Worker + database installation:
 ```bash
-pip3 install heat_battery
+bash install_scripts/install_ubuntu.sh -y -p --ppass db_password, --ppassc db_password
 ```
 
-You can clone the repository and install directly.
-```bash
-git clone https://github.com/LiborKudela/heat-battery
-cd heat_battery
-pip3 install .
-```
+### Windows installation
+If you wish to install under Windows you will need to install Windows subsystem 
+for Linux (WSL) first.  
+Select a Ubuntu distribution*(e.g. 22.04 LTS). You can find the details for this step
+[here](#https://learn.microsoft.com/en-us/windows/wsl/install).  
+Then open new terminal with the WSL distribution and proceed with the steps for [Ubuntu installation](#ubuntu-installation).
 
-### 5. Test the package
+
+### Test the package
+After installation you can test the package with the following command:
 ```bash
 python3 -c "import heat_battery; heat_battery.test_package()"
 ```
-
-### 6. Install Paraview (optional!! for postprocessing)
-Paraview can be installed in Linux and Windows. Please see the details options [here](#https://www.paraview.org/download/).
+# Other compatible software
+### Paraview (for postprocessing)
+Paraview can be installed in Linux and Windows. 
+Please see the details options [here](#https://www.paraview.org/download/).
 
 ## Main Features
-- Complex geometry import via STL files import
-- Sensitivity analysis (forward and adjoint derivative)
-- Mathematical optimisation, algorithms included
-- Least square fitting to data
-- Simulation of in loop controller such as PID
-- Live visualization via web aplication ploting
+Some of this features are in development  
+- <text style="color: green">Simulation of heat storages with complex geometry,</text>
+- <text style="color: green"> Co-simulation of attached controllers (e.g. PID, python code etc.),</text>
+- <text style="color: green"> Co-simulation of attached systems (e.g. buildings, heat pumps, etc.),</text>
+- <text style="color: red"> Co-simulation of OpenModelica models (e.g. buildings, heat pumps, etc.),</text>
+- <text style="color: green"> Distributed parallel simulation (via MPI),</text>
+- <text style="color: green"> Distributed large parameter studies (via MPI, workers send data to master),</text>
+- <text style="color: green"> Web based UI for management of the distributed parameter studies (requires database),</text>
+- <text style="color: green"> Complex geometry import via STL files import,</text>
+- <text style="color: green"> Sensitivity analysis (adjoint derivative),</text>
+- <text style="color: red"> Second order sensitivity analysis (Hessian) (in development),</text>
+- <text style="color: orange"> Mathematical optimisation (Gradient descent, Newton's method, etc.),</text>
+- <text style="color: orange"> Least square fitting to data with SGD</text>
 
 ## Examples/Tutorials
 - [Example_01: Simple cylindrical heat storage](examples/Example_01)
 - [Example_02: Same but STEP file imported geometry](examples/Example_02)
 - [Example_03: Transient hot wire method simulation](examples/Example_03)
 - [Example_04: Simulation of passive heat storage](examples/Example_04)
+- [Example_05: Large parameter study of passive heat storage](examples/Example_05)
+- [Example_06: Simulation of active heat storage with controller](examples/Example_06)

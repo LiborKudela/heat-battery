@@ -28,12 +28,15 @@ class TestSimulation(unittest.TestCase):
         Qc = 100.0
         alpha = 5.0
         t_max = 100.0 # terminate at this time
-        probes = self.sim.solve_unsteady(
+        self.sim.solve_unsteady(
             T_amb_t=lambda t: T_amb,
             Qc_t=lambda t: Qc,
+            probe_destinations=[
+                {'type': 'memory'}
+            ],
             alpha_t=lambda t: alpha,
             t_max=t_max)
-        stored_heat = probes.get_value('heat')
+        stored_heat = self.sim.unsteady_probes.get_value('heat')
 
         # ignoring little bit of heat loss but t_max is small so it should be ok
         self.assertTrue(np.isclose(stored_heat, Qc*t_max, atol=1), "Stored heat is wrong")

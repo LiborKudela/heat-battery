@@ -9,15 +9,14 @@ from examples.Example_01.model import Experiment_v1
 
 class TestPostgresqlProject(unittest.TestCase):
     def setUp(self) -> None:
-        
         try:
             setup_local_config_path('config.yaml')
-            print(f"Running config database tests with config.yaml in cwd")
+            print(f"Running config database tests in local with config.yaml")
         except:
             setup_local_config_path('.github/github_test_config.yaml')
             print(f"Running config database tests in Github Actions with .github/github_test_config.yaml")
+        self.project = Project('test_project_x', if_exists='override')
     
-        self.project = Project('test_project_X', if_exists='override')
     def test_jobs_equivalence(self):
         p_inputs = sweep.ParameterGrid(dict(
             mesh_p = sweep.ParameterGrid(dict(
@@ -38,6 +37,7 @@ class TestPostgresqlProject(unittest.TestCase):
             mesh_builder=build_geometry,
             runner='solve_unsteady',
             group_name='test_group',
+            group_priority=0,
             p_grid=p_inputs,
         )
 
