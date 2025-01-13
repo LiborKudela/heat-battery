@@ -257,7 +257,7 @@ echo "libpq-dev installed!"
 if [ "$install_postgres" = "true" ]; then
     echo "POSTGRES server packages will be installed now!"
     sudo apt install postgresql postgresql-contrib $auto_yes
-    sudo apt install postgresql-plpython3-14 $auto_yes || echo 'postgresql-plpython3-14 install failed - skipping...'
+    sudo apt install postgresql-plpython3 $auto_yes
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
 
