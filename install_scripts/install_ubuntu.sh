@@ -143,15 +143,6 @@ if [ $no_option_args -gt 0 ]; then
     done
 fi
 
-#check if heat_batter_data_dir parent directory exists when default is used
-if [ "$heat_battery_data_dir" = "home/$user_name/heat_battery_data" ]; then
-    if [ ! -d "/home/$user_name" ]; then
-        echo "Parent directory /home/$user_name does not exist! Exiting.."
-        echo "Cannot set default heat_battery_data_dir to /home/$user_name/heat_battery_data"
-        exit 1
-    fi
-fi
-
 echo "Provided argumets are valid, starting installation..."
 
 # update system and ensure essential packages are installed
@@ -172,6 +163,7 @@ ORG_PWD=$(pwd)
 
 # ask for password for postgres user
 if [ "$install_postgres" = "true" ]; then
+
     echo "POSTGRES server packages will be installed now!"
     sudo apt install postgresql postgresql-contrib $auto_yes
     sudo apt install postgresql-plpython3 $auto_yes || plpython3_failed=true
@@ -224,8 +216,15 @@ if [ "$install_postgres" = "true" ]; then
     echo "Password for postgres user set successfully!"
 
     # set permissions for postgres user
-    echo "Setting permissions for postgres user..."
-    sudo mkdir -p $heat_battery_data_dir
+    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
+    # if postgres is installed, check if heat_battery_data_dir parent directory exists
+    if [ ! -d "$heat_battery_data_dir" ]; then
+        echo "Creating parent directory $heat_battery_data_dir for postgres user..."
+        mkdir -p $heat_battery_data_dir
+        echo "Parent directory $heat_battery_data_dir created!"
+    else
+        echo "Parent directory $heat_battery_data_dir exists!"
+    fi
     sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
     sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
     echo "Permissions for postgres user set successfully!"

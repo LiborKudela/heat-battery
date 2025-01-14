@@ -10,4 +10,4 @@ database:
         password: workflow_password
         host: 127.0.0.1
         port: 5432
-        bin_files_folder_prefix: ./heat_battery_data/
+        bin_files_folder_prefix: /home/runner/heat_battery_data/

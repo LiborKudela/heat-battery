@@ -119,6 +119,19 @@ def _create_all_python_procedures_query(
         cur = conn.cursor()
         cur.execute(query)
 
+        # create the procedure for getting the current working directory
+        REQUIRED_PROCEDURES.append('get_psql_plpython_cwd')
+        query = sql.SQL(
+            f"DROP FUNCTION IF EXISTS {project_name}.get_psql_plpython_cwd();\n"
+            f"CREATE OR REPLACE FUNCTION {project_name}.get_psql_plpython_cwd()\n"
+            "RETURNS text AS $$\n"
+            "import os\n"
+            "return os.getcwd()\n"
+            "$$ LANGUAGE plpython3u;"
+        )
+        cur = conn.cursor()
+        cur.execute(query)
+
         # create the procedure for checking if a folder exists
         REQUIRED_PROCEDURES.append('check_folder_exists')
         query = sql.SQL(
@@ -504,7 +517,15 @@ class Project:
                         f"Unknown value of if_exists. Expected 'skip', "
                         f"'override' or 'fail', got '{if_exists}'."
                     )
-            
+
+            # check cwd
+            query = sql.SQL("SELECT {}.get_cwd()")
+            query = query.format(sql.Identifier(self.project_name))
+            cur = conn.cursor()
+            cur.execute(query)
+            res = cur.fetchone()[0]
+            print(f"Current working directory of running procedures: {res}")
+
             # create main folder for the project
             query = sql.SQL("SELECT {}.make_folder(%s)")
             query = query.format(sql.Identifier(self.project_name))
