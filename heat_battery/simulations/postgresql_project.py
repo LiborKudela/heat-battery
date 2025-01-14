@@ -519,7 +519,7 @@ class Project:
                     )
 
             # check cwd
-            query = sql.SQL("SELECT {}.get_cwd()")
+            query = sql.SQL("SELECT {}.get_psql_plpython_cwd()")
             query = query.format(sql.Identifier(self.project_name))
             cur = conn.cursor()
             cur.execute(query)
