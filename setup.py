@@ -40,7 +40,7 @@ setup(
         ],
     packages = find_packages(),
     keywords = 'finite element method, thermal storage, simulation, optimization',
-    python_requires='>3.10.0',
+    python_requires='>3.8.0',
     classifiers=[
         'Natural Language :: English',
         'Development Status :: 2 - Pre-Alpha',
