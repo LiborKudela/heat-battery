@@ -181,12 +181,19 @@ if [ "$install_postgres" = "true" ]; then
         echo "Installing postgresql-common..."
         sudo apt install $auto_yes postgresql-common
         echo "Installing PostgreSQL PPA..."
-        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh <<< 'yes'
+        cat /etc/apt/sources.list.d/pgdg.list
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add - 
         sudo apt update
         echo "Available postgresql-plpython3 packages at this moment:"
         sudo apt-cache policy postgresql-plpython3-*
         echo "Attempting to install postgresql-plpython3 again..."
-        sudo apt install $auto_yes postgresql-plpython3 || sudo apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || exit 1
+        POSTGRES_VERSION=$(psql --version | cut -d' ' -f5 | cut -d')' -f1)
+        MAJOR_VERSION=$(echo $POSTGRES_VERSION | cut -d'.' -f1)
+        echo "POSTGRES_VERSION: $POSTGRES_VERSION"
+        echo "MAJOR_VERSION: $MAJOR_VERSION"
+        echo "POSTGRES_VERSION_FULL: postgresql-plpython3-${MAJOR_VERSION}=${POSTGRES_VERSION}"
+        sudo apt install $auto_yes postgresql-plpython3 || sudo apt install $auto_yes postgresql-plpython3=${MAJOR_VERSION} || exit 1
     fi
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
