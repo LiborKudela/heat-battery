@@ -257,7 +257,17 @@ echo "libpq-dev installed!"
 if [ "$install_postgres" = "true" ]; then
     echo "POSTGRES server packages will be installed now!"
     sudo apt install postgresql postgresql-contrib $auto_yes
-    sudo apt install postgresql-plpython3 $auto_yes
+    sudo apt install postgresql-plpython3 $auto_yes || plpython3_failed=true
+    echo "try_postgres_ppa: $TRY_POSTGRESQL_PPA" || echo "try_postgres_ppa: false"
+    if [ "$plpython3_failed" = "true" ] && [ "$TRY_POSTGRESQL_PPA" = "true" ]; then
+        echo "Failed to install postgresql-plpython3, trying to install plpython3 from PostgreSQL PPA..."
+        echo "Installing postgresql-common..."
+        sudo apt install -y postgresql-common
+        echo "Installing PostgreSQL PPA..."
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        echo "Attempting to install postgresql-plpython3 again..."
+        sudo apt install -y postgresql-plpython3 || exit 1
+    fi
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
 

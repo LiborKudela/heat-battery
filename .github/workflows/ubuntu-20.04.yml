@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TRY_POSTGRESQL_PPA: true
+
 jobs:
   install_and_unittest:
 
