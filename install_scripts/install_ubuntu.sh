@@ -228,30 +228,65 @@ if [ "$install_postgres" = "true" ]; then
     else
         echo "Parent directory $heat_battery_data_dir exists!"
     fi
-    sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
-    sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    #sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    #sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+
+    sudo groupadd hb_group
+    sudo usermod -a -G hb_group $user_name
+    sudo usermod -a -G hb_group postgres
+    sudo chown $user_name:hb_group $heat_battery_data_dir
+    sudo chmod 2770 $heat_battery_data_dir
+    # check if postgres user has read access to heat_battery_data_dir
+    if ! sudo -u postgres ls $heat_battery_data_dir > /dev/null 2>&1; then
+        echo "Failed to set read permissions for postgres user to use $heat_battery_data_dir"
+        echo "Curent working dir is: ${ORG_PWD}"
+        echo "Current user is: $user_name"
+        echo "This is output of tree:"
+        tree
+        echo "This is output of ls -la $heat_battery_data_dir:"
+        ls -la $heat_battery_data_dir
+        exit 1
+    fi
+    # check if original user has write access to heat_battery_data_dir
+    if ! sudo -u $user_name touch $heat_battery_data_dir/install_test_psql.txt > /dev/null 2>&1; then
+        echo "Failed to set write permissions for original user to use $heat_battery_data_dir"
+        echo "Curent working dir is: ${ORG_PWD}"
+        echo "Current user is: $user_name"
+        echo "This is output of tree:"
+        tree
+        echo "This is output of ls -la $heat_battery_data_dir:"
+        ls -la $heat_battery_data_dir
+        exit 1
+    fi
+    echo "Permissions for original user set successfully!"
     #check if postgres user has read access to heat_battery_data_dir
     if ! sudo -u postgres ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for postgres user to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
-        echo "Current user is: $(whoami)"
+        echo "Current user is: $user_name"
         echo "This is output of tree:"
         tree
+        echo "This is output of ls -la $heat_battery_data_dir:"
+        ls -la $heat_battery_data_dir
         exit 1
     fi
     #check if postgres user has write access to heat_battery_data_dir
-    if ! sudo -u postgres touch $heat_battery_data_dir/install_test.txt > /dev/null 2>&1; then
+    if ! sudo -u postgres touch $heat_battery_data_dir/install_test_user.txt > /dev/null 2>&1; then
         echo "Failed to set write permissions for postgres user to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
-        echo "Current user is: $(whoami)"
+        echo "Current user is: $user_name"
         echo "This is output of tree:"
         tree
+        echo "This is output of ls -la $heat_battery_data_dir:"
+        ls -la $heat_battery_data_dir
         exit 1
     fi
-    #remove test file
-    sudo -u postgres rm $heat_battery_data_dir/install_test.txt
     echo "Permissions for postgres user set successfully!"
+    #remove test files
+    sudo -u postgres rm $heat_battery_data_dir/install_test_psql.txt
+    sudo -u postgres rm $heat_battery_data_dir/install_test_user.txt
 fi
+echo "PostgreSQL server installed and configured successfully!"
 
 # install openmpi
 # echo "Instaling OpenMPI and mpi4py!"
