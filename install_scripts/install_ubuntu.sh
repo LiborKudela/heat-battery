@@ -190,10 +190,11 @@ if [ "$install_postgres" = "true" ]; then
         echo "Attempting to install postgresql-plpython3 again..."
         POSTGRES_VERSION=$(psql --version | cut -d' ' -f5 | cut -d')' -f1)
         MAJOR_VERSION=$(echo $POSTGRES_VERSION | cut -d'.' -f1)
-        echo "POSTGRES_VERSION: $POSTGRES_VERSION"
+        FULL_NAME="postgresql-plpython3-${MAJOR_VERSION}=${POSTGRES_VERSION}"
         echo "MAJOR_VERSION: $MAJOR_VERSION"
-        echo "POSTGRES_VERSION_FULL: postgresql-plpython3-${MAJOR_VERSION}=${POSTGRES_VERSION}"
-        sudo apt install $auto_yes postgresql-plpython3 || sudo apt install $auto_yes postgresql-plpython3=${MAJOR_VERSION} || exit 1
+        echo "POSTGRES_VERSION: $POSTGRES_VERSION"
+        echo "FULL_NAME: $FULL_NAME"
+        sudo apt install $auto_yes postgresql-plpython3 || sudo apt install $auto_yes ${FULL_NAME} || exit 1
     fi
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
