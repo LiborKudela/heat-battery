@@ -230,11 +230,19 @@ if [ "$install_postgres" = "true" ]; then
     #check if postgres user has read access to heat_battery_data_dir
     if ! sudo -u postgres ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for postgres user to use $heat_battery_data_dir"
+        echo "Curent working dir is: ${ORG_PWD}"
+        echo "Current user is: $(whoami)"
+        echo "This is output of tree:"
+        tree
         exit 1
     fi
     #check if postgres user has write access to heat_battery_data_dir
     if ! sudo -u postgres touch $heat_battery_data_dir/install_test.txt > /dev/null 2>&1; then
         echo "Failed to set write permissions for postgres user to use $heat_battery_data_dir"
+        echo "Curent working dir is: ${ORG_PWD}"
+        echo "Current user is: $(whoami)"
+        echo "This is output of tree:"
+        tree
         exit 1
     fi
     #remove test file
