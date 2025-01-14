@@ -184,9 +184,9 @@ if [ "$install_postgres" = "true" ]; then
         sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt update
         echo "Available postgresql-plpython3 packages at this moment:"
-        sudo apt madison postgresql-plpython3
+        sudo apt-cache madison postgresql-plpython3
         echo "Attempting to install postgresql-plpython3 again..."
-        apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || exit 1
+        sudo apt install $auto_yes postgresql-plpython3|| apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || exit 1
     fi
     sudo apt install acl $auto_yes
     echo "PostgreSQL server packages installed!"
