@@ -128,6 +128,9 @@ if $install_postgres; then
     fi
 fi
 
+# make sure the path is absolute, postgres procedure might have cwd elsewhere
+heat_battery_data_dir=$(realpath $heat_battery_data_dir)
+
 echo "Running script with options:"
 echo "  -y: $auto_yes_bool"
 echo "  -p: $install_postgres"
