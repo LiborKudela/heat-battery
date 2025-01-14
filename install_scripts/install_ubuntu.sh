@@ -170,15 +170,68 @@ echo "Build-essential and python3-pip installed!"
 PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
 ORG_PWD=$(pwd)
 
-# install openmpi
-echo "Instaling OpenMPI and mpi4py!"
-sudo apt install openmpi-bin openmpi-doc libopenmpi-dev $auto_yes
-pip3 install mpi4py
-if ! mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"; then
-    echo "Failed to run mpi4py"
-    exit 1
+# ask for password for postgres user
+if [ "$install_postgres" = "true" ]; then
+    echo "POSTGRES server packages will be installed now!"
+    sudo apt install postgresql postgresql-contrib $auto_yes
+    sudo apt install postgresql-plpython3 $auto_yes || plpython3_failed=true
+    echo "try_postgres_ppa: $TRY_POSTGRESQL_PPA" || echo "try_postgres_ppa: false"
+    if [ "$plpython3_failed" = "true" ] && [ "$TRY_POSTGRESQL_PPA" = "true" ]; then
+        echo "Failed to install postgresql-plpython3, trying to install plpython3 from PostgreSQL PPA..."
+        echo "Installing postgresql-common..."
+        sudo apt install $auto_yes postgresql-common
+        echo "Installing PostgreSQL PPA..."
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt update
+        echo "Available postgresql-plpython3 packages at this moment:"
+        sudo apt madison postgresql-plpython3
+        echo "Attempting to install postgresql-plpython3 again..."
+        apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || apt install $auto_yes postgresql-plpython3=14.15-1.pgdg22.04+1 || exit 1
+    fi
+    sudo apt install acl $auto_yes
+    echo "PostgreSQL server packages installed!"
+
+    echo "Starting PostgreSQL server..."
+    # on normal Ubuntu
+    if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl start postgresql.service
+
+    # on WSL Ubuntu
+    elif command -v service >/dev/null 2>&1; then
+        sudo service postgresql start
+
+    else
+        echo "Could not start PostgreSQL service!"
+        echo "No command in this list found:"
+        echo "   - systemctl (for normal Ubuntu)"
+        echo "   - service (for WSL Ubuntu)"
+        exit 1
+    fi
+    sudo pg_isready
+    echo "PostgreSQL server started successfully!"
+
+    # set password for postgres user
+    echo "Setting password for postgres user..."
+    sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password '$postgres_password';"
+    echo "Password for postgres user set successfully!"
+
+    # set permissions for postgres user
+    echo "Setting permissions for postgres user..."
+    sudo mkdir -p $heat_battery_data_dir
+    sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    echo "Permissions for postgres user set successfully!"
 fi
-echo "OpenMPI installed!"
+
+# install openmpi
+# echo "Instaling OpenMPI and mpi4py!"
+# sudo apt install openmpi-bin openmpi-doc libopenmpi-dev $auto_yes
+# pip3 install mpi4py
+# if ! mpirun -n 1 python3 -c "from mpi4py import MPI; print(f'rank: {MPI.COMM_WORLD.rank}')"; then
+#     echo "Failed to run mpi4py"
+#     exit 1
+# fi
+# echo "OpenMPI installed!"
 
 # install gmsh
 echo "Installing Gmsh and gmsh python package!"
@@ -252,56 +305,6 @@ echo "ADIOS2 installed!"
 echo "Installing libpq-dev (needed by worker nodes)!"
 sudo apt install libpq-dev $auto_yes
 echo "libpq-dev installed!"
-
-# ask for password for postgres user
-if [ "$install_postgres" = "true" ]; then
-    echo "POSTGRES server packages will be installed now!"
-    sudo apt install postgresql postgresql-contrib $auto_yes
-    sudo apt install postgresql-plpython3 $auto_yes || plpython3_failed=true
-    echo "try_postgres_ppa: $TRY_POSTGRESQL_PPA" || echo "try_postgres_ppa: false"
-    if [ "$plpython3_failed" = "true" ] && [ "$TRY_POSTGRESQL_PPA" = "true" ]; then
-        echo "Failed to install postgresql-plpython3, trying to install plpython3 from PostgreSQL PPA..."
-        echo "Installing postgresql-common..."
-        sudo apt install -y postgresql-common
-        echo "Installing PostgreSQL PPA..."
-        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        echo "Attempting to install postgresql-plpython3 again..."
-        sudo apt install -y postgresql-plpython3 || exit 1
-    fi
-    sudo apt install acl $auto_yes
-    echo "PostgreSQL server packages installed!"
-
-    echo "Starting PostgreSQL server..."
-    # on normal Ubuntu
-    if command -v systemctl >/dev/null 2>&1; then
-        sudo systemctl start postgresql.service
-
-    # on WSL Ubuntu
-    elif command -v service >/dev/null 2>&1; then
-        sudo service postgresql start
-
-    else
-        echo "Could not start PostgreSQL service!"
-        echo "No command in this list found:"
-        echo "   - systemctl (for normal Ubuntu)"
-        echo "   - service (for WSL Ubuntu)"
-        exit 1
-    fi
-    sudo pg_isready
-    echo "PostgreSQL server started successfully!"
-
-    # set password for postgres user
-    echo "Setting password for postgres user..."
-    sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password '$postgres_password';"
-    echo "Password for postgres user set successfully!"
-
-    # set permissions for postgres user
-    echo "Setting permissions for postgres user..."
-    sudo mkdir -p $heat_battery_data_dir
-    sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
-    sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
-    echo "Permissions for postgres user set successfully!"
-fi
 
 # install heat_battery
 echo "Installing heat_battery python package..."
