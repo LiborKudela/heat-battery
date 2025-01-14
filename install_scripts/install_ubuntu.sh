@@ -227,6 +227,18 @@ if [ "$install_postgres" = "true" ]; then
     fi
     sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
     sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    #check if postgres user has read access to heat_battery_data_dir
+    if ! sudo -u postgres ls $heat_battery_data_dir > /dev/null 2>&1; then
+        echo "Failed to set read permissions for postgres user to use $heat_battery_data_dir"
+        exit 1
+    fi
+    #check if postgres user has write access to heat_battery_data_dir
+    if ! sudo -u postgres touch $heat_battery_data_dir/install_test.txt > /dev/null 2>&1; then
+        echo "Failed to set write permissions for postgres user to use $heat_battery_data_dir"
+        exit 1
+    fi
+    #remove test file
+    sudo -u postgres rm $heat_battery_data_dir/install_test.txt
     echo "Permissions for postgres user set successfully!"
 fi
 
