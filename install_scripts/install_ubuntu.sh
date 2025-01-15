@@ -227,6 +227,7 @@ if [ "$install_postgres" = "true" ]; then
         echo "Parent directory $heat_battery_data_dir exists!"
     fi
 
+    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
     # check if postgres user does exist
     if ! id -u postgres > /dev/null 2>&1; then
         echo "All users in /etc/passwd:"
@@ -237,22 +238,27 @@ if [ "$install_postgres" = "true" ]; then
         echo "User postgres exists!"
     fi
     # set permissions for postgres user
-    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
     if ! sudo groupadd hb_group; then
         echo "Failed to create hb_group. Checking if it already exists..."
         if ! getent group hb_group > /dev/null; then
             echo "Could not create or find hb_group! Exiting..."
             exit 1
         fi
+    else
+        echo "hb_group added successfully!"
     fi
     # Add users to group and verify
-    for user in "$user_name" "postgres"; do
-        if ! sudo usermod -a -G hb_group "$user"; then
-            echo "Failed to add $user to hb_group"
-            echo "Current groups for $user:"    
-            groups "$user" || echo "Could not get groups for $user"
-            exit 1
-        fi
+    if ! sudo usermod -a -G hb_group "$user_name"; then
+        echo "Failed to add $user_name to hb_group"
+        echo "Current groups for $user_name:"    
+        groups "$user_name" || echo "Could not get groups for $user_name"
+        exit 1
+    fi
+    if ! sudo usermod -a -G hb_group postgres; then
+        echo "Failed to add postgres to hb_group"
+        echo "Current groups for postgres:"    
+        groups postgres || echo "Could not get groups for postgres"
+        exit 1
     fi
     # Set ownership and permissions
     if ! sudo chown "$user_name:hb_group" "$heat_battery_data_dir"; then
@@ -312,8 +318,8 @@ if [ "$install_postgres" = "true" ]; then
     fi
     echo "Permissions for user postgres set successfully!"
     #remove test files
-    sudo -u postgres rm $heat_battery_data_dir/install_test_psql.txt
-    sudo -u postgres rm $heat_battery_data_dir/install_test_user.txt
+    sudo -u postgres rm $heat_battery_data_dir/install_test_psql.txt <<< 'yes'
+    sudo -u postgres rm $heat_battery_data_dir/install_test_user.txt <<< 'yes'
 fi
 echo "PostgreSQL server installed and configured successfully!"
 
