@@ -218,8 +218,6 @@ if [ "$install_postgres" = "true" ]; then
     sudo -u postgres psql template1 -c "ALTER USER postgres with encrypted password '$postgres_password';"
     echo "Password for postgres user set successfully!"
 
-    # set permissions for postgres user
-    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
     # if postgres is installed, check if heat_battery_data_dir parent directory exists
     if [ ! -d "$heat_battery_data_dir" ]; then
         echo "Creating parent directory $heat_battery_data_dir for postgres user..."
@@ -228,14 +226,23 @@ if [ "$install_postgres" = "true" ]; then
     else
         echo "Parent directory $heat_battery_data_dir exists!"
     fi
-    #sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
-    #sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
 
+    # check if postgres user does exist
+    if ! id -u postgres > /dev/null 2>&1; then
+        echo "All users in /etc/passwd:"
+        cut -d: -f1 /etc/passwd
+        echo "User postgres does not exist! Exiting..."
+        exit 1
+    fi
+
+    # set permissions for postgres user
+    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
     sudo groupadd hb_group
     sudo usermod -a -G hb_group $user_name
     sudo usermod -a -G hb_group postgres
     sudo chown $user_name:hb_group $heat_battery_data_dir
     sudo chmod 2770 $heat_battery_data_dir
+
     # check if postgres user has read access to heat_battery_data_dir
     if ! ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for user $user_name to use $heat_battery_data_dir"
