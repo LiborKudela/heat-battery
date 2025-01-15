@@ -227,8 +227,6 @@ if [ "$install_postgres" = "true" ]; then
         echo "Parent directory $heat_battery_data_dir exists!"
     fi
 
-    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
-    # check if postgres user does exist
     if ! id -u postgres > /dev/null 2>&1; then
         echo "All users in /etc/passwd:"
         cut -d: -f1 /etc/passwd
@@ -237,55 +235,27 @@ if [ "$install_postgres" = "true" ]; then
     else
         echo "User postgres exists!"
     fi
-    # set permissions for postgres user
-    if ! sudo groupadd hb_group; then
-        echo "Failed to create hb_group. Checking if it already exists..."
-        if ! getent group hb_group > /dev/null; then
-            echo "Could not create or find hb_group! Exiting..."
-            exit 1
-        fi
-    else
-        echo "hb_group added successfully!"
-    fi
-    # Add users to group and verify
-    if ! sudo usermod -a -G hb_group "$user_name"; then
-        echo "Failed to add $user_name to hb_group"
-        echo "Current groups for $user_name:"    
-        groups "$user_name" || echo "Could not get groups for $user_name"
-        exit 1
-    fi
-    if ! sudo usermod -a -G hb_group postgres; then
-        echo "Failed to add postgres to hb_group"
-        echo "Current groups for postgres:"    
-        groups postgres || echo "Could not get groups for postgres"
-        exit 1
-    fi
-    # Set ownership and permissions
-    if ! sudo chown "$user_name:hb_group" "$heat_battery_data_dir"; then
-        echo "Failed to set ownership of $heat_battery_data_dir"
-        exit 1
-    fi
-    # set permissions for hb_group
-    if ! sudo chmod 2770 "$heat_battery_data_dir"; then
-        echo "Failed to set permissions on $heat_battery_data_dir"
-        exit 1
-    fi
 
-    # Verify the permissions
-    echo "Directory permissions after setting:"
-    tree -pufidg $heat_battery_data_dir/..
-    echo "Groups for current user:"
-    groups
-    echo "Groups for postgres user:"
-    groups postgres || echo "Could not get groups for postgres"
+    echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
+    # First ensure the directory and its parents have execute permissions
+    sudo chmod +x $(dirname $heat_battery_data_dir)
+    sudo chmod +x $heat_battery_data_dir
+    
+    # Set ownership and base permissions
+    sudo chown $(whoami):postgres $heat_battery_data_dir
+    sudo chmod 770 $heat_battery_data_dir
+
+    # Set ACLs for both current and future files
+    sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
 
     # check if postgres user has read access to heat_battery_data_dir
     if ! ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for user $user_name to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
         echo "Current user is: $user_name"
-        echo "This is output of tree -pufidg:"
-        tree -pufidg
+        echo "This is output of ls -la $heat_battery_data_dir/.."
+        ls -la $heat_battery_data_dir/..
         exit 1
     fi
     # check if original user has write access to heat_battery_data_dir
@@ -293,8 +263,8 @@ if [ "$install_postgres" = "true" ]; then
         echo "Failed to set write permissions for user $user_name to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
         echo "Current user is: $user_name"
-        echo "This is output of tree -pufidg:"
-        tree -pufidg
+        echo "This is output of ls -la $heat_battery_data_dir/.."
+        ls -la $heat_battery_data_dir/..
         exit 1
     fi
     echo "Permissions for user $user_name set successfully!"
@@ -303,8 +273,8 @@ if [ "$install_postgres" = "true" ]; then
         echo "Failed to set read permissions for user postgres to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
         echo "Current user is: $user_name"
-        echo "This is output of tree -pufidg:"
-        tree -pufidg
+        echo "This is output of ls -la $heat_battery_data_dir/.."
+        ls -la $heat_battery_data_dir/..
         exit 1
     fi
     #check if postgres user has write access to heat_battery_data_dir
@@ -312,8 +282,8 @@ if [ "$install_postgres" = "true" ]; then
         echo "Failed to set write permissions for user postgres to use $heat_battery_data_dir"
         echo "Curent working dir is: ${ORG_PWD}"
         echo "Current user is: $user_name"
-        echo "This is output of tree -pufidg:"
-        tree -pufidg
+        echo "This is output of ls -la $heat_battery_data_dir/.."
+        ls -la $heat_battery_data_dir/..
         exit 1
     fi
     echo "Permissions for user postgres set successfully!"
