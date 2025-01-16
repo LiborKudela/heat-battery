@@ -259,8 +259,8 @@ if [ "$install_postgres" = "true" ]; then
     sudo chmod 770 $heat_battery_data_dir  # drwxrwx---
 
     # Set ACLs for both current and future files
-    sudo setfacl -m "u::rwx,u:postgres:rwx,g::rwx,o::--x" $heat_battery_data_dir
-    sudo setfacl -dm "u::rwx,u:postgres:rwx,g::rwx,o::---" $heat_battery_data_dir
+    sudo setfacl -m "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx,o::--x" $heat_battery_data_dir
+    sudo setfacl -dm "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx,o::---" $heat_battery_data_dir
 
     # Verify postgres is in required groups
     if ! groups postgres | grep -q "postgres"; then
@@ -351,13 +351,13 @@ echo "Fenicsx installed!"
 echo "Building and installing adios2!"
 git clone https://github.com/ornladios/ADIOS2.git ADIOS2
 adios2_pulled_version=$(grep -oP "(?<=setup_version\().*(?=\))" ADIOS2/CMakeLists.txt)
-adios2_installed_version=$(python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')") || adios2_installed_version=""
+adios2_installed_version=$(python3 -c "import adios2; print(adios2.__version__)") || adios2_installed_version=""
 skip_adios2_build=false
 if [ "$adios2_installed_version" != "" ]; then
     echo "Pulled version of ADIOS2: $adios2_pulled_version"
     adios2_installed_version=$(echo $adios2_installed_version | cut -d. -f1-3)
     echo "Already installed version of ADIOS2: $adios2_installed_version"
-    if [ "$adios2_pulled_version" == "$adios2_installed_version" ]; then
+    if [ "$adios2_pulled_version" = "$adios2_installed_version" ]; then
         skip_adios2_build=true
     fi
 fi
