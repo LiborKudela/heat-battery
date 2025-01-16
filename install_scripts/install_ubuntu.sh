@@ -237,61 +237,68 @@ if [ "$install_postgres" = "true" ]; then
     fi
 
     echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
-    # First ensure the directory and its parents have execute permissions
-    sudo chmod +x $(dirname $heat_battery_data_dir)
-    sudo chmod +x $heat_battery_data_dir
-    
     # Set ownership and base permissions
-    sudo chown $(whoami):postgres $heat_battery_data_dir
-    sudo chmod 770 $heat_battery_data_dir
+    sudo setfacl -m u:postgres:--x $(dirname $heat_battery_data_dir)
+    sudo setfacl -m u:postgres:--x $heat_battery_data_dir
+
+    # Ensure the directory and its parents have execute permissions
+    sudo chown ubuntu:postgres $heat_battery_data_dir
+    sudo chmod 770 $heat_battery_data_dir  # drwxrwx---
 
     # Set ACLs for both current and future files
-    sudo setfacl -Rm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
-    sudo setfacl -Rdm u:postgres:rwx,u:$(whoami):rwx $heat_battery_data_dir
+    sudo setfacl -m "u::rwx,u:postgres:rwx,g::rwx,o::--x" $heat_battery_data_dir
+    sudo setfacl -dm "u::rwx,u:postgres:rwx,g::rwx,o::---" $heat_battery_data_dir
+
+    # Verify postgres is in required groups
+    if ! groups postgres | grep -q "postgres"; then
+        echo "Warning: postgres user not in postgres group"
+        exit 1
+    fi
 
     # check if postgres user has read access to heat_battery_data_dir
+    permision_failed=false
     if ! ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for user $user_name to use $heat_battery_data_dir"
-        echo "Curent working dir is: ${ORG_PWD}"
-        echo "Current user is: $user_name"
-        echo "This is output of ls -la $heat_battery_data_dir/.."
-        ls -la $heat_battery_data_dir/..
-        exit 1
+        permision_failed=true
+    else
+        echo "Read permissions for user $user_name to use $heat_battery_data_dir set successfully!"
     fi
     # check if original user has write access to heat_battery_data_dir
     if ! touch $heat_battery_data_dir/install_test_psql.txt > /dev/null 2>&1; then
         echo "Failed to set write permissions for user $user_name to use $heat_battery_data_dir"
-        echo "Curent working dir is: ${ORG_PWD}"
-        echo "Current user is: $user_name"
-        echo "This is output of ls -la $heat_battery_data_dir/.."
-        ls -la $heat_battery_data_dir/..
-        exit 1
+        permision_failed=true
+    else
+        echo "Write permissions for user $user_name to use $heat_battery_data_dir set successfully!"
     fi
-    echo "Permissions for user $user_name set successfully!"
     #check if postgres user has read access to heat_battery_data_dir
     if ! sudo -u postgres ls $heat_battery_data_dir > /dev/null 2>&1; then
         echo "Failed to set read permissions for user postgres to use $heat_battery_data_dir"
-        echo "Curent working dir is: ${ORG_PWD}"
-        echo "Current user is: $user_name"
-        echo "This is output of ls -la $heat_battery_data_dir/.."
-        ls -la $heat_battery_data_dir/..
-        exit 1
+        permision_failed=true
+    else
+        echo "Read permissions for user postgres to use $heat_battery_data_dir set successfully!"
     fi
     #check if postgres user has write access to heat_battery_data_dir
     if ! sudo -u postgres touch $heat_battery_data_dir/install_test_user.txt > /dev/null 2>&1; then
         echo "Failed to set write permissions for user postgres to use $heat_battery_data_dir"
+        permision_failed=true
+    else
+        echo "Write permissions for user postgres to use $heat_battery_data_dir set successfully!"
+    fi
+    if [ "$permision_failed" = "true" ]; then
         echo "Curent working dir is: ${ORG_PWD}"
         echo "Current user is: $user_name"
-        echo "This is output of ls -la $heat_battery_data_dir/.."
-        ls -la $heat_battery_data_dir/..
+        echo "This is output of namei -l $heat_battery_data_dir"
+        namei -l $heat_battery_data_dir
+        echo "Permissions for user postgres set failed!"
         exit 1
     fi
     echo "Permissions for user postgres set successfully!"
     #remove test files
     sudo -u postgres rm $heat_battery_data_dir/install_test_psql.txt <<< 'yes'
-    sudo -u postgres rm $heat_battery_data_dir/install_test_user.txt <<< 'yes'
+    sudo rm $heat_battery_data_dir/install_test_user.txt <<< 'yes'
 fi
 echo "PostgreSQL server installed and configured successfully!"
+exit 0
 
 # install openmpi
 # echo "Instaling OpenMPI and mpi4py!"
