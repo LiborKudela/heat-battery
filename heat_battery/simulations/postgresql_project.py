@@ -342,7 +342,7 @@ class Project:
         assert project_name.islower(), "Project name must be in lowercase!"
         self.project_name = project_name.lower()
         self.bin_files_folder_prefix = get_config_item(['database', 'postgres', 'bin_files_folder_prefix'])
-        self.project_path = os.path.join(self.bin_files_folder_prefix, self.project_name)
+        self.project_path = os.path.abspath(os.path.join(self.bin_files_folder_prefix, self.project_name))
         self.res_prefix = os.path.join(self.project_path, 'results')
         self.ckpnt_prefix = os.path.join(self.project_path, 'checkpoints')
         self.project_name = project_name

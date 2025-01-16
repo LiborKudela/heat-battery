@@ -310,6 +310,10 @@ if [ "$install_postgres" = "true" ]; then
     sudo -u postgres rm $heat_battery_data_dir/install_test_psql.txt <<< 'yes'
     sudo rm $heat_battery_data_dir/install_test_user.txt <<< 'yes'
 fi
+# install libpg for worker nodes
+echo "Installing libpq-dev (needed by worker nodes)!"
+sudo apt install libpq-dev $auto_yes
+echo "libpq-dev installed!"
 echo "PostgreSQL server installed and configured successfully!"
 
 # install openmpi
@@ -346,54 +350,65 @@ echo "Fenicsx installed!"
 # build and install adios2
 echo "Building and installing adios2!"
 git clone https://github.com/ornladios/ADIOS2.git ADIOS2
-mkdir build-adios2
-cd build-adios2
-cmake ../ADIOS2 -DADIOS2_BUILD_EXAMPLES=ON
-make -j $(nproc)
-sudo make install
-sudo ldconfig
-
-# sometimes the make install copies the adios2 binding to wrong directory
-if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
-
-    p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
-    echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
-    paths=(
-        "lib/python${PY_VERSION}/dist-packages/adios2" 
-        "local/lib/python${PY_VERSION}/dist-packages/adios2"
-        "lib/python3/dist-packages/adios2"
-        "local/lib/python3/dist-packages/adios2" 
-    )
-    for src_path in "${paths[@]}"; do
-        echo "Checking python package at path: $src_path"
-        if [ -d "$src_path" ]; then
-            echo "Python package data FOUND at $src_path"
-            echo "Copying adios2 bindings from $src_path to ${p3_corect_dir}"
-            sudo mkdir -p ${p3_corect_dir}
-            sudo cp -r "$src_path"/* ${p3_corect_dir}/
-            break
-        else
-            echo "Python package data NOT FOUND at $src_path"
-        fi
-    done
-    sudo ldconfig
-    echo "Trying again python import again..."
-    if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
-        tree
-        echo "Python adios2 import test has failed, see tree of build-adios2 directory above - exiting..."
-        exit 1
+adios2_pulled_version=$(grep -oP "(?<=setup_version\().*(?=\))" ADIOS2/CMakeLists.txt)
+adios2_instaled_version=$(python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')") || adios2_instaled_version=""
+skip_adios2_build=false
+if [ "$adios2_instaled_version" != "" ]; then
+    echo "Pulled version of ADIOS2: $adios2_pulled_version"
+    adios2_instaled_version=$(echo $adios2_instaled_version | cut -d. -f1-3)
+    echo "Already installed version of ADIOS2: $adios2_instaled_version"
+    if [ "$adios2_pulled_version" == "$adios2_instaled_version" ]; then
+        skip_adios2_build=true
     fi
 fi
-echo "Python3 adios2 import test successful!"
-cd $ORG_PWD
-rm -rf ADIOS2
-rm -rf build-adios2
-echo "ADIOS2 installed!"
+if [ "$skip_adios2_build" = "false" ]; then
+    echo "ADIOS2 of version $adios2_pulled_version is already build and installed - skipping build"
+else
+    echo "Building ADIOS2 of version $adios2_pulled_version..."
+    mkdir build-adios2
+    cd build-adios2
+    cmake ../ADIOS2 -DADIOS2_BUILD_EXAMPLES=ON
+    make -j $(nproc)
+    sudo make install
+    sudo ldconfig
 
-# install libpg for worker nodes
-echo "Installing libpq-dev (needed by worker nodes)!"
-sudo apt install libpq-dev $auto_yes
-echo "libpq-dev installed!"
+    # sometimes the make install copies the adios2 binding to wrong directory
+    if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
+
+        p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
+        echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
+        paths=(
+            "lib/python${PY_VERSION}/dist-packages/adios2" 
+            "local/lib/python${PY_VERSION}/dist-packages/adios2"
+            "lib/python3/dist-packages/adios2"
+            "local/lib/python3/dist-packages/adios2" 
+        )
+        for src_path in "${paths[@]}"; do
+            echo "Checking python package at path: $src_path"
+            if [ -d "$src_path" ]; then
+                echo "Python package data FOUND at $src_path"
+                echo "Copying adios2 bindings from $src_path to ${p3_corect_dir}"
+                sudo mkdir -p ${p3_corect_dir}
+                sudo cp -r "$src_path"/* ${p3_corect_dir}/
+                break
+            else
+                echo "Python package data NOT FOUND at $src_path"
+            fi
+        done
+        sudo ldconfig
+        echo "Trying again python import again..."
+        if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
+            tree
+            echo "Python adios2 import test has failed, see tree of build-adios2 directory above - exiting..."
+            exit 1
+        fi
+    fi
+    echo "Python3 adios2 import test successful!"
+    cd $ORG_PWD
+    rm -rf ADIOS2
+    rm -rf build-adios2
+    echo "ADIOS2 installed!"
+fi
 
 # install heat_battery
 echo "Installing heat_battery python package..."
