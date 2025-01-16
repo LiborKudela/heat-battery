@@ -255,7 +255,7 @@ if [ "$install_postgres" = "true" ]; then
     #sudo setfacl -m u:postgres:--x $heat_battery_data_dir
 
     # Ensure the directory and its parents have execute permissions
-    sudo chown ubuntu:postgres $heat_battery_data_dir
+    sudo chown $user_name:postgres $heat_battery_data_dir
     sudo chmod 770 $heat_battery_data_dir  # drwxrwx---
 
     # Set ACLs for both current and future files
