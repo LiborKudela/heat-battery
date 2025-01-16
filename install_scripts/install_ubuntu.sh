@@ -298,7 +298,6 @@ if [ "$install_postgres" = "true" ]; then
     sudo rm $heat_battery_data_dir/install_test_user.txt <<< 'yes'
 fi
 echo "PostgreSQL server installed and configured successfully!"
-exit 0
 
 # install openmpi
 # echo "Instaling OpenMPI and mpi4py!"
