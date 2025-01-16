@@ -238,8 +238,21 @@ if [ "$install_postgres" = "true" ]; then
 
     echo "Setting permissions for postgres user to use $heat_battery_data_dir..."
     # Set ownership and base permissions
-    sudo setfacl -m u:postgres:--x $(dirname $heat_battery_data_dir)
-    sudo setfacl -m u:postgres:--x $heat_battery_data_dir
+    echo "Setting traverse permissions from / to $heat_battery_data_dir"
+    current_path=""
+    for dir in $(echo "$heat_battery_data_dir" | tr '/' ' '); do
+        if [ -n "$dir" ]; then  # Skip empty strings from leading/trailing slashes
+            current_path="${current_path}/${dir}"
+            if [ "$current_path" != "$heat_battery_data_dir" ]; then  # Don't set ACL on target dir
+                echo "Setting traverse permission on: $current_path"
+                sudo setfacl -m u:postgres:--x "$current_path"
+            fi
+        fi
+    done
+    echo "Resulting traverse permissions from / to $heat_battery_data_dir:"
+    namei -l $heat_battery_data_dir
+    #sudo setfacl -m u:postgres:--x $(dirname $heat_battery_data_dir)
+    #sudo setfacl -m u:postgres:--x $heat_battery_data_dir
 
     # Ensure the directory and its parents have execute permissions
     sudo chown ubuntu:postgres $heat_battery_data_dir
