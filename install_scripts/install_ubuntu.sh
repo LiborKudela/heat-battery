@@ -259,8 +259,9 @@ if [ "$install_postgres" = "true" ]; then
     sudo chmod 770 $heat_battery_data_dir  # drwxrwx---
 
     # Set ACLs for both current and future files
-    sudo setfacl -m "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx,o::--x" $heat_battery_data_dir
-    sudo setfacl -dm "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx,o::---" $heat_battery_data_dir
+
+    sudo setfacl -Rm "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx" $heat_battery_data_dir
+    sudo setfacl -Rdm "u::rwx,u:postgres:rwx,g::rwx,g:$user_name:rwx" $heat_battery_data_dir
 
     # Verify postgres is in required groups
     if ! groups postgres | grep -q "postgres"; then

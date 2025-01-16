@@ -112,8 +112,12 @@ def _create_all_python_procedures_query(
             f"DROP FUNCTION IF EXISTS {project_name}.check_python_user();\n"
             f"CREATE OR REPLACE FUNCTION {project_name}.check_python_user()\n"
             "RETURNS text AS $$\n"
-            "import os\n"
-            "return os.getenv('USER')\n"
+            "try:\n"
+            "    import subprocess\n"
+            "    result = subprocess.run(['whoami'], stdout=subprocess.PIPE, text=True)\n"
+            "    return result.stdout.strip()\n"
+            "except Exception as e:\n"
+            "    return str(e)\n"
             "$$ LANGUAGE plpython3u;"
         )   
         cur = conn.cursor()
@@ -127,18 +131,6 @@ def _create_all_python_procedures_query(
             "RETURNS text AS $$\n"
             "import os\n"
             "return os.getcwd()\n"
-            "$$ LANGUAGE plpython3u;"
-        )
-        cur = conn.cursor()
-        cur.execute(query)
-
-        REQUIRED_PROCEDURES.append('get_psql_plpython_username')
-        query = sql.SQL(
-            f"DROP FUNCTION IF EXISTS {project_name}.get_psql_plpython_username();\n"
-            f"CREATE OR REPLACE FUNCTION {project_name}.get_psql_plpython_username()\n"
-            "RETURNS text AS $$\n"
-            "import os\n"
-            "return os.getenv('USER')\n"
             "$$ LANGUAGE plpython3u;"
         )
         cur = conn.cursor()
@@ -539,7 +531,7 @@ class Project:
             print(f"Current working directory of running procedures: {res}")
 
             # check username
-            query = sql.SQL("SELECT {}.get_psql_plpython_username()")
+            query = sql.SQL("SELECT {}.check_python_user()")
             query = query.format(sql.Identifier(self.project_name))
             cur = conn.cursor()
             cur.execute(query)
@@ -574,13 +566,21 @@ class Project:
             if commit:
                 conn.commit()
 
+            print(f"Listing permissions for traversal to {self.project_path}...")
+            print(os.system(f'namei -l {self.project_path}'))
+
     def create(self, if_exists: str = 'skip'):
         self._create_query(if_exists=if_exists)
         self._set_get_result_methods_by_permissions()
 
     @only_rank_0
     def _set_get_result_methods_by_permissions(self):
-        file_list = os.listdir(self.project_path)
+        try:
+            file_list = os.listdir(self.project_path)
+        except:
+            user = os.getenv('USER')
+            print(f"Failed to list files in {self.project_path}, probably no permissions were granted for user {user}!")
+            file_list = []
         if f'hash_{hash_data(self.project_name)}.empty' not in file_list:
             print(
                 f"Local {self} does not have permissions "
