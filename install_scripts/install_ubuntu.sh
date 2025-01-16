@@ -351,17 +351,17 @@ echo "Fenicsx installed!"
 echo "Building and installing adios2!"
 git clone https://github.com/ornladios/ADIOS2.git ADIOS2
 adios2_pulled_version=$(grep -oP "(?<=setup_version\().*(?=\))" ADIOS2/CMakeLists.txt)
-adios2_instaled_version=$(python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')") || adios2_instaled_version=""
+adios2_installed_version=$(python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')") || adios2_installed_version=""
 skip_adios2_build=false
-if [ "$adios2_instaled_version" != "" ]; then
+if [ "$adios2_installed_version" != "" ]; then
     echo "Pulled version of ADIOS2: $adios2_pulled_version"
-    adios2_instaled_version=$(echo $adios2_instaled_version | cut -d. -f1-3)
-    echo "Already installed version of ADIOS2: $adios2_instaled_version"
-    if [ "$adios2_pulled_version" == "$adios2_instaled_version" ]; then
+    adios2_installed_version=$(echo $adios2_installed_version | cut -d. -f1-3)
+    echo "Already installed version of ADIOS2: $adios2_installed_version"
+    if [ "$adios2_pulled_version" == "$adios2_installed_version" ]; then
         skip_adios2_build=true
     fi
 fi
-if [ "$skip_adios2_build" = "false" ]; then
+if [ "$skip_adios2_build" = "true" ]; then
     echo "ADIOS2 of version $adios2_pulled_version is already build and installed - skipping build"
 else
     echo "Building ADIOS2 of version $adios2_pulled_version..."
