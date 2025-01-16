@@ -164,6 +164,9 @@ echo "Build-essential and python3-pip installed!"
 PY_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
 ORG_PWD=$(pwd)
 
+# update pip to the latest version
+pip3 install --upgrade pip
+
 # ask for password for postgres user
 if [ "$install_postgres" = "true" ]; then
 
@@ -368,7 +371,7 @@ else
     echo "Building ADIOS2 of version $adios2_pulled_version..."
     mkdir build-adios2
     cd build-adios2
-    cmake ../ADIOS2 -DADIOS2_BUILD_EXAMPLES=ON
+    cmake ../ADIOS2
     make -j $(nproc)
     sudo make install
     sudo ldconfig
@@ -376,31 +379,36 @@ else
     # sometimes the make install copies the adios2 binding to wrong directory
     if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
 
-        p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
+        # where should we copy the binding to?
+        if [ "$VIRTUAL_ENV" != "" ]; then
+            echo "Current virtual environment: $VIRTUAL_ENV"
+            echo "Porting binding to virtual environment..."
+            p3_corect_dir="${VIRTUAL_ENV}/lib/python${PY_VERSION}/dist-packages/adios2"
+        else
+            p3_corect_dir="/usr/local/lib/python${PY_VERSION}/dist-packages/adios2"
+        fi
         echo "Python adios2 import failed - copying binding directly to ${p3_corect_dir}"
-        paths=(
-            "lib/python${PY_VERSION}/dist-packages/adios2" 
-            "local/lib/python${PY_VERSION}/dist-packages/adios2"
-            "lib/python3/dist-packages/adios2"
-            "local/lib/python3/dist-packages/adios2" 
-        )
-        for src_path in "${paths[@]}"; do
-            echo "Checking python package at path: $src_path"
-            if [ -d "$src_path" ]; then
-                echo "Python package data FOUND at $src_path"
-                echo "Copying adios2 bindings from $src_path to ${p3_corect_dir}"
-                sudo mkdir -p ${p3_corect_dir}
-                sudo cp -r "$src_path"/* ${p3_corect_dir}/
-                break
-            else
-                echo "Python package data NOT FOUND at $src_path"
-            fi
-        done
+
+        # look for python bindings in build-adios2 directory
+        src_path=$(tree -if | grep -E "/*-packages/adios2$")
+        if [ -d "$src_path" ]; then
+            echo "Python package data FOUND at $src_path"
+            echo "Copying adios2 bindings from $src_path to ${p3_corect_dir}"
+            sudo mkdir -p ${p3_corect_dir}
+            sudo cp -r "$src_path"/* ${p3_corect_dir}/
+        else
+            echo "Python package data NOT FOUND at $src_path"
+            exit 1
+        fi
         sudo ldconfig
+        
         echo "Trying again python import again..."
         if ! python3 -c "import adios2; print(f'adios2 version: {adios2.__version__}')"; then
-            tree
-            echo "Python adios2 import test has failed, see tree of build-adios2 directory above - exiting..."
+            echo "Python adios2 import test has failed again!!"
+            echo "Python related files in build-adios2 directory:"
+            tree -i -f | grep "packages/adios2/*"
+            echo "Python bindings are not compiled correctly or not created at all.."
+            echo "See output above for debuging - exiting..."
             exit 1
         fi
     fi

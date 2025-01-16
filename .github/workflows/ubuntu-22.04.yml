@@ -19,23 +19,33 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Create virtual environment
+      run: |
+        sudo apt install python3-venv
+        python3 -m venv --system-site-packages hb_venv
+
     - name: Make install script executable
       run: chmod +x install_scripts/install_ubuntu.sh
 
     - name: Install script
       run: |
+        source hb_venv/bin/activate
         config_ppass=$(cat .github/github_test_config.yaml | grep -oP '(?<=password: )[^ ]+')
         config_ppassc=$(echo ${config_ppass})
         config_hbdir=$(cat .github/github_test_config.yaml | grep -oP '(?<=bin_files_folder_prefix: )[^ ]+')
         bash install_scripts/install_ubuntu.sh -y -p --ppass ${config_ppass} --ppassc ${config_ppassc} --hbdir ${config_hbdir}
 
     - name: Install coverage
-      run: pip3 install coverage
+      run: |
+        source hb_venv/bin/activate
+        pip3 install coverage
 
     - name: Run unittest
       run: |
+        source hb_venv/bin/activate
         python3 -m coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
 
     - name: Coverage report
-      run: >
+      run: |
+        source hb_venv/bin/activate
         echo "Code coverage: $(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
