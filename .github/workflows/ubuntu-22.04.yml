@@ -61,8 +61,8 @@ jobs:
         COLOR: ${{ steps.coverage.outputs.coverage >= 80 && 'green' || steps.coverage.outputs.coverage >= 70 && 'yellow' || 'red' }}
       with:
         auth: ${{ secrets.GIST_SECRET }}
-        gistID: 6f402d08683e16acdfc545b806f60259
-        filename: coverage-ubuntu-22.04.json
-        label: Coverage
-        message: $COVERAGE_VALUE
-        color: $COLOR
+        gistID: "6f402d08683e16acdfc545b806f60259"
+        filename: "coverage-ubuntu-22.04.json"
+        label: "Coverage"
+        message: "${COVERAGE_VALUE}"
+        color: "${COLOR}"
