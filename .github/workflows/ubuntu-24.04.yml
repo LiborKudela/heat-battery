@@ -49,15 +49,15 @@ jobs:
       id: coverage
       run: |
         source hb_venv/bin/activate
-        coverage_report=$(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*')
+        coverage_report=$(python3 -m coverage report -m | grep 'TOTAL' | awk '{print $NF}' | sed 's/%//')
         echo "Code coverage: ${coverage_report}%"
-        echo "{coverage}={$coverage_report}" >> "$GITHUB_OUTPUT"
+        echo "{coverage}={$coverage_report}" >> $GITHUB_OUTPUT
   
     - name: Create the Badge
       uses: schneegans/dynamic-badges-action@v1.6.0
       with:
         auth: ${{ secrets.GIST_SECRET }}
-        gistID: gist:6f402d08683e16acdfc545b806f60259
+        gistID: 6f402d08683e16acdfc545b806f60259
         filename: coverage-ubuntu-24.04.json
         label: Coverage
         message: ${{ steps.coverage.outputs.coverage }}%
