@@ -46,6 +46,19 @@ jobs:
         python3 -m coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
 
     - name: Coverage report
+      id: coverage
       run: |
         source hb_venv/bin/activate
-        echo "Code coverage: $(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
+        coverage_report=$(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*')
+        echo "coverage=$coverage_report" >> $GITHUB_OUTPUT
+        echo "Code coverage: ${coverage_report}%"
+    
+    - name: Create the Badge
+      uses: schneegans/dynamic-badges-action@v1.6.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: coverage-ubuntu-22.04.json
+        label: Coverage
+        message: ${{ steps.coverage.outputs.coverage }}%
+        color: ${{ steps.coverage.outputs.coverage >= 80 && 'green' || steps.coverage.outputs.coverage >= 70 && 'yellow' || 'red' }}

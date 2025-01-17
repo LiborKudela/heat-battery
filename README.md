@@ -1,7 +1,6 @@
-[![build-ubuntu20.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-20.04.yml)(Python3.8)  
-[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)(Python3.10)  
-[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)(Python3.12)  
-
+[![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
+[![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/coverage-ubuntu-22.04.json)      
 
 ## Battery included heat equation solver for solid heat storages
 
@@ -32,7 +31,7 @@ bash install_scripts/install_ubuntu.sh -y
 ```
 #### Worker + database installation:
 ```bash
-bash install_scripts/install_ubuntu.sh -y -p --ppass db_password, --ppassc db_password
+bash install_scripts/install_ubuntu.sh -y -p --ppass db_password --ppassc db_password
 ```
 
 ### Windows installation
