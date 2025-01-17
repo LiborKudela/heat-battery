@@ -50,7 +50,7 @@ jobs:
       run: |
         source hb_venv/bin/activate
         coverage_report=$(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*')
-        echo "coverage=${coverage_report}" >> $GITHUB_OUTPUT
+        echo "coverage=$coverage_report" >> "$GITHUB_OUTPUT"
         echo "Code coverage: ${coverage_report}%"
   
     - name: Create the Badge
