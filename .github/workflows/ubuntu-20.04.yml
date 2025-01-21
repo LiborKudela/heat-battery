@@ -19,6 +19,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Store initial disk space
+      run: echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . --output=avail | tail -n 1) > vminfo.initial
+
     - name: Make install script executable
       run: chmod +x install_scripts/install_ubuntu.sh
 
@@ -39,3 +42,14 @@ jobs:
     - name: Coverage report
       run: >
         echo "Code coverage: $(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
+
+    - name: Report of disk usage
+      run: |
+        initial_avail_space=$(cat vminfo.initial | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/'")
+        echo "Initial avail space: $initial_avail_space"
+        final_avail_space=$(cat vminfo.final | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/'")
+        echo "Final avail space: $final_avail_space"
+        consumed_space_raw=$(($initial_avail_space - $final_avail_space))
+        echo "Consumed space raw: $consumed_space_raw"
+        consumed_space_human=$(numfmt --to=si $(($consumed_space_raw*1000))) || echo "Failed to convert to human readable space"
+        echo "Consumed space human: $consumed_space_human"
