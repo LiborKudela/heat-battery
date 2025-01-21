@@ -1,6 +1,6 @@
 [![build-ubuntu22.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
 [![build-ubuntu24.04](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml/badge.svg)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
-![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/coverage-ubuntu-22.04.json)      
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/coverage-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)      
 
 ## Battery included heat equation solver for solid heat storages
 
@@ -37,7 +37,7 @@ bash install_scripts/install_ubuntu.sh -y -p --ppass db_password --ppassc db_pas
 ### Windows installation
 If you wish to install under Windows you will need to install Windows subsystem 
 for Linux (WSL) first.  
-Select a Ubuntu distribution*(e.g. 22.04 LTS). You can find the details for this step
+Select a Ubuntu distribution (e.g. 22.04 LTS). You can find the details for this step
 [here](#https://learn.microsoft.com/en-us/windows/wsl/install).  
 Then open new terminal with the WSL distribution and proceed with the steps for [Ubuntu installation](#ubuntu-installation).
 
@@ -54,18 +54,18 @@ Please see the details options [here](#https://www.paraview.org/download/).
 
 ## Main Features
 Some of this features are in development  
-- <text style="color: green">Simulation of heat storages with complex geometry,</text>
-- <text style="color: green"> Co-simulation of attached controllers (e.g. PID, python code etc.),</text>
-- <text style="color: green"> Co-simulation of attached systems (e.g. buildings, heat pumps, etc.),</text>
-- <text style="color: red"> Co-simulation of OpenModelica models (e.g. buildings, heat pumps, etc.),</text>
-- <text style="color: green"> Distributed parallel simulation (via MPI),</text>
-- <text style="color: green"> Distributed large parameter studies (via MPI, workers send data to master),</text>
-- <text style="color: green"> Web based UI for management of the distributed parameter studies (requires database),</text>
-- <text style="color: green"> Complex geometry import via STL files import,</text>
-- <text style="color: green"> Sensitivity analysis (adjoint derivative),</text>
-- <text style="color: red"> Second order sensitivity analysis (Hessian) (in development),</text>
-- <text style="color: orange"> Mathematical optimisation (Gradient descent, Newton's method, etc.),</text>
-- <text style="color: orange"> Least square fitting to data with SGD</text>
+- <span text="color: green">Simulation of heat storages with complex geometry,</span>
+- <span style="color: green">Co-simulation of attached controllers (e.g. PID, python code etc.),</span>
+- <span style="color: green">Co-simulation of attached systems (e.g. PV panels, heat pumps, etc.),</span>
+- <span style="color: red">Co-simulation of OpenModelica models (e.g. pipes, heat pumps, etc.),</span>
+- <span style="color: green">Distributed parallel simulation (via MPI),</span>
+- <span style="color: green">Distributed large parameter studies (via MPI, workers send data to master),</span>
+- <span style="color: green">Web based UI for management of the distributed parameter studies (requires database),</span>
+- <span style="color: green">Complex geometry import via STL files import,</span>
+- <span style="color: green">Sensitivity analysis (adjoint derivative),</span>
+- <span style="color: red">Second order sensitivity analysis (Hessian) (in development),</span>
+- <span style="color: orange">Mathematical optimisation (Gradient descent, Newton's method, etc.),</span>
+- <span style="color: orange">Least square fitting to data with SGD</span>
 
 ## Examples/Tutorials
 - [Example_01: Simple cylindrical heat storage](examples/Example_01)

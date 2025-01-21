@@ -45,9 +45,9 @@ jobs:
 
     - name: Report of disk usage
       run: |
-        initial_avail_space=$(cat vminfo.initial | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/'")
+        initial_avail_space=$(cat vminfo.initial | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/')
         echo "Initial avail space: $initial_avail_space"
-        final_avail_space=$(cat vminfo.final | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/'")
+        final_avail_space=$(cat vminfo.final | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/')
         echo "Final avail space: $final_avail_space"
         consumed_space_raw=$(($initial_avail_space - $final_avail_space))
         echo "Consumed space raw: $consumed_space_raw"
