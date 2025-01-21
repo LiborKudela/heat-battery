@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Store initial disk space
-      run: echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . --output=avail | tail -n 1) > vminfo.initial
+      run: echo avail_df[$(date '+%d.%m.%Y %H:%M:%S')]=$(df . --output=avail | tail -n 1) > vminfo.initial
 
     - name: Make install script executable
       run: chmod +x install_scripts/install_ubuntu.sh
