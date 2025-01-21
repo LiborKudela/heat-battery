@@ -37,13 +37,29 @@ jobs:
 
     - name: Run unittest
       run: |
+        source hb_venv/bin/activate
         python3 -m coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
 
     - name: Coverage report
-      run: >
-        echo "Code coverage: $(python3 -m coverage report -m | grep 'TOTAL'| grep -o '[0-9]*%')"
+      id: coverage
+      run: |
+        source hb_venv/bin/activate
+        coverage_report=$(python3 -m coverage report -m | grep 'TOTAL' | awk '{print $NF}' | sed 's/%//')
+        echo "Code coverage: ${coverage_report}%"
+        echo "coverage=$coverage_report" >> "$GITHUB_OUTPUT"
+      
+    - name: Create coverage badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: coverage-ubuntu-20.04.json
+        label: Code coverage
+        message: "${{ steps.coverage.outputs.coverage }}%"
+        color: ${{ steps.coverage.outputs.coverage >= 80 && 'green' || steps.coverage.outputs.coverage >= 70 && 'yellow' || 'red' }}
 
     - name: Report of disk usage
+      id: disk_space_consumed
       run: |
         echo avail_df[$(date '+%d.%m.%Y %H:%M:%S')]=$(df . --output=avail | tail -n 1) > vminfo.final
         initial_avail_space=$(cat vminfo.initial | grep '^avail_df' | sed 's/.*=\s*\(.*\)/\1/')
@@ -53,4 +69,15 @@ jobs:
         consumed_space_raw=$(($initial_avail_space - $final_avail_space))
         echo "Consumed space raw: $consumed_space_raw"
         consumed_space_human=$(numfmt --to=si $(($consumed_space_raw*1000))) || echo "Failed to convert to human readable space"
-        echo "Consumed space human: $consumed_space_human"
+        echo "Consumed space human readable: $consumed_space_human"
+        echo "disk_space_consumed=$consumed_space_human" >> "$GITHUB_OUTPUT"
+  
+    - name: Create disk space badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: disk-usage-ubuntu-20.04.json
+        label: Disk usage
+        message: "${{ steps.disk_space_consumed.outputs.disk_space_consumed }}"
+        color: green
