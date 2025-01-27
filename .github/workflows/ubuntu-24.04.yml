@@ -108,7 +108,7 @@ jobs:
         gistID: 6f402d08683e16acdfc545b806f60259
         filename: success-unittest-ubuntu-24.04.json
         label: Test
-        message: "Passing"
+        message: "passing"
         color: green
   
     - name: Set unittest badge to "Failing" if unittest fails
@@ -119,7 +119,7 @@ jobs:
         gistID: 6f402d08683e16acdfc545b806f60259
         filename: success-unittest-ubuntu-24.04.json
         label: Test
-        message: "Failing"
+        message: "failing"
         color: red
 
     - name: Coverage report
