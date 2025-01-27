@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  install_and_unittest:
+  count_lines_of_code:
 
     runs-on: ubuntu-22.04
    
@@ -23,11 +23,15 @@ jobs:
     - name: Count lines of code
       id: cloc
       run: |
-        cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" | grep SUM
+        cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" | grep SUM)
         cloc_blank_lines=$(echo "$cloc_output" | awk '{print $3}')
+        echo "blank lines: $cloc_blank_lines"
         cloc_comments_lines=$(echo "$cloc_output" | awk '{print $4}')
+        echo "comments lines: $cloc_comments_lines"
         cloc_code_lines=$(echo "$cloc_output" | awk '{print $5}')
+        echo "code lines: $cloc_code_lines"
         cloc_total_lines=$(($cloc_blank_lines + $cloc_comments_lines + $cloc_code_lines))
+        echo "total lines: $cloc_total_lines"
         echo "cloc_blank_lines=$cloc_blank_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_comments_lines=$cloc_comments_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines=$cloc_code_lines" >> "$GITHUB_OUTPUT"
