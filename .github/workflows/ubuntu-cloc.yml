@@ -22,12 +22,8 @@ jobs:
 
     - name: Count lines of code
       id: cloc
-      env:
-        EXCLUDE_PATTERNS: >-
-          heat_battery/visualization/assets/lotties,
-          heat_battery/visualization/assets/images
       run: |
-        cloc . --sum-one --quiet --exclude-dir=$EXCLUDE_PATTERNS | grep SUM
+        cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" | grep SUM
         cloc_blank_lines=$(echo "$cloc_output" | awk '{print $3}')
         cloc_comments_lines=$(echo "$cloc_output" | awk '{print $4}')
         cloc_code_lines=$(echo "$cloc_output" | awk '{print $5}')
