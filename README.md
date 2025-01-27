@@ -6,6 +6,7 @@
 [![build-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-build-ubuntu-24.04.json&logo=gnubash)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml) 
 [![unittest-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-unittest-ubuntu-24.04.json&logo=python)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
 [![diskusage-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/disk-usage-ubuntu-24.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)  
+[![cloc-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-cloc.yml)
 [![coverage-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/coverage-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
 
 ## Battery included heat equation solver for solid heat storages
