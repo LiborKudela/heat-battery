@@ -36,6 +36,11 @@ jobs:
         echo "cloc_comments_lines=$cloc_comments_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines=$cloc_code_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_total_lines=$cloc_total_lines" >> "$GITHUB_OUTPUT"
+        echo "cloc_total_lines_human=$(numfmt --to=si $cloc_total_lines)" >> "$GITHUB_OUTPUT"
+        echo "cloc_blank_lines_human=$(numfmt --to=si $cloc_blank_lines)" >> "$GITHUB_OUTPUT"
+        echo "cloc_comments_lines_human=$(numfmt --to=si $cloc_comments_lines)" >> "$GITHUB_OUTPUT"
+        echo "cloc_code_lines_human=$(numfmt --to=si $cloc_code_lines)" >> "$GITHUB_OUTPUT"
+
 
     - name: Create badge for lines of code
       uses: schneegans/dynamic-badges-action@v1.7.0
@@ -44,6 +49,6 @@ jobs:
         gistID: 6f402d08683e16acdfc545b806f60259
         filename: cloc-ubuntu-22.04.json
         label: Lines of code
-        message: "${{ steps.cloc.outputs.cloc_code_lines }}/${{ steps.cloc.outputs.cloc_total_lines }}"
+        message: "${{ steps.cloc.outputs.cloc_code_lines_human }}/${{ steps.cloc.outputs.cloc_total_lines_human }}"
         color: green
 
