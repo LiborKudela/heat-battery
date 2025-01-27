@@ -23,7 +23,7 @@ jobs:
     - name: Count lines of code
       id: cloc
       run: |
-        cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" | grep SUM)
+        cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" --ignored=ignored_cloc.txt --counted=found_cloc.txt | grep SUM)
         cloc_blank_lines=$(echo "$cloc_output" | awk '{print $3}')
         echo "blank lines: $cloc_blank_lines"
         cloc_comments_lines=$(echo "$cloc_output" | awk '{print $4}')
@@ -49,6 +49,13 @@ jobs:
         echo "cloc_comments_lines_human=$cloc_comments_lines_human" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines_human=$cloc_code_lines_human" >> "$GITHUB_OUTPUT"
 
+    - name: show found files
+      run: |
+        cat found_cloc.txt
+
+    - name: show ignored files
+      run: |
+        cat ignored_cloc.txt
 
     - name: Create badge for lines of code
       uses: schneegans/dynamic-badges-action@v1.7.0
