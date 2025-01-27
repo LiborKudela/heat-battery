@@ -367,6 +367,7 @@ if [ "$adios2_installed_version" != "" ]; then
 fi
 if [ "$skip_adios2_build" = "true" ]; then
     echo "ADIOS2 of version $adios2_pulled_version is already build and installed - skipping build"
+    rm -rf ADIOS2 || echo "Failed to remove ADIOS2 directory.."
 else
     echo "Building ADIOS2 of version $adios2_pulled_version..."
     mkdir build-adios2
@@ -416,8 +417,8 @@ else
     cd $ORG_PWD
     rm -rf ADIOS2
     rm -rf build-adios2
-    echo "ADIOS2 installed!"
 fi
+echo "ADIOS2 installed!"
 
 # install heat_battery
 echo "Installing heat_battery python package..."

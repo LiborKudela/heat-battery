@@ -19,6 +19,36 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set build badge to "in progress"
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: success-build-ubuntu-24.04.json
+        label: build
+        message: "in progress"
+        color: yellow
+
+    - name: Set unittest badge to "in progress"
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: success-unittest-ubuntu-24.04.json
+        label: Test
+        message: "in progress"
+        color: yellow
+
+    - name: Set disk usage badge to "in progress"
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: disk-usage-ubuntu-24.04.json
+        label: Disk usage
+        message: "in progress"
+        color: yellow
+
     - name: Store initial disk space
       run: echo avail_df[$(date '+%d.%m.%Y %H:%M:%S')]=$(df . --output=avail | tail -n 1) > vminfo.initial
 
@@ -38,6 +68,28 @@ jobs:
         config_hbdir=$(cat .github/github_test_config.yaml | grep -oP '(?<=bin_files_folder_prefix: )[^ ]+')
         bash install_scripts/install_ubuntu.sh -y -p --ppass ${config_ppass} --ppassc ${config_ppassc} --hbdir ${config_hbdir}
 
+    - name: Set build badge to "Failing" if install script fails
+      if: failure()
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: success-build-ubuntu-24.04.json
+        label: build
+        message: "failing"
+        color: red
+  
+    - name: Set build badge to "Succes" if install script completes without errors
+      if: success()
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        label: build
+        filename: success-build-ubuntu-24.04.json
+        message: "success"
+        color: green
+
     - name: Install coverage
       run: |
         source hb_venv/bin/activate
@@ -47,6 +99,28 @@ jobs:
       run: |
         source hb_venv/bin/activate
         python3 -m coverage run --source="./heat_battery" -m unittest discover -v -s ./test  -p 'test_*.py'
+
+    - name: Create success unittest badge
+      if: success()
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: success-unittest-ubuntu-24.04.json
+        label: Test
+        message: "Passing"
+        color: green
+  
+    - name: Set unittest badge to "Failing" if unittest fails
+      if: failure()
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: 6f402d08683e16acdfc545b806f60259
+        filename: success-unittest-ubuntu-24.04.json
+        label: Test
+        message: "Failing"
+        color: red
 
     - name: Coverage report
       id: coverage
