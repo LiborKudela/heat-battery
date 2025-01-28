@@ -9,7 +9,7 @@ fig.add_trace(
         x=df['date'], 
         y=df['cloc_total_lines'], 
         mode='markers+lines', 
-        name='Total lines (includes comments and blank lines)',
+        name='All lines',
     )
 )
 fig.add_trace(
@@ -17,7 +17,7 @@ fig.add_trace(
         x=df['date'], 
         y=df['cloc_code_lines'], 
         mode='markers+lines', 
-        name='Code lines (without comments or blank lines)',
+        name='Only code',
     ),
 )
 fig.add_trace(
@@ -25,7 +25,7 @@ fig.add_trace(
         x=df['date'],
         y=df['norm_pages'], 
         mode='markers+lines', 
-        name='Normalized pages (1800 chars per page)',
+        name='All text in normalized pages',
     ), 
     secondary_y=True,
 )
@@ -39,7 +39,7 @@ fig.update_layout(
         side='right',
     ),
     legend=dict(
-        orientation='h',
+        orientation='v',
         yanchor='bottom',
         y=1.02,
         xanchor='center',

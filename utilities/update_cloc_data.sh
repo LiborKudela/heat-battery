@@ -9,7 +9,7 @@ if [[ ! -f $cache_file ]]; then
 
 fi
 cache_count=$(wc -l $cache_file | awk '{ print $1 }')
-commits_to_process=$(git reflog master | awk '{ print $1 }' | tac | tail -n +$cache_count)
+commits_to_process=$(git log --format="%H" --reverse | awk '{ print $1 }' | tail -n +$cache_count)
 verbose=1;
 
 rm -rf $temp_dir/files || echo "no files to remove.. OK"

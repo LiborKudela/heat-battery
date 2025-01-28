@@ -23,11 +23,7 @@ jobs:
     - name: Count lines of code
       id: cloc
       run: |
-<<<<<<< HEAD
-        cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" --ignored=ignored_cloc.txt --counted=found_cloc.txt | grep SUM)
-=======
         cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)|assets/cloc" --ignored=ignored_cloc.txt --counted=found_cloc.txt | grep SUM)
->>>>>>> b20715a (move cloc assets to subfolder)
         cloc_blank_lines=$(echo "$cloc_output" | awk '{print $3}')
         cloc_comments_lines=$(echo "$cloc_output" | awk '{print $4}')
         cloc_code_lines=$(echo "$cloc_output" | awk '{print $5}')
