@@ -25,21 +25,28 @@ jobs:
       run: |
         cloc_output=$(cloc . --sum-one --quiet --fullpath --not-match-d="heat_battery/visualization/assets/(lotties|images)" --ignored=ignored_cloc.txt --counted=found_cloc.txt | grep SUM)
         cloc_blank_lines=$(echo "$cloc_output" | awk '{print $3}')
-        echo "blank lines: $cloc_blank_lines"
         cloc_comments_lines=$(echo "$cloc_output" | awk '{print $4}')
-        echo "comments lines: $cloc_comments_lines"
         cloc_code_lines=$(echo "$cloc_output" | awk '{print $5}')
-        echo "code lines: $cloc_code_lines"
         cloc_total_lines=$(($cloc_blank_lines + $cloc_comments_lines + $cloc_code_lines))
-        echo "total lines: $cloc_total_lines"
         cloc_total_lines_human=$(numfmt --to=si $cloc_total_lines)
-        echo "total lines human: $cloc_total_lines_human"
         cloc_blank_lines_human=$(numfmt --to=si $cloc_blank_lines)
-        echo "blank lines human: $cloc_blank_lines_human"
         cloc_comments_lines_human=$(numfmt --to=si $cloc_comments_lines)
-        echo "comments lines human: $cloc_comments_lines_human"
         cloc_code_lines_human=$(numfmt --to=si $cloc_code_lines)
+        wc_output=$(xargs -a found_cloc.txt wc -lm | grep 'total')
+        wc_total_lines=$(echo "$wc_output" | awk '{print $1}')
+        wc_total_chars=$(echo "$wc_output" | awk '{print $2}')
+        wc_norm_pages=$(($wc_total_chars / 1800))
+
+        echo "blank lines: $cloc_blank_lines"
+        echo "comments lines: $cloc_comments_lines"
+        echo "code lines: $cloc_code_lines"
+        echo "total lines: $cloc_total_lines"
+        echo "total lines human: $cloc_total_lines_human"
+        echo "blank lines human: $cloc_blank_lines_human"
+        echo "comments lines human: $cloc_comments_lines_human"
         echo "code lines human: $cloc_code_lines_human"
+        echo "norm pages: $wc_norm_pages"
+
         echo "cloc_blank_lines=$cloc_blank_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_comments_lines=$cloc_comments_lines" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines=$cloc_code_lines" >> "$GITHUB_OUTPUT"
@@ -48,6 +55,7 @@ jobs:
         echo "cloc_blank_lines_human=$cloc_blank_lines_human" >> "$GITHUB_OUTPUT"
         echo "cloc_comments_lines_human=$cloc_comments_lines_human" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines_human=$cloc_code_lines_human" >> "$GITHUB_OUTPUT"
+        echo "wc_norm_pages=$wc_norm_pages" >> "$GITHUB_OUTPUT"
 
     - name: show found files
       run: |
@@ -63,7 +71,7 @@ jobs:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 6f402d08683e16acdfc545b806f60259
         filename: cloc-ubuntu-22.04.json
-        label: Lines of code
-        message: "${{ steps.cloc.outputs.cloc_code_lines_human }}/${{ steps.cloc.outputs.cloc_total_lines_human }}"
+        label: Lines of code Total/Code/NPages
+        message: "${{ steps.cloc.outputs.cloc_code_lines_human }}/${{ steps.cloc.outputs.cloc_total_lines_human }}/${{ steps.cloc.outputs.wc_norm_pages }}"
         color: green
 
