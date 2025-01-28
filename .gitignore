@@ -2,7 +2,7 @@ config.yaml
 __pycache__/
 /.vscode
 heat_battery.egg*
-*heat_battery_temp*
+/heat_battery_temp
 /miscellaneous
 /structured_test
 /bin
@@ -17,3 +17,6 @@ trial*
 # ignore Example_05 it is not completed
 /examples/Example_05
 /examples/Example_06
+
+# ignore cloc data
+!/assets/cloc/line_count_cache.csv
