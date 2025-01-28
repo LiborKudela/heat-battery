@@ -36,7 +36,7 @@ jobs:
         wc_total_lines=$(echo "$wc_output" | awk '{print $1}')
         wc_total_chars=$(echo "$wc_output" | awk '{print $2}')
         wc_norm_pages=$(($wc_total_chars / 1800))
-
+        
         echo "blank lines: $cloc_blank_lines"
         echo "comments lines: $cloc_comments_lines"
         echo "code lines: $cloc_code_lines"
@@ -45,6 +45,8 @@ jobs:
         echo "blank lines human: $cloc_blank_lines_human"
         echo "comments lines human: $cloc_comments_lines_human"
         echo "code lines human: $cloc_code_lines_human"
+        echo "wc_total_lines: $wc_total_lines"
+        echo "wc_total_chars: $wc_total_chars"
         echo "norm pages: $wc_norm_pages"
 
         echo "cloc_blank_lines=$cloc_blank_lines" >> "$GITHUB_OUTPUT"
@@ -55,6 +57,8 @@ jobs:
         echo "cloc_blank_lines_human=$cloc_blank_lines_human" >> "$GITHUB_OUTPUT"
         echo "cloc_comments_lines_human=$cloc_comments_lines_human" >> "$GITHUB_OUTPUT"
         echo "cloc_code_lines_human=$cloc_code_lines_human" >> "$GITHUB_OUTPUT"
+        echo "wc_total_lines=$wc_total_lines" >> "$GITHUB_OUTPUT"
+        echo "wc_total_chars=$wc_total_chars" >> "$GITHUB_OUTPUT"
         echo "wc_norm_pages=$wc_norm_pages" >> "$GITHUB_OUTPUT"
 
     - name: show found files
