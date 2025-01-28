@@ -1,7 +1,7 @@
 #!/bin/bash
 
 temp_dir=$(mktemp -d)
-cache_file="assets/line_count_cache.csv"
+cache_file="assets/cloc/line_count_cache.csv"
 
 if [[ ! -f $cache_file ]]; then
     echo "Cache file not found, creating new cache file"
