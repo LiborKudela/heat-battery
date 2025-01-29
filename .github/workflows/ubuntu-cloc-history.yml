@@ -1,4 +1,4 @@
-name: Upload SVG to Gist
+name: Refresh cloc history cache and chart
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
          fetch-depth: 0
 
@@ -26,21 +26,16 @@ jobs:
 
       - name: Pull clocl cache file
         run: |
-          GIST_URL="https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc_history_cache.csv" || echo "failed to load cache file from gists: cloc_history_cache.csv"
-          curl -o cloc_history_cache.csv $GIST_URL
+          GIST_URL="https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc_history_cache.csv"
+          curl -s -o cloc_history_cache.csv $GIST_URL || curl -o cloc_history_cache.csv $GIST_URL 
           
       - name: Make install script executable
         run: chmod +x utilities/update_cloc_data.sh
 
       - name: Update cloc history data
         run: |
-          echo "Initial state of cache file:"
-          cat cloc_history_cache.csv
-          echo "Number of lines in cache file: $(wc -l cloc_history_cache.csv)"
           bash utilities/update_cloc_data.sh cloc_history_cache.csv
-          echo "Updated state of cache file:"
-          cat cloc_history_cache.csv
-          echo "Number of lines in cache file: $(wc -l cloc_history_cache.csv)"
+
       - name: Upload new cloc history data cache to gist
         env:
           GIST_TOKEN: ${{ secrets.GIST_SECRET }}
