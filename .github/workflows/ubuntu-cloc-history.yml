@@ -27,7 +27,7 @@ jobs:
 
       - name: Upload new cloc history data cache to gist
         env:
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_SECRET }}
           FILE_PATH: cloc_history_cache.csv
           GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
@@ -47,7 +47,7 @@ jobs:
 
       - name: Upload new SVG to Gist
         env:
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_SECRET }}
           FILE_PATH: cloc_history_cache.svg
           GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
