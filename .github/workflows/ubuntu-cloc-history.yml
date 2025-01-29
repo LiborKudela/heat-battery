@@ -15,10 +15,10 @@ jobs:
       - name: Install cloc and python dependencies
         run: |
           sudo apt-get install cloc
+          sudo apt-get install gh
           pip3 install plotly
           pip3 install -U kaleido
           pip3 install pandas
-          npm install @octokit/rest
 
       - name: Pull and update cloc history data
         run: |
@@ -27,49 +27,15 @@ jobs:
           bash utilities/update_cloc_data.sh cloc_history_cache.csv
 
       - name: Upload new cloc history data cache to gist
-        uses: actions/github-script@v4
-        with:
-          script: |
-            const { Gist } = await import('@octokit/rest');
-            const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
-
-            const gistId = '6f402d08683e16acdfc545b806f60259';
-            const cacheFilePath = 'cloc_history_cache.csv';
-            const csvContent = require('fs').readFileSync(cacheFilePath, 'utf8');
-
-            const response = await gist.create({
-              gist_id: gistId,
-              files: {
-                'cloc_history_cache.csv': {
-                  content: csvContent,
-                },
-              },
-            });
-
-            console.log(`Gist created: ${response.data.html_url}`);
+        run: |
+          gh auth login --with-token < ${{ secrets.GIST_SECRET }}
+          gh gist edit 6f402d08683e16acdfc545b806f60259 --add cloc_history_cache.csv
 
       - name: Create SVG chart files
         run: |
           python3 "utilities/create_cloc_chart.py" cloc_history_cache.csv
 
       - name: Upload new SVG to Gist
-        uses: actions/github-script@v4
-        with:
-          script: |
-            const { Gist } = await import('@octokit/rest');
-            const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
-
-            const gistId = '6f402d08683e16acdfc545b806f60259';
-            const svgFilePath = 'cloc_history_cache.svg';
-            const svgContent = require('fs').readFileSync(svgFilePath, 'utf8');
-
-            const response = await gist.create({
-              gist_id: gistId,
-              files: {
-                'cloc_history_cache.svg': {
-                  content: svgContent,
-                },
-              },
-            });
-
-            console.log(`Gist created: ${response.data.html_url}`);
+        run: |
+          gh auth login --with-token < ${{ secrets.GIST_SECRET }}
+          gh gist edit 6f402d08683e16acdfc545b806f60259 --add cloc_history_cache.svg
