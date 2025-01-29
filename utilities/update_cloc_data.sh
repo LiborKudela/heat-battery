@@ -10,8 +10,12 @@ if [[ ! -f $cache_file ]]; then
 
 fi
 cache_count=$(wc -l $cache_file | awk '{ print $1 }')
-commits_to_process=$(git log --format="%H" --reverse | awk '{ print $1 }' | tail -n +$cache_count)
+commits_in_repo=$(git log --format="%H" --reverse | awk '{ print $1 }')
+commits_to_process=$(echo "$commits_in_repo" | tail -n +$cache_count)
 verbose=1;
+echo "commits in repo: $commits_in_repo"
+echo "commits_to_process: $commits_to_process"
+echo "Updating cache file: $cache_file"
 
 rm -rf $temp_dir/files || echo "no files to remove.. OK"
 mkdir -p $temp_dir/files
