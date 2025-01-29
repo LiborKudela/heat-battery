@@ -26,6 +26,9 @@ jobs:
         run: |
           GIST_URL="https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc_history_cache.csv" || echo "failed to load cache file from gists: cloc_history_cache.csv"
           curl -o cloc_history_cache.csv $GIST_URL
+          
+      - name: Make install script executable
+        run: chmod +x utilities/update_cloc_data.sh
 
       - name: Update cloc history data
         run: |

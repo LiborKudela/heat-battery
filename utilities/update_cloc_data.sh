@@ -1,7 +1,8 @@
 #!/bin/bash
 
-temp_dir=$(mktemp -d)
 cache_file=$1
+echo "Running update_cloc_data.sh with received cache file name: $cache_file"
+temp_dir=$(mktemp -d)
 
 if [[ ! -f $cache_file ]]; then
     echo "Cache file not found, creating new cache file"
