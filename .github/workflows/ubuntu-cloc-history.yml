@@ -32,10 +32,12 @@ jobs:
           GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
           CONTENT=$(jq -Rs '.' < "$FILE_PATH")
+          echo "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}" > payload.json
           curl -X PATCH "https://api.github.com/gists/$GIST_ID" \
             -H "Authorization: token $GIST_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}"
+            -d @payload.json
+          rm payload.json
 
       - name: Create SVG chart files
         run: |
@@ -48,7 +50,9 @@ jobs:
           GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
           CONTENT=$(jq -Rs '.' < "$FILE_PATH")
+          echo "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}" > payload.json
           curl -X PATCH "https://api.github.com/gists/$GIST_ID" \
             -H "Authorization: token $GIST_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}"
+            -d @payload.json
+          rm payload.json
