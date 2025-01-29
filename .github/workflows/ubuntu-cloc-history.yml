@@ -1,0 +1,73 @@
+name: Upload SVG to Gist
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  upload-gist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install cloc and python dependencies
+        run: |
+          sudo apt-get install cloc
+          pip3 install plotly
+          pip3 install pandas
+
+      - name: Pull and update cloc history data
+        run: |
+          GIST_URL="https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc_history_cache.csv" || echo "failed to load cache file from gists: cloc_history_cache.csv"
+          curl -o cloc_history_cache.csv $GIST_URL
+          bash utilities/create_cloc_chart.sh cloc_history_cache.csv
+
+      - name: Upload new cloc history data cache to gist
+        uses: actions/github-script@v4
+        with:
+          script: |
+            const { Gist } = require('@octokit/rest');
+            const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
+
+            const gistId = '6f402d08683e16acdfc545b806f60259';
+            const cacheFilePath = 'cloc_history_cache.csv';
+            const csvContent = require('fs').readFileSync(cacheFilePath, 'utf8');
+
+            const response = await gist.create({
+              gist_id: gistId,
+              files: {
+                'cloc_history_cache.csv': {
+                  content: csvContent,
+                },
+              },
+            });
+
+            console.log(`Gist created: ${response.data.html_url}`);
+
+      - name: Create SVG chart files
+        run: |
+          python3 "utilities/create_cloc_chart.py" cloc_history_cache.csv
+
+      - name: Upload new SVG to Gist
+        uses: actions/github-script@v4
+        with:
+          script: |
+            const { Gist } = require('@octokit/rest');
+            const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
+
+            const gistId = '6f402d08683e16acdfc545b806f60259';
+            const svgFilePath = 'cloc_history_cache.svg';
+            const svgContent = require('fs').readFileSync(svgFilePath, 'utf8');
+
+            const response = await gist.create({
+              gist_id: gistId,
+              files: {
+                'cloc_history_cache.svg': {
+                  content: svgContent,
+                },
+              },
+            });
+
+            console.log(`Gist created: ${response.data.html_url}`);
