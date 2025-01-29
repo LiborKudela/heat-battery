@@ -5,6 +5,9 @@ on:
     branches: [ "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   upload-gist:
     runs-on: ubuntu-latest
@@ -19,12 +22,20 @@ jobs:
           pip3 install -U kaleido
           pip3 install pandas
 
-      - name: Pull and update cloc history data
+      - name: Pull clocl cache file
         run: |
           GIST_URL="https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc_history_cache.csv" || echo "failed to load cache file from gists: cloc_history_cache.csv"
           curl -o cloc_history_cache.csv $GIST_URL
-          bash utilities/update_cloc_data.sh cloc_history_cache.csv
 
+      - name: Update cloc history data
+        run: |
+          echo "Initial state of cache file:"
+          cat cloc_history_cache.csv
+          echo "Number of lines in cache file: $(wc -l cloc_history_cache.csv)"
+          bash utilities/update_cloc_data.sh cloc_history_cache.csv
+          echo "Updated state of cache file:"
+          cat cloc_history_cache.csv
+          echo "Number of lines in cache file: $(wc -l cloc_history_cache.csv)"
       - name: Upload new cloc history data cache to gist
         env:
           GIST_TOKEN: ${{ secrets.GIST_SECRET }}
@@ -44,6 +55,7 @@ jobs:
       - name: Create SVG chart files
         run: |
           python3 "utilities/create_cloc_chart.py" cloc_history_cache.csv
+          
 
       - name: Upload new SVG to Gist
         env:
