@@ -30,7 +30,7 @@ jobs:
         uses: actions/github-script@v4
         with:
           script: |
-            const { Gist } = require('@octokit/rest');
+            const { Gist } = await import('@octokit/rest');
             const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
 
             const gistId = '6f402d08683e16acdfc545b806f60259';
@@ -56,7 +56,7 @@ jobs:
         uses: actions/github-script@v4
         with:
           script: |
-            const { Gist } = require('@octokit/rest');
+            const { Gist } = await import('@octokit/rest');
             const gist = new Gist({ auth: ${{ secrets.GIST_SECRET }} });
 
             const gistId = '6f402d08683e16acdfc545b806f60259';
