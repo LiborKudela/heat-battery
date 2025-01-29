@@ -15,7 +15,6 @@ jobs:
       - name: Install cloc and python dependencies
         run: |
           sudo apt-get install cloc
-          sudo apt-get install gh
           pip3 install plotly
           pip3 install -U kaleido
           pip3 install pandas
@@ -28,10 +27,15 @@ jobs:
 
       - name: Upload new cloc history data cache to gist
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          FILE_PATH: cloc_history_cache.csv
+          GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
-          gh auth login
-          gh gist edit 6f402d08683e16acdfc545b806f60259 --add cloc_history_cache.csv
+          CONTENT=$(jq -Rs '.' < "$FILE_PATH")
+          curl -X PATCH "https://api.github.com/gists/$GIST_ID" \
+            -H "Authorization: token $GIST_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}"
 
       - name: Create SVG chart files
         run: |
@@ -39,7 +43,12 @@ jobs:
 
       - name: Upload new SVG to Gist
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          FILE_PATH: cloc_history_cache.svg
+          GIST_ID: "6f402d08683e16acdfc545b806f60259"
         run: |
-          gh auth login
-          gh gist edit 6f402d08683e16acdfc545b806f60259 --add cloc_history_cache.svg
+          CONTENT=$(jq -Rs '.' < "$FILE_PATH")
+          curl -X PATCH "https://api.github.com/gists/$GIST_ID" \
+            -H "Authorization: token $GIST_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"files\": {\"$(basename $FILE_PATH)\": {\"content\": $CONTENT}}}"
