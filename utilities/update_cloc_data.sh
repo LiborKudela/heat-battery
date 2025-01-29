@@ -53,5 +53,3 @@ for commit in $commits_to_process; do
 
 done
 rm -rf $temp_dir
-script_dir=$(dirname "${BASH_SOURCE[0]}")
-python3 "$script_dir/create_cloc_chart.py" $cache_file
