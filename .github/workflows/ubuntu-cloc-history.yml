@@ -16,6 +16,7 @@ jobs:
         run: |
           sudo apt-get install cloc
           pip3 install plotly
+          pip3 install -U kaleido
           pip3 install pandas
 
       - name: Pull and update cloc history data

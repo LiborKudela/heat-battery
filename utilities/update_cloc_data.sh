@@ -1,7 +1,7 @@
 #!/bin/bash
 
 temp_dir=$(mktemp -d)
-cache_file="assets/cloc/line_count_cache.csv"
+cache_file=$1
 
 if [[ ! -f $cache_file ]]; then
     echo "Cache file not found, creating new cache file"
@@ -49,4 +49,4 @@ for commit in $commits_to_process; do
 done
 rm -rf $temp_dir
 script_dir=$(dirname "${BASH_SOURCE[0]}")
-python3 "$script_dir/create_cloc_chart.py"
+python3 "$script_dir/create_cloc_chart.py" $cache_file

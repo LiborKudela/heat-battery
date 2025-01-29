@@ -1,8 +1,10 @@
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-df = pd.read_csv('assets/cloc/line_count_cache.csv', sep=';')
-df['date'] = pd.to_datetime(df['date'])
+import sys
+cache_file=sys.argv[1]
+df = pd.read_csv(cache_file, sep=';')
+df['date'] = pd.to_datetime(df['date'], utc=True)
 fig = make_subplots(specs=[[{'secondary_y': True}]])
 fig.add_trace(
     go.Scatter(
@@ -46,4 +48,5 @@ fig.update_layout(
         x=0.5,
     ),
 )
-fig.write_image('assets/cloc/line_count_cache.svg', scale=2, width=1024, height=512)
+svg_file=cache_file.replace('.csv', '.svg')
+fig.write_image(svg_file, scale=2, width=1024, height=512)
