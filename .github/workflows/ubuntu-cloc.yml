@@ -1,4 +1,4 @@
-name: Count lines of code
+name: Count lines of code and create badge
 
 on:
   push:
