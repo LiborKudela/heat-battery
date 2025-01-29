@@ -13,7 +13,6 @@ cache_count=$(wc -l $cache_file | awk '{ print $1 }')
 commits_in_repo=$(git log --format="%H" --reverse | awk '{ print $1 }')
 commits_to_process=$(echo "$commits_in_repo" | tail -n +$cache_count)
 verbose=1;
-echo "commits in repo: $commits_in_repo"
 echo "commits_to_process: $commits_to_process"
 echo "Updating cache file: $cache_file"
 
