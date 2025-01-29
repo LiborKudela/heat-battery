@@ -46,5 +46,4 @@ fig.update_layout(
         x=0.5,
     ),
 )
-fig.write_html('assets/cloc/line_count_cache.html')
 fig.write_image('assets/cloc/line_count_cache.svg', scale=2, width=1024, height=512)
