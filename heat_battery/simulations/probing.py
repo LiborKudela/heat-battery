@@ -109,6 +109,12 @@ class MemoryProbeWriteDestination(ProbeWriteDestination):
     def close(self):
         pass
 
+    def get_checkpoint_data(self):
+        return {'df_array': self.df.values, 'df_columns': self.df.columns}
+
+    def load_checkpoint_data(self, data: dict):
+        self.df = pd.DataFrame(data['df_array'], columns=data['df_columns'])
+
 class CSVFileProbeWriteDestination(ProbeWriteDestination):
     def __init__(
             self,
@@ -121,6 +127,7 @@ class CSVFileProbeWriteDestination(ProbeWriteDestination):
         self.flush = flush
         self.is_initialized = False
         self.printer = print
+        self.file_size = None
 
     @staticmethod
     def from_dict(d: dict):
@@ -137,9 +144,7 @@ class CSVFileProbeWriteDestination(ProbeWriteDestination):
     def initialize(
             self, 
             header_names: list[str],
-            mode: str = 'w',
         ):
-        assert mode in ['w', 'a'], "Mode must be 'w' or 'a'."
         if self.is_initialized:
             raise ValueError("CSVFileProbeWriteDestination already initialized.")
         if MPI.COMM_WORLD.rank == 0:
@@ -149,6 +154,15 @@ class CSVFileProbeWriteDestination(ProbeWriteDestination):
             result_file_path = os.path.join(self.result_dir, self.file_name)
             if os.path.exists(result_file_path):
                 self.printer(f"Probe file already exists: {result_file_path}. Overwriting.")
+            
+            if self.file_size is not None:
+                self.printer(f"Truncating file to {self.file_size} bytes according to checkpoint data...")
+                with open(result_file_path, 'r+b') as f:
+                    f.seek(self.file_size)
+                    f.truncate()
+                mode = 'a'
+            else:
+                mode = 'w'
             self.file = open(result_file_path, mode, newline='')
             self.printer(f"New probe file opened: {self.file}")
             self.writer = csv.writer(self.file)
@@ -169,6 +183,13 @@ class CSVFileProbeWriteDestination(ProbeWriteDestination):
         if MPI.COMM_WORLD.rank == 0:
             self.file.close()
 
+    def get_checkpoint_data(self):
+        size = os.path.getsize(self.file_path)
+        return {'file_size': size}
+
+    def load_checkpoint_data(self, data: dict):
+        self.file_size = data['file_size']
+
 class DatabaseProbeWriteDestination(ProbeWriteDestination):
     def __init__(
             self,
@@ -181,6 +202,7 @@ class DatabaseProbeWriteDestination(ProbeWriteDestination):
         self.table_name = table_name
         self.printer = print
         self.is_initialized = False
+        self.bytes_written = None
 
     @staticmethod
     def from_dict(d: dict):
@@ -227,10 +249,12 @@ class DatabaseProbeWriteDestination(ProbeWriteDestination):
             header_bytes = n_cols_bytes + n_cols_names_bytes + col_names_bytes
 
             if mode == 'w':
+                print(f'Writing header to probe file: {self.binary_file_name}')
                 query = sql.SQL("SELECT {}.write_bytes_to_file(%s, %s)")
                 query = query.format(sql.Identifier(self.project_name))
                 cur = self.conn.cursor()
-                cur.execute(query, (self.binary_file_name, header_bytes))  
+                cur.execute(query, (self.binary_file_name, header_bytes)) 
+                self.bytes_written = len(header_bytes)
             
                 # write colums to job table
                 query = sql.SQL("UPDATE {} SET {} = %s")
@@ -243,31 +267,43 @@ class DatabaseProbeWriteDestination(ProbeWriteDestination):
                 self.conn.commit()
             elif mode == 'a':
                 # check that colums agree
-                query = sql.SQL("SELECT column_name FROM information_schema.columns WHERE table_name = %s")
-                query = query.format(sql.Identifier(self.project_name, 'jobs'))
+                print(f'Initializing DatabaseProbeWriteDestination in append mode...')
+                print(f'Truncating file to {self.bytes_written} bytes according to checkpoint data...')
+                query = sql.SQL("SELECT {}.truncate_file(%s, %s)")
+                query = query.format(sql.Identifier(self.project_name))
                 cur = self.conn.cursor()
-                cur.execute(query, (self.binary_file_name,))
-                res = cur.fetchall()
-                if res != header_names:
-                    raise ValueError(
-                        "Column names of ProbeWriter do not agree with existing "
-                        "file in Database. \n"
-                        f"Columns in database: {len(res)} columns -> {res}\n"
-                        f"Columns in ProbeWriter: {len(header_names)} columns -> {header_names}\n"
-                        "Aborting since this is critical error."
-                    )
+                cur.execute(query, (self.binary_file_name, self.bytes_written))
+                self.conn.commit()
 
             self.insert_query = sql.SQL(f"SELECT {self.project_name}.append_bytes_to_file('{self.binary_file_name}', %s)")
+            print('Initialization of DatabaseProbeWriteDestination complete.')
 
     def initialize(
         self, 
         header_names: list[str],
-        mode: str = 'w',
     ):
         if self.is_initialized:
             raise ValueError("DatabaseProbeWriteDestination already initialized.")
-        self._initialize_query(header_names)
+        if self.bytes_written is None:
+            self._initialize_query(header_names, mode='w')
+        else:
+            self._initialize_query(header_names, mode='a')
         self.is_initialized = True
+
+    @debounced_query
+    def _get_file_size_query(self):
+        if MPI.COMM_WORLD.rank == 0:
+            query = sql.SQL("SELECT {}.get_file_size(%s)")
+            query = query.format(sql.Identifier(self.project_name))
+            cur = self.conn.cursor()
+            cur.execute(query, (self.binary_file_name,))
+            n_bytes = cur.fetchone()[0]
+        return n_bytes
+    
+    def get_file_size(self):
+        n_bytes = self._get_file_size_query()
+        n_bytes = MPI.COMM_WORLD.bcast(n_bytes, root=0)
+        return n_bytes
 
     @debounced_query
     def _write_row_query(
@@ -281,6 +317,7 @@ class DatabaseProbeWriteDestination(ProbeWriteDestination):
             bytes_row = np.array(values, dtype=np.float64).tobytes()
             cur.execute(self.insert_query, (bytes_row,))
             self.conn.commit()
+            self.bytes_written += len(bytes_row)
 
     def write_row(
         self, 
@@ -294,6 +331,12 @@ class DatabaseProbeWriteDestination(ProbeWriteDestination):
             self.printer(f"Database connection closed.")
         self.is_initialized = False
 
+    def get_checkpoint_data(self):
+        return {'bytes_written': self.bytes_written}
+
+    def load_checkpoint_data(self, data: dict):
+        self.bytes_written = data['bytes_written']
+
 def parse_probe_destinations(d):
     assert isinstance(d, dict), "Probe destinations must be a dictionary."
     assert 'type' in d, "Probe destinations must have a 'type' key."
@@ -306,107 +349,6 @@ def parse_probe_destinations(d):
         return CSVFileProbeWriteDestination.from_dict(d)
     elif d['type'] == 'database':
         return DatabaseProbeWriteDestination.from_dict(d)
-    
-class CheckpointDestination:
-    def __init__(self, path):
-        self.path = path
-
-    def get_temp_dir(self):
-        return self.path
-
-    def check_unpacked_checkpoint(self):
-        if MPI.COMM_WORLD.rank == 0:
-            if os.path.isdir(self.path):
-                # check the ADIOS2 stuff
-                if os.path.isdir(os.path.join(self.path, 'function')):
-                    for item in ['data.0', 'md.0', 'md.idx', 'profiling.json']:
-                        item_path = os.path.join(self.path, 'function', item)
-                        if not os.path.isfile(item_path):
-                            return False
-                        
-                # check the data of terms and local
-                if not os.path.isfile(os.path.join(self.path, 'data.pickle')):
-                    return False
-                else:
-                    return True # valid checkpoint
-            else:
-                return False
-            
-    def check_destination(self):
-        return self.check_unpacked_checkpoint()
-
-    def archive_checkpoint(self):
-        pass
-
-    def unpack_checkpoint(self):
-        pass
-
-class ArchiveCheckpointDestination(CheckpointDestination):
-    def __init__(self, archive_path, temp_dir, format='zip'):
-        self.archive_path = archive_path
-        self.temp_dir = temp_dir
-        self.format = format
-
-    def get_temp_dir(self):
-        return self.temp_dir
-
-    def check_destination(self):
-        return os.path.exists(self.archive_path)
-
-    def archive_checkpoint(self):
-        self.check_unpacked_checkpoint()
-        if MPI.COMM_WORLD.rank == 0:
-            shutil.make_archive(
-                base_name=self.archive_path,
-                format=self.format,
-                root_dir=self.temp_dir
-            )
-
-    def unpack_checkpoint(self):
-        if MPI.COMM_WORLD.rank == 0:
-            shutil.unpack_archive(
-                filename=self.archive_path,
-                extract_dir=self.temp_dir,
-                format=self.format
-            )
-        self.check_unpacked_checkpoint()
-
-    def check_destination(self):
-        return os.path.isfile(self.archive_path)
-
-# class DatabaseCheckpointDestination(CheckpointDestination):
-#     def __init__(self, db_name, project_name, table_name, format='zip'):
-#         self.db_name = db_name
-#         self.project_name = project_name
-#         self.table_name = table_name
-#         self.format = format
-#         self.temp_dir = os.path.join(get_config_item(['database', 'postgres', 'res_folder_prefix']), 'checkpoint')
-
-#     def check_destination(self):
-#         return False 
-
-#     @debounced_query
-#     def _archive_checkpoint_query(
-#             self, 
-#             checkpoint_dir: str
-#         ):
-#         self.check_unpacked_checkpoint()
-#         if MPI.COMM_WORLD.rank == 0:   
-#             shutil.make_archive(
-#                 base_name=os.path.join(self.temp_dir, self.table_name),
-#                 format=self.format,
-#                 root_dir=checkpoint_dir
-#             )
-#             with DBConnection() as conn:
-#                 query = sql.SQL("UPDATE {} SET {} = %s")
-
-#     def unpack_checkpoint(self, checkpoint_dir):
-#         if MPI.COMM_WORLD.rank == 0:
-#             shutil.unpack_archive(
-#                 filename=self.path,
-#                 extract_dir=checkpoint_dir,
-#                 format=self.format
-#             )
         
 class Probe_writer:
     def __init__(self, flush=True):

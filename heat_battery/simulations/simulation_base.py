@@ -632,6 +632,7 @@ class Simulation():
             call_back_each_step (int): trigger callback after simulations advances this many steps
             custom_xdmf_trigger (function): not implemented yet
         """
+        
         if load_initial_checkpoint is None:
             # set initial state of simulation
             if T0 is not None:    
@@ -666,7 +667,13 @@ class Simulation():
             # set initial state of simulation from checkpoint
             # this function wills set the terms constants inplace.
             # some local data need to be handled by the caller manually.
-            local_data = self.load_unsteady_checkpoint(load_initial_checkpoint)
+
+            #TODO: do not mix in place and out of place 
+            self.load_metadata_checkpoint(load_initial_checkpoint, checkpoint_fname='metadata')
+            self.load_simulation_constants_checkpoint(load_initial_checkpoint, checkpoint_fname='constants') # load before functions
+            self.load_function_checkpoint(load_initial_checkpoint, checkpoint_fname='functions')
+            self.load_terms_checkpoint(load_initial_checkpoint, checkpoint_fname='terms')
+            local_data = self.load_local_scope_data_checkpoint(load_initial_checkpoint, checkpoint_fname='local_data')
             in_event: bool = local_data["in_event"]
             pre_event_dt : float = local_data["pre_event_dt"]
             prev_callback_t = local_data["prev_callback_t"]
@@ -690,6 +697,8 @@ class Simulation():
         if probe_destinations:
             for destination in probe_destinations:
                 self.unsteady_probes.add_destination(destination)
+        if load_initial_checkpoint is not None:
+            self.load_probe_destination_checkpoints(load_initial_checkpoint, checkpoint_fname='probes')
         self.unsteady_probes.initialize()
         
         if probes_callbacks is not None:
@@ -932,11 +941,8 @@ class Simulation():
         # if MPI.COMM_WORLD.rank == 0:
         #     return self.unsteady_probes
 
-    def save_unsteady_checkpoint(self, checkpoint_dir, local_data=None):
-
-        function_folder = Path(checkpoint_dir, "functions")
-        data_file = Path(checkpoint_dir, "data").with_suffix(".pickle")
-        metadata_file = Path(checkpoint_dir, "metadata").with_suffix(".json")
+    def save_function_checkpoint(self, checkpoint_dir, checkpoint_fname='functions'):
+        function_folder = Path(checkpoint_dir, checkpoint_fname)
         # save function of temperature T_n
         adios4dolfinx.write_function_on_input_mesh( 
             function_folder, 
@@ -955,20 +961,20 @@ class Simulation():
             name="Temperature",
         )
 
-        # get simulations constants
+    def save_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
+        data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = {}
         data["t_n"] = self.t_n.value
         data["t"] = self.t.value
         data["dt"] = self.dt.value
         data["h0_T_ref"] = self.mats[0].h0_T_ref.value
-        data["q_source_data"] = [None]*len(self.q_source) 
-        data["bcs_terms_data"] = [None]*len(self.bcs_terms)
-        data["local_data"] = {}
-        if local_data is not None:
-            for key, value in local_data.items():
-                data["local_data"][key] = value
+        save_data_binary(data_file, data)
 
-        # get source Terms data
+    def save_terms_checkpoint(self, checkpoint_dir, checkpoint_fname='terms'):
+        terms_data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        data = {}
+        data["q_source_data"] = [None]*len(self.q_source)
+        data["bcs_terms_data"] = [None]*len(self.bcs_terms)
         for i, term in enumerate(self.q_source):
             if term is not None:
                 data[f"q_source_data"][i] = term.get_checkpoint_data()
@@ -978,31 +984,62 @@ class Simulation():
             if term is not None:
                 data[f"bcs_terms_data"][i] = term.get_checkpoint_data()
 
-        # save data
-        save_data_binary(data_file, data)
+        save_data_binary(terms_data_file, data)
 
-        # save metadata
+    def save_probe_destination_checkpoints(self, checkpoint_dir, checkpoint_fname='probes'):
+        probe_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        data = [None]*len(self.unsteady_probes.destinations)
+        for i, probe_destination in enumerate(self.unsteady_probes.destinations):
+            data[i] = probe_destination.get_checkpoint_data()
+
+        save_data_binary(probe_file, data)
+
+    def save_metadata_checkpoint(self, checkpoint_dir, checkpoint_fname='metadata'):
+        metadata_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".json")
         metadata = {
             "progress": self.unsteady_probes.get_value('progress'),
             "local_timestamp": datetime.datetime.now().isoformat(),
         }
         save_data_json(metadata_file, metadata)
 
-    def load_unsteady_checkpoint(self, checkpoint_dir):
-        function_folder = Path(checkpoint_dir, "functions")
-        data_file = Path(checkpoint_dir, "data").with_suffix(".pickle")
-        metadata_file = Path(checkpoint_dir, "metadata").with_suffix(".json")
+    def save_local_scope_data_checkpoint(self, checkpoint_dir, checkpoint_fname='local_data', data=None):
+        data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        save_data_binary(data_file, data)
 
-        # load simulations constants
+    def save_unsteady_checkpoint(self, checkpoint_dir, local_data=None):
+        self.save_simulation_constants_checkpoint(checkpoint_dir, checkpoint_fname='constants') #must be first
+        self.save_function_checkpoint(checkpoint_dir, checkpoint_fname='functions')
+        self.save_terms_checkpoint(checkpoint_dir, checkpoint_fname='terms')
+        self.save_probe_destination_checkpoints(checkpoint_dir, checkpoint_fname='probes')
+        self.save_local_scope_data_checkpoint(checkpoint_dir, checkpoint_fname='local_data', data=local_data)
+        self.save_metadata_checkpoint(checkpoint_dir, checkpoint_fname='metadata')
+
+    def load_function_checkpoint(self, checkpoint_dir, checkpoint_fname='functions'):
+        function_folder = Path(checkpoint_dir, checkpoint_fname)
+        adios4dolfinx.read_function(
+            function_folder, 
+            self.T_n, 
+            time=self.t_n.value, 
+            name="Temperature_n",
+        )
+        adios4dolfinx.read_function(
+            function_folder, 
+            self.T, 
+            time=self.t.value, 
+            name="Temperature",
+        )
+
+    def load_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
+        data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(data_file)
         self.t_n.value = data["t_n"]
         self.t.value = data["t"]
         self.dt.value = data["dt"]
         self.mats.set_h0_T_ref(data["h0_T_ref"])
 
-        # load metadata
-        # metadata = load_data_json(metadata_file)
-
+    def load_terms_checkpoint(self, checkpoint_dir, checkpoint_fname='terms'):
+        terms_data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        data = load_data_binary(terms_data_file)
         # load source Terms data
         for i, term in enumerate(self.q_source):
             if term is not None:
@@ -1020,24 +1057,36 @@ class Simulation():
                 else:
                     bcs_names = list(self.bcs.keys())
                     raise ValueError(f"No data for boundary term[{i}]({bcs_names[i]}) in checkpoint")
-                
-        # load function of temperature data
-        adios4dolfinx.read_function(
-            function_folder, 
-            self.T_n, 
-            time=self.t_n.value, 
-            name="Temperature_n",
-        )
 
-        # load function of temperature data
-        adios4dolfinx.read_function(
-            function_folder, 
-            self.T, 
-            time=self.t.value, 
-            name="Temperature",
-        )
+    def load_probe_destination_checkpoints(self, checkpoint_dir, checkpoint_fname='probes'):
+        data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        data = load_data_binary(data_file)
+        for i, probe_destination in enumerate(self.unsteady_probes.destinations):
+            assert len(data) == len(self.unsteady_probes.destinations), "Number of probe destinations in checkpoint does not match"
+            if data[i] is not None:
+                probe_destination.load_checkpoint_data(data[i])
+            else:
+                probe_destination_names = list(probe_destination.keys())
+                raise ValueError(f"No data for probe destination[{i}]({probe_destination_names[i]}) in checkpoint")
 
-        return data["local_data"]
+    def load_metadata_checkpoint(self, checkpoint_dir, checkpoint_fname='metadata'):
+        metadata_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".json")
+        metadata = load_data_json(metadata_file)
+        return metadata
+            
+    def load_local_scope_data_checkpoint(self, checkpoint_dir, checkpoint_fname='local_data'):
+        data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
+        data = load_data_binary(data_file)
+        return data
+
+    def load_unsteady_checkpoint(self, checkpoint_dir):
+        self.load_simulation_constants_checkpoint(checkpoint_dir, checkpoint_fname='constants')
+        self.load_terms_checkpoint(checkpoint_dir, checkpoint_fname='terms')
+        self.load_probe_destination_checkpoints(checkpoint_dir, checkpoint_fname='probes')
+        self.load_function_checkpoint(checkpoint_dir, checkpoint_fname='functions')
+        self.load_metadata_checkpoint(checkpoint_dir, checkpoint_fname='metadata')
+        local_data = self.load_local_scope_data_checkpoint(checkpoint_dir, checkpoint_fname='local_data')
+        return local_data
 
     def get_temperature_range(self, cell_tag=None):
         'This method must run on all rank to work properly'

@@ -228,6 +228,20 @@ def _create_all_python_procedures_query(
         cur = conn.cursor()
         cur.execute(query)
 
+        # create the procedure for truncating a file at a specific position
+        REQUIRED_PROCEDURES.append('truncate_file')
+        query = sql.SQL(
+            f"DROP FUNCTION IF EXISTS {project_name}.truncate_file(file_path text, keep_n_bytes integer);\n"
+            f"CREATE OR REPLACE FUNCTION {project_name}.truncate_file(file_path text, keep_n_bytes integer)\n"
+            "RETURNS void AS $$\n"
+            "with open(file_path, 'r+b') as f:\n"
+            "    f.seek(keep_n_bytes)\n"
+            "    f.truncate()\n"
+            "$$ LANGUAGE plpython3u;"
+        )
+        cur = conn.cursor()
+        cur.execute(query)
+
         # create the procedure for writing bytes to a file
         REQUIRED_PROCEDURES.append('write_bytes_to_file')
         query = sql.SQL(
@@ -250,6 +264,19 @@ def _create_all_python_procedures_query(
             "with open(file_path, 'rb') as f:\n"
             "    f.seek(seek_n_bytes)\n"
             "    return f.read()\n"
+            "$$ LANGUAGE plpython3u;"
+        )
+        cur = conn.cursor()
+        cur.execute(query)
+
+        # create the procedure for getting the size of a file in bytes
+        REQUIRED_PROCEDURES.append('get_file_size')
+        query = sql.SQL(
+            f"DROP FUNCTION IF EXISTS {project_name}.get_file_size(file_path text);\n"
+            f"CREATE OR REPLACE FUNCTION {project_name}.get_file_size(file_path text)\n"
+            "RETURNS integer AS $$\n"
+            "import os\n"
+            "return os.path.getsize(file_path)\n"
             "$$ LANGUAGE plpython3u;"
         )
         cur = conn.cursor()
@@ -1576,6 +1603,38 @@ class Project:
 
     @only_rank_0
     @debounced_query
+    def _truncate_result_binary_file_query(
+        self,
+        signature: str,
+        keep_n_bytes: int,
+        conn: psycopg2.extensions.connection = None,
+    ):
+        commit = conn is None
+        with DBConnection() if commit else conn as conn:
+            query = sql.SQL("SELECT {}.truncate_file(%s, %s)")
+            query = query.format(sql.Identifier(self.project_name))
+            binary_file_path = os.path.join(
+                self.res_prefix, 
+                f'{signature}.hbres'
+            )
+            cur = conn.cursor()
+            cur.execute(query, (binary_file_path, keep_n_bytes))
+            if commit:
+                conn.commit()
+
+    def truncate_result_binary_file(self, signature: str, keep_n_bytes: int):
+        """Truncates the result binary file at the specified position.
+        
+        Args:
+            signature: The signature of the job whose result file should be truncated
+            position: The position in bytes where the file should be truncated
+                     (all data after this position will be removed)
+        """
+        self._truncate_result_binary_file_query(signature=signature, keep_n_bytes=keep_n_bytes)
+
+
+    @only_rank_0
+    @debounced_query
     def _append_data_to_result_binary_file_query(
             self, 
             signature:str, 
@@ -1625,7 +1684,7 @@ class Project:
         return MPI.COMM_WORLD.bcast(res, root=0)
 
     @only_rank_0
-    def _parse_binary_result_bytes(self, binary_data:bytes):
+    def _parse_binary_result_header(self, binary_data:bytes):
         size = len(binary_data)
         mem_view_bytes = memoryview(binary_data)
         n_cols = np.frombuffer(mem_view_bytes[:8], dtype=np.int64)[0]
@@ -1635,8 +1694,13 @@ class Project:
             "Size of binary data is not divisible by number size of float64 (8 bytes)"
         )
         n_rows = int((size-16-n_cols_names) / (n_cols * 8))
+        return n_cols, n_cols_names, col_names, n_rows
 
+    @only_rank_0
+    def _parse_binary_result_bytes(self, binary_data:bytes):
+        n_cols, n_cols_names, col_names, n_rows = self._parse_binary_result_header(binary_data)
         start_time = time.time()
+        mem_view_bytes = memoryview(binary_data)
         array = np.frombuffer(mem_view_bytes[16+n_cols_names:], dtype=np.float64).reshape(n_rows, n_cols)
         return array, col_names, n_cols, n_rows
         
