@@ -1,5 +1,12 @@
 user: 
-    username: Github Actions
+    first_name: Firstname
+    last_name: Lastname
+    github_username: github_username
+    email: email@email.com
+    x_handle: x_handle
+    avatar_url: null
+    link: https://github.com/github_username
+    force_avatar_key: x_handle
 
 database:
     use_engine: postgresql
