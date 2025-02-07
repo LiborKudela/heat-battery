@@ -6,13 +6,18 @@ class ContentItem:
 
     last_id = 0
 
-    def __init__(self):
+    def __init__(self, parent=None, bootstrap_style:str='bootstrap'):
         self.id = self.get_new_id()
         self.data = None
         self.update_current_time_stamp()
+        self.parent = parent
+        self.bootstrap_style = bootstrap_style
 
     def get_children(self):
         return []
+    
+    def preload_cache_data(self):
+        pass
 
     def set_server_data(self, server_data):
         self.server_data = server_data

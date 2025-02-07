@@ -15,8 +15,9 @@ trial*
 *.csv
 
 # ignore Example_05 it is not completed
-/examples/Example_05
-/examples/Example_06
+examples/Example_0*/data*
+examples/Example_0*/meshes*
+examples/Example_0*/results*
 
 # ignore cloc data
 !/assets/cloc/line_count_cache.csv

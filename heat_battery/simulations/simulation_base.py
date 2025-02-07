@@ -657,12 +657,14 @@ class Simulation():
             self.dt.value = dt_start
             in_event: bool = False
             pre_event_dt : float = 0.0
+            self.elapsed = 0.0
             self.t.value = 0
             self.t_n.value = self.t.value
             prev_callback_t = 0.0
             prev_callback_step = 0
             next_xdmf_t = 0.0
             prev_checkpoint_t = 0.0
+            step = 0
         elif True: #os.path.isfile(Path(load_initial_checkpoint).with_suffix('.bp')) and os.path.isfile(Path(load_initial_checkpoint).with_suffix('.json')):
             # set initial state of simulation from checkpoint
             # this function wills set the terms constants inplace.
@@ -680,7 +682,7 @@ class Simulation():
             prev_callback_step = local_data["prev_callback_step"]
             next_xdmf_t = local_data["next_xdmf_t"]
             prev_checkpoint_t = local_data["prev_checkpoint_t"]
-
+            step = local_data["step"]
         # set tolerances
         self.unsteady_solver.atol = atol
         self.unsteady_solver.rtol = rtol
@@ -689,9 +691,6 @@ class Simulation():
             self.timestamp_start = datetime.datetime.strptime(datetime_start, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
         else:
             self.datetime_start = 0.0
-
-        # start stopwatch for total cpu time
-        t_start = time.time()
 
         # set unsteady probes outputs locations
         if probe_destinations:
@@ -730,7 +729,6 @@ class Simulation():
         # time steping loop with time adaptation
         self.t_max = t_max
         stop_timesteping = False
-        step = 0
         while self.t.value < self.t_max:
             i_start = time.time() # start stopwatch for cputime of one iteration
             step += 1
@@ -891,8 +889,8 @@ class Simulation():
 
             # Compute how long everything took
             if MPI.COMM_WORLD.rank == 0:
-                self.elapsed = time.time() - t_start
                 self.ielapsed = time.time() - i_start
+                self.elapsed += self.ielapsed
 
             # Write the probes (appending mode)
             self.unsteady_probes.write_all_set_probes_outputs()
@@ -923,6 +921,7 @@ class Simulation():
                     "prev_checkpoint_t": prev_checkpoint_t,
                     "in_event": in_event,
                     "pre_event_dt": pre_event_dt,
+                    "step": step,
                 }
                 assert local_data["in_event"] == False, "Checkpoint should not be saved in event"
                 prev_checkpoint_t += checkpoint_dt
@@ -964,6 +963,7 @@ class Simulation():
     def save_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = {}
+        data["elapsed"] = self.elapsed
         data["t_n"] = self.t_n.value
         data["t"] = self.t.value
         data["dt"] = self.dt.value
@@ -1032,6 +1032,7 @@ class Simulation():
     def load_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(data_file)
+        self.elapsed = data["elapsed"]
         self.t_n.value = data["t_n"]
         self.t.value = data["t"]
         self.dt.value = data["dt"]

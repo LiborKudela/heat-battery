@@ -6,7 +6,7 @@ class HomePage(VisualizerApp):
     def __init__(self, name="Home"):
         super().__init__(name=name)
 
-    def get_layout(self):
+    def get_layout(self, qs_data:dict|None=None):
         return dash_enrich.html.Div(
             children=[
                 Lottie(
@@ -17,24 +17,3 @@ class HomePage(VisualizerApp):
                 ),
             ],
         )
-    
-class SingleItemPage(VisualizerApp):
-    def __init__(self, name, item):
-        super().__init__(name=name)
-        self.item = item
-
-    def get_children(self):
-        return [self.item]
-
-    def update_data(self):
-        self.item.update_data()
-
-    def get_layout(self):
-        div = dash_enrich.html.Div(
-            children=[self.item.get_layout()],
-            style={'height':'100%'},
-            )
-        return div
-    
-    def set_callbacks(self, server):
-        self.item.set_callbacks(server)

@@ -1,6 +1,13 @@
 user: 
-    username: null
-    
+    first_name: null
+    last_name: null
+    github_username: null
+    email: null
+    x_handle: null
+    avatar_url: null
+    link: null
+    force_avatar_key: null
+
 local_temp_dir: heat_battery_temp
 
 database:

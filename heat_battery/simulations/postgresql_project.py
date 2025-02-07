@@ -1413,6 +1413,25 @@ class Project:
 
     @only_rank_0
     @debounced_query
+    def _get_input_outputs_query(
+        self, 
+        signature:str,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("SELECT p_inputs, output FROM {} WHERE signature = %s")
+            query = query.format(self.get_jobs_table_sql_identifier())
+            cur = conn.cursor()
+            cur.execute(query, (signature, ))
+            res = cur.fetchone()
+            return {'inputs': res[0], 'outputs': res[1]}
+
+    def get_input_outputs(self, signature:str):
+        res = self._get_input_outputs_query(signature=signature)
+        return MPI.COMM_WORLD.bcast(res, root=0)
+
+    @only_rank_0
+    @debounced_query
     def _get_parameter_space_query(
         self, 
         group_names:list[str]|None=None,
@@ -1852,60 +1871,6 @@ class Project:
             df:pd.DataFrame, 
         ):
         self._upload_result_table_query(signature=signature, df=df)
-
-    # @only_rank_0
-    # @debounced_query
-    # def _copy_csv_to_result_table_query(
-    #     self, 
-    #     signature:str, 
-    #     path_to_csv:str,
-    #     conn:psycopg2.extensions.connection=None,
-    #     ):
-    #     commit = conn is None
-    #     with DBConnection() if commit else conn as conn:
-    #         query = sql.SQL("COPY {} FROM {} WITH CSV HEADER")
-    #         query = query.format(
-    #             sql.Identifier(self.project_name, f'res_{signature}'),
-    #             sql.Literal(path_to_csv),
-    #         )
-    #         cur = conn.cursor()
-    #         cur.execute(query)
-    #         if commit:
-    #             conn.commit()
-
-    # def copy_csv_to_result_table(
-    #         self, 
-    #         signature:str, 
-    #         path_to_csv:str,
-    #     ):
-    #     self._copy_csv_to_result_table_query(
-    #         signature=signature, 
-    #         path_to_csv=path_to_csv,
-    #     )
-
-    # @only_rank_0
-    # @debounced_query
-    # def _clean_files_query(
-    #     self, 
-    #     conn:psycopg2.extensions.connection=None, 
-    #     ):
-    #     with DBConnection() if conn is None else conn as conn:
-    #         query = sql.SQL(
-    #             "SELECT array_agg(uq) FROM "
-    #             "(SELECT DISTINCT unnest(required_source_files) as uq FROM {})"
-    #             "subquery"
-    #         )
-    #         query = query.format(
-    #             self.get_jobs_table_sql_identifier(self.project_name),
-    #             )
-    #         cur =  conn.cursor()
-    #         cur.execute(query)
-    #         res = cur.fetchone()[0]
-    #     return res
-    
-    # def clean_files(self):
-    #     res = self._clean_files_query()
-    #     return MPI.COMM_WORLD.bcast(res, root=0)
  
     def __repr__(self):
         return f"Project(name={self.project_name})"

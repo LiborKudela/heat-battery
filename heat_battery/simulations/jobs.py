@@ -33,7 +33,7 @@ class Job:
         'group_signature': 'TEXT',
         'group_priority': 'INTEGER',
         'signature': 'TEXT UNIQUE',
-        'created_by': 'TEXT',
+        'created_by': 'JSONB',
         'insert_datetime': 'TIMESTAMP WITH TIME ZONE',
         'last_updated': 'TIMESTAMP WITH TIME ZONE',
         'last_checkpoint_date': 'TIMESTAMP WITH TIME ZONE',
@@ -502,7 +502,7 @@ def new_jobs_generator(
     #      }
     # )
     p_grid.instantiate()
-    created_by = get_config_item(['user', 'username'])
+    created_by = get_config_item(['user'], must_be_terminating_key=False)
 
     for p_input in p_grid.kde_parameters():
 
@@ -510,7 +510,7 @@ def new_jobs_generator(
             group_name=group_name,
             group_signature=p_input['GROUP_SIGNATURE'][:GROUP_SIGNATURE_LENGTH],
             group_priority=group_priority,
-            created_by=created_by,
+            created_by=json.dumps(created_by),
             insert_datetime="UNDEFINED",
             last_updated='UNDEFINED',
             last_checkpoint_date=None,
