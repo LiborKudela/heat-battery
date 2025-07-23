@@ -99,6 +99,31 @@ menuItem_ViewInputs = function (props) {
     );
 }
 
+menuItem_ViewDownloads = function (props) {
+    return React.createElement(
+        window.dash_bootstrap_components.DropdownMenuItem,
+        null,
+        React.createElement(
+            'div',
+            null,
+            React.createElement(
+                window.dash_iconify.DashIconify,
+                {
+                    icon: 'oui:download',
+                    width: menu_icon_size,
+                    style: {
+                        marginRight: '5px',
+                    }
+                }
+            ),
+            React.createElement(
+                window.dash_bootstrap_components.Label,
+                {style: menu_text_style},
+                'Download items'
+            )
+        )
+    );
+}
 
 menuItem_Divider = function (props) {
     return React.createElement(
@@ -116,6 +141,9 @@ menuItem_Header = function (props, text) {
 }
 
 dagcomponentfuncs.actionsMenu = function (props) {
+    if (props.data == undefined) {
+        return ""
+    }
     return React.createElement(
         window.dash_bootstrap_components.DropdownMenu,
         {
@@ -128,6 +156,7 @@ dagcomponentfuncs.actionsMenu = function (props) {
         menuItem_Header(props, "Database actions"),
         menuItem_OpenResult(props),
         menuItem_ViewInputs(props),
+        menuItem_ViewDownloads(props),
         menuItem_Divider(props),
         menuItem_Header(props, "Simulation actions"),
         React.createElement(
@@ -138,31 +167,48 @@ dagcomponentfuncs.actionsMenu = function (props) {
     );
 };
 
-dagcomponentfuncs.viewOutputsBtn = function (props) {
-    return React.createElement(
-        window.dash_bootstrap_components.Button,
-        {
-            children: 'View outputs',
-            id: JSON.stringify({
-                type: 'view-outputs-button',
-                index: props.data['signature']
-            }),
-            color: 'secondary',
-            size: 'sm',
-            style: {display: 'inline-block', margin: 'auto'},
-            n_clicks: 0,
-            onClick: () => {
-                props.setData({
-                    signature: props.data['signature'],
-                    output: props.data['output']
-                });
+// dagcomponentfuncs.viewOutputsBtn = function (props) {
+//     return React.createElement(
+//         window.dash_bootstrap_components.Button,
+//         {
+//             children: 'View outputs',
+//             id: JSON.stringify({
+//                 type: 'view-outputs-button',
+//                 index: props.data['signature']
+//             }),
+//             color: 'secondary',
+//             size: 'sm',
+//             style: {display: 'inline-block', margin: 'auto'},
+//             n_clicks: 0,
+//             onClick: () => {
+//                 props.setData({
+//                     signature: props.data['signature'],
+//                     output: props.data['output']
+//                 });
                 
+//             }
+//         }
+//     );
+// };
+
+dagcomponentfuncs.signatureCell= function (props) {
+    if (props.value !== undefined) {
+        return props.value;
+    } else {
+        return React.createElement(
+            window.dash_bootstrap_components.Spinner, 
+            {
+                color: "primary", 
+                size: "sm"
             }
-        }
-    );
-};
+        )
+    }
+}
 
 dagcomponentfuncs.statusBadge = function (props) {
+    if (props.value == undefined) {
+        return ""
+    }
     // switch for badge type
     var color;
     var status_text;
@@ -197,7 +243,9 @@ dagcomponentfuncs.statusBadge = function (props) {
 };
 
 dagcomponentfuncs.progressBar = function (props) {
-    
+    if (props.value == undefined) {
+        return ""
+    }
     console.log(props.data['progress'] < 100);
     var progressElement = React.createElement(
         
@@ -205,8 +253,8 @@ dagcomponentfuncs.progressBar = function (props) {
         {
             value: props.data['progress'],
             style: {width: '100%'},
-            animated: true,
-            striped: true,
+            animated: props.data['status'].includes('RUNNING'),
+            striped: props.data['status'].includes('RUNNING'),
             color: (props.data['progress'] < 100) ? 'danger' : 'success',
             id: `progress-bar-${props.data['signature']}`
         },
@@ -248,6 +296,9 @@ function secondsToReadable(totalSeconds, appendText = '', subsecondsText = '') {
 }
 
 dagcomponentfuncs.remainingTime = function (props) { 
+    if (props.value == undefined) {
+        return "";
+    }
     return React.createElement(
         'div',
         {
@@ -257,6 +308,9 @@ dagcomponentfuncs.remainingTime = function (props) {
 };
 
 dagcomponentfuncs.elapsedTime = function (props) { 
+    if (props.value == undefined) {
+        return "";
+    }
     return React.createElement(
         'div',
         {
@@ -266,6 +320,9 @@ dagcomponentfuncs.elapsedTime = function (props) {
 };
 
 dagcomponentfuncs.inserted = function (props) { 
+    if (props.value == undefined) {
+        return "";
+    }
     const update_time = new Date(props.value)
     const diff = Date.now() - update_time.getTime();
     const totalSeconds = Math.floor(diff / 1000);
@@ -278,6 +335,9 @@ dagcomponentfuncs.inserted = function (props) {
 };
 
 dagcomponentfuncs.lastUpdated = function (props) { 
+    if (props.value == undefined) {
+        return "";
+    }
     const update_time = new Date(props.value)
     const diff = Date.now() - update_time.getTime();
     const totalSeconds = Math.floor(diff / 1000);
@@ -291,7 +351,7 @@ dagcomponentfuncs.lastUpdated = function (props) {
 
 dagcomponentfuncs.lastCheckpoint = function (props) { 
     if (props.value == undefined) {
-        return 'N/A';
+        return "";
     }
     const update_time = new Date(props.value)
     const diff = Date.now() - update_time.getTime();
@@ -305,6 +365,9 @@ dagcomponentfuncs.lastCheckpoint = function (props) {
 };
 
 dagcomponentfuncs.createdByAvatar = function (props) {
+    if (props.value == undefined) {
+        return ""
+    }
     const avatar_map = {
         'github_username': 'https://github.com/',
         'email': 'https://unavatar.io/',
