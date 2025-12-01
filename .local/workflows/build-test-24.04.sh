@@ -18,7 +18,6 @@ exit_gracefully() {
     exit 1
 }
 
-
 if [ "$1" = "--no-cache" ]; then
     echo "Removing previous VM $vm_name... (--no-cache)"
     multipass stop $vm_name
@@ -28,7 +27,7 @@ fi
 if ! multipass list | grep -q $vm_name; then
     echo "Creating new VM $vm_name..."
     multipass launch $version --name $vm_name --cpus 4 --memory 16384M --disk 20G
-    multipass exec $vm_name -- bash -c "echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . -h --output=avail | tail -n 1) > vminfo.initial'"
+    multipass exec $vm_name -- bash -c "echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . --output=avail | tail -n 1) > vminfo.initial"
 fi
 
 # create workspace directory and copy git files to it
@@ -45,15 +44,17 @@ echo "Removing existing files from $name workspace..."
 multipass exec $vm_name -- rm -rf $workspace_dir/* || exit_gracefully
 echo "Transferring bundle to VM $name..."
 multipass transfer $bundle_file_name $vm_name:$workspace_dir || exit_gracefully
-rm $bundle_file_namev
+rm $bundle_file_name
+echo "Extracting bundle in VM $name..."
+multipass exec $vm_name -- tar -xf $workspace_dir/$bundle_file_name -C $workspace_dir || exit_gracefully
+echo "Changing directory to $name workspace..."
+multipass exec $vm_name -- cd "$workspace_dir" || exit_gracefully
 echo "Listing files in $name workspace..."
 multipass exec $vm_name -- bash -c "cd $workspace_dir && ls -la" || exit_gracefully
 
 # job steps follow here
 
 #install python3-venv
-#run date command bute output in english not czech
-multipass exec $vm_name -- bash -c "echo 'date=$(date +%d.%m.%Y %H:%M:%S)' >> vminfo.txt"
 multipass exec $vm_name -- sudo apt install -y python3-venv || exit_gracefully
 
 #setup virtual environment if not already setup
@@ -96,7 +97,7 @@ multipass exec $vm_name -- bash -c "\
 multipass exec $vm_name -- bash -c "\
     cd $workspace_dir && \
     $activate_venv_cmd && \
-    python3 -m coverage run --source='./heat_battery' -m unittest discover -s test/ -p 'test_*.py' && \
+    python3 -m coverage run --source='./heat_battery' -m unittest discover -s test/ -p 'test_*.py' &&\
     $deactivate_venv_cmd \
     " || exit_gracefully
 
@@ -128,5 +129,3 @@ echo "Consumed space raw: $consumed_space_raw"
 consumed_space_human=$(numfmt --to=si $(($consumed_space_raw*1000))) || echo "Failed to convert to human readable space"
 echo "Consumed space human: $consumed_space_human"
 exit 0
-
-

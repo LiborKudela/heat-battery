@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Set
 import ast
 import importlib
+import pandas as pd
+import numpy as np
 
 def test_package():
     #TODO: make this proper

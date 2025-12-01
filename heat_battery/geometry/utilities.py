@@ -3,10 +3,12 @@ import meshio
 from typing import Callable
 import cloudpickle
 from mpi4py import MPI
+import gmsh
+import math
 
 def save_mesh_add_data(
     add_data_file_path: str, call_data: dict, dim: int, points: dict,
-    mats: dict, bcs: dict, jac_f: Callable):
+    mats: dict, bcs: dict, jac_f: Callable, custom_data: dict|None=None):
     
     add_data = {
         'call_data':call_data,
@@ -15,6 +17,7 @@ def save_mesh_add_data(
         'materials':mats,
         'boundaries':bcs,
         'jac_f':jac_f,
+        'custom_data':custom_data,
         }
     
     with open(add_data_file_path, 'wb') as fp:
@@ -52,4 +55,36 @@ def convert_to_legacy_fenics(msh_path):
     meshio.write(meshio_boundaries_path, triangle_data)
 
     print("legacy fenics mesh written")
+
+def find_closest_entity(target_point, entities, dim=3):
+    """Find the entity with center of mass closest to the target point.
+    
+    Args:
+        target_point: Tuple (x, y, z) representing the target point
+        entities: List of entity tags or (dim, tag) tuples
+        dim: Dimension of entities if only tags are provided
+        
+    Returns:
+        Tuple (dim, tag) of the closest entity and the distance
+    """
+    min_distance = float('inf')
+    closest_entity = None
+    
+    for entity in entities:
+        # Handle both tag-only and (dim, tag) formats
+        if isinstance(entity, tuple) and len(entity) == 2:
+            entity_dim, entity_tag = entity
+        else:
+            entity_dim, entity_tag = dim, entity
+            
+        com = gmsh.model.occ.getCenterOfMass(entity_dim, entity_tag)
+        
+        # Calculate Euclidean distance
+        distance = math.sqrt(sum((a - b) ** 2 for a, b in zip(target_point, com)))
+        
+        if distance < min_distance:
+            min_distance = distance
+            closest_entity = (entity_dim, entity_tag)
+    
+    return closest_entity
     

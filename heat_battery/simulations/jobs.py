@@ -39,11 +39,12 @@ class Job:
         'last_checkpoint_date': 'TIMESTAMP WITH TIME ZONE',
         'last_checkpoint_progress': 'FLOAT',
         'checkpoint_data':'BYTEA',
-        'remaining_time': 'INTEGER',
-        'elapsed_time': 'INTEGER',
+        'remaining_time': 'FLOAT',
+        'elapsed_time': 'FLOAT',
         'priority': 'INTEGER',
         'p_inputs': 'JSONB',
-        'output': 'JSONB',
+        'output_build': 'JSONB',
+        'output_postprocess': 'JSONB',
         'probe_columns': 'TEXT[]',
         'runner': 'TEXT',
         'required_source_files': 'TEXT[]',
@@ -175,6 +176,18 @@ class Job:
         self.project.add_checkpoint(
             signature=self['signature'],
             checkpoint_dir=checkpoint_dir,
+        )
+
+    def set_output_build(self, output:dict):
+        self.project.set_output_build(
+            signature=self['signature'],
+            output=output,
+        )
+
+    def append_output(self, output:dict):
+        self.project.append_output_build(
+            signature=self['signature'],
+            output=output,
         )
 
     @only_rank_0
@@ -405,7 +418,7 @@ if __name__ == "__main__":
             ]
             if 'probes_callbacks' not in sim_p:
                 sim_p['probes_callbacks'] = []
-            sim_p['probes_callbacks'].append(self.update_progress)
+            sim_p['probes_callbacks'].append(self.update_progress) #add at least this callback
 
             # set checkpoint updater
             if 'checkpoint_dt' in sim_p:
@@ -417,10 +430,15 @@ if __name__ == "__main__":
                     sim_p['checkpoint_callbacks'] = []
                 sim_p['checkpoint_callbacks'].append(self.update_checkpoint)
 
+            # # set postprocess results updater
+            # if 'postprocess_results' in sim_p:
+            #     sim_p['postprocess_results'] = sim.postprocess_results()
+
             # run simulation with runner arguments
             self.set_status('RUNNING - SIMULATION')
+            self.set_output_build(sim.get_initial_postprocess_data())
             runner = getattr(sim, self['runner'])
-            runner(**sim_p)
+            runner(**sim_p) # <- THIS IS THE MAIN SIMULATION CALL
 
             # set job status to completed
             self.set_status('COMPLETED')
@@ -516,12 +534,13 @@ def new_jobs_generator(
             last_checkpoint_date=None,
             last_checkpoint_progress=None,
             checkpoint_data=None,
-            remaining_time=0,
-            elapsed_time=0,
+            remaining_time=0.0,
+            elapsed_time=0.0,
             signature=p_input['SIGNATURE'][:SIGNATURE_LENGTH],
             priority=p_input['PRIORITY'],
             p_inputs=p_input,
-            output='{}',
+            output_build='{}',
+            output_postprocess='{}',
             probe_columns=[],
             runner=runner,
             required_source_files=[sfr['sha256'] for sfr in source_files_rows],
@@ -589,7 +608,8 @@ def job_from_legacy_folder(
             'res_file_name': os.path.join(legacy_folder, 'unsteady.csv'),
             'SIGNATURE': legacy_folder.split(os.sep)[-1],
         },
-        'output': json.dumps({'key': 'value'}),
+        'output_build': json.dumps({'key': 'value'}),
+        'output_postprocess': json.dumps({'key': 'value'}),
         'probe_columns': df_res.columns.tolist(),
         'runner': 'solve_unsteady',
         'required_source_files': [],

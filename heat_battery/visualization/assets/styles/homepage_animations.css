@@ -1,0 +1,50 @@
+/* Homepage Title Animations */
+
+/* Slide down animation for title entrance */
+@keyframes slideDown {
+    0% {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.8);
+    }
+    70% {
+        transform: translateY(5px) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Shimmer effect for gradient text */
+@keyframes shimmer {
+    0%, 100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+/* Expand width animation for underline */
+@keyframes expandWidth {
+    0% {
+        width: 0;
+        opacity: 0;
+    }
+    100% {
+        width: 200px;
+        opacity: 1;
+    }
+}
+
+/* Glow effect on hover */
+h1:hover {
+    filter: drop-shadow(0 0 20px rgba(102, 126, 234, 0.6));
+    transition: filter 0.3s ease;
+}
+
+/* Ensure background-size for shimmer animation */
+h1 {
+    background-size: 200% 200%;
+}
+

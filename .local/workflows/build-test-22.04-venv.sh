@@ -20,6 +20,7 @@ exit_gracefully() {
 
 if [ "$1" = "--no-cache" ]; then
     echo "Removing previous VM $vm_name... (--no-cache)"
+    
     multipass stop $vm_name
     multipass delete --purge $vm_name
 fi

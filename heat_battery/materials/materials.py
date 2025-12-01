@@ -4,6 +4,12 @@ from . material_base import (Material,
                              PropertyUnits,
                              MaterialsSet)
 
+def get_material_by_name(name: str) -> Material:
+    try:
+        return eval(name)
+    except:
+        raise ValueError(f"Material {name} not found")
+
 class Kannthal_A1(Material):
     def __init__(self, domain, name="Kanthal", h0_T_ref=20):
         super().__init__(
@@ -171,7 +177,7 @@ class SandTheory(Material):
         super().__init__(
             domain=domain,
             k = Polynomial_property(domain, c=kc, unit=PropertyUnits.k).to_lagrange_property([20, 200, 400, 600]),
-            rho = Lagrange_property(domain, [20, 600], [2650.0, 2650.0], PropertyUnits.rho),
+            rho = Lagrange_property(domain, [20, 600], [1700.0, 1700.0], PropertyUnits.rho),
             cp = Lagrange_property(domain, [20, 600], [830, 830], PropertyUnits.cp),
             h0_T_ref = h0_T_ref,
             name=name)
@@ -195,5 +201,6 @@ def new_contact_class(d, name="New contact", h0_T_ref=20):
                 k = Lagrange_property(domain, [20, 1000], [0.5, 0.5], PropertyUnits.K, multiplier=d*1000),
                 rho = Lagrange_property(domain, [20], [1], PropertyUnits.rho),
                 cp = Lagrange_property(domain, [20], [1], PropertyUnits.cp), 
+                price = 0.0,
                 name=name)
     return Contact_class

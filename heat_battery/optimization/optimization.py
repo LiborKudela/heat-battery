@@ -59,17 +59,20 @@ class SteadyStateComparer:
             else:
                 idx_batch = np.arange(self.n)
 
-            for i in idx_batch:
-                input_data = self.inputs[i]
-                output_data = self.outputs[i]
-                J.true_values = output_data
-                adjoint_derivative.forward(**input_data)
-                _g = adjoint_derivative.compute_gradient()
-                g += _g.dot(transform_jac)
-                l += adjoint_derivative.compute_loss()
-
-            self.set_k(original_k, m=m)
-            self.sim.T.x.array[:] = original_T
+            try:
+                for i in idx_batch:
+                    input_data = self.inputs[i]
+                    output_data = self.outputs[i]
+                    J.true_values = output_data
+                    adjoint_derivative.forward(**input_data)
+                    _g = adjoint_derivative.compute_gradient()
+                    g += _g.dot(transform_jac)
+                    l += adjoint_derivative.compute_loss()
+            except Exception as e:
+                raise e
+            finally:
+                self.set_k(original_k, m=m)
+                self.sim.T.x.array[:] = original_T
             return g, l
 
         return gradient

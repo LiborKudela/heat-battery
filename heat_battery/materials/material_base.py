@@ -4,6 +4,8 @@ from petsc4py import PETSc
 import numpy as np
 import plotly.graph_objects as go
 from typing import List, Optional, Union
+from .default_price_data import data as material_price_data
+
 
 class PropertyUnits:
     default = {'name':'', 'unit': '[]'}
@@ -258,7 +260,7 @@ class Material():
                  cp : Material_property,
                  sigma=None,
                  h0_T_ref = 20,
-                 price=0.0,
+                 price=None,
                  name="Unspecified"):
         
         self.h0_T_ref = fem.Constant(domain, PETSc.ScalarType(h0_T_ref))
@@ -268,6 +270,12 @@ class Material():
         self.sigma = sigma
         self.price = price
         self.name = name
+        if price is None:
+            try:
+                self.price = material_price_data[self.__class__.__name__]['price']
+            except KeyError:
+                self.price = 0
+                print(f"WARNING: Price for material {self.name} not found!!")
 
     #TODO: change this aproach to Linked_material_property_integral
     def h(self, T):

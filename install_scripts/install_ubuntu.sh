@@ -330,6 +330,25 @@ echo "PostgreSQL server installed and configured successfully!"
 # fi
 # echo "OpenMPI installed!"
 
+
+# # install assimulo
+# echo "Installing Assimulo!"
+# sudo apt install libsundials-dev $auto_yes
+# sudo apt install liblapack3 liblapack-dev $auto_yes
+# sudo apt install libblas-dev $auto_yes
+# sudo apt install libsuperlu-dev $auto_yes
+# git clone https://github.com/modelon-community/Assimulo.git
+# cd Assimulo
+# python3 -m pip install numpy==1.26.4
+# python3 -m pip install cython
+# python3 setup.py install --sundials-home=/usr/ --blas-home=/usr/lib/x86_64-linux-gnu/blas/ --lapack-home=/usr/lib/x86_64-linux-gnu/lapack/ --user
+# if ! python3 -c "import assimulo; print(f'assimulo version: {assimulo.__version__}')"; then
+#     echo "Failed to import assimulo"
+#     exit 1
+# fi
+# echo "Assimulo installed!"
+# cd ..
+
 # install gmsh
 echo "Installing Gmsh and gmsh python package!"
 sudo apt install gmsh $auto_yes

@@ -368,6 +368,12 @@ class Project:
         self.ensure_database_exists()
         self.create(if_exists=if_exists)
 
+    def load_from_file(self, file_path:str):
+        pass
+
+    def save_to_file(self, file_path:str):
+        pass
+
     def get_jobs_table_sql_identifier(self, project_name:str|None=None):
         if project_name is not None:
             project_name = project_name 
@@ -839,9 +845,9 @@ class Project:
     def _update_progress_query(
         self, 
         signature:str,
-        progress:float,
-        remaining_time:int,
-        elapsed_time:int,
+        progress:float, 
+        remaining_time:float,
+        elapsed_time:float,
         conn:psycopg2.extensions.connection=None,
     ):
         commit = conn is None
@@ -858,6 +864,7 @@ class Project:
                 self.get_jobs_table_sql_identifier(),
             )
             cur = conn.cursor()
+                
             cur.execute(query, (progress, remaining_time, elapsed_time, signature))
             if commit:
                 conn.commit()
@@ -866,8 +873,8 @@ class Project:
             self, 
             signature:str, 
             progress:float, 
-            remaining_time:int, 
-            elapsed_time:int,
+            remaining_time:float, 
+            elapsed_time:float,
         ):
         self._update_progress_query(
             signature=signature, 
@@ -1384,18 +1391,17 @@ class Project:
         self, 
         conn:psycopg2.extensions.connection=None, 
         ):
-        if MPI.COMM_WORLD.rank == 0:
-            with DBConnection() if conn is None else conn as conn:
-                query = sql.SQL(
-                    "SELECT * FROM {}"
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL(
+                "SELECT * FROM {}"
+            )
+            query = query.format(
+                self.get_jobs_table_sql_identifier(),
                 )
-                query = query.format(
-                    self.get_jobs_table_sql_identifier(),
-                    )
-                cur = conn.cursor()
-                cur.execute(query)
-                jobs_rows = cur.fetchall()
-            return jobs_rows
+            cur = conn.cursor()
+            cur.execute(query)
+            jobs_rows = cur.fetchall()
+        return jobs_rows
 
     def get_jobs(
             self, 
@@ -1410,6 +1416,268 @@ class Project:
                 Job(dict(zip(Job.COLUMNS.keys(), row)), [], self) 
                 for row in jobs_rows
             ]  
+        
+    def construct_filter_code(self, filter_model, col):
+        number_type_map = {
+            "equals": ("WHERE {} = {}", lambda x: x),
+            "notEqual": ("WHERE {} != {}", lambda x: x),
+            "greaterThan": ("WHERE {} > {}", lambda x: x),
+            'greaterThanOrEqual': ("WHERE {} >= {}", lambda x: x),
+            "lessThan": ("WHERE {} < {}", lambda x: x),
+            "lessThanOrEqual": ("WHERE {} <= {}", lambda x: x),
+            "inRange": ("WHERE {} BETWEEN {} AND {}", lambda x: x),
+            "blank": ("WHERE {} IS NULL", lambda x: x),
+            "notBlank": ("WHERE {} IS NOT NULL", lambda x: x),
+        }
+        text_type_map = {
+            "equals": ("WHERE {} = {}", lambda x: x),   
+            "notEqual": ("WHERE {} != {}", lambda x: x),
+            "contains": ("WHERE {} ILIKE {}", lambda x: f"%{x}%"),
+            "notContains": ("WHERE {} NOT ILIKE {}", lambda x: f"%{x}%"),
+            "startsWith": ("WHERE {} LIKE {}", lambda x: f"{x}%"),
+            "endsWith": ("WHERE {} LIKE {}", lambda x: f"%{x}"),
+            "blank": ("WHERE {} IS NULL", lambda x: x),
+            "notBlank": ("WHERE {} IS NOT NULL", lambda x: x),
+        }
+        date_type_map = {
+            "equals": ("WHERE {} = {}", lambda f, t: f),
+            "notEqual": ("WHERE {} != {}", lambda f, t: f),
+            "greaterThan": ("WHERE {} > {}", lambda f, t: f),
+            "lessThan": ("WHERE {} < {}", lambda f, t: f),
+            "inRange": ("WHERE {} BETWEEN {} AND {}", lambda f, t: (f, t)),
+            "blank": ("WHERE {} IS NULL", lambda f, t: f),
+            "notBlank": ("WHERE {} IS NOT NULL", lambda f, t: f),
+        }
+        if filter_model['filterType'] == 'number':
+            if filter_model.get('operator') is not None:
+                sql_filters = []
+                for i in range(5):
+                    condition = filter_model.get(f'condition{i}')
+                    if condition is not None:
+                        sql_template, value_formatter = number_type_map[condition['type']]
+                        sql_q = sql.SQL(sql_template)
+                        filter_value = value_formatter(condition['filter'])
+                        sql_filters.append(sql_q.format(sql.Identifier(col), sql.Literal(filter_value)))
+                return sql.SQL(filter_model.get('operator')).join(sql_filters)
+            else:
+                sql_template, value_formatter = number_type_map[filter_model['type']]
+                sql_q = sql.SQL(sql_template)
+                filter_value = value_formatter(filter_model['filter'])
+                return sql_q.format(sql.Identifier(col), sql.Literal(filter_value))
+        elif filter_model['filterType'] == 'text':
+            if filter_model.get('operator') is not None:
+                sql_filters = []
+                for i in range(5):
+                    condition = filter_model.get(f'condition{i}')
+                    if condition is not None:
+                        sql_template, value_formatter = text_type_map[condition['type']]
+                        sql_q = sql.SQL(sql_template)
+                        filter_value = value_formatter(condition['filter'])
+                        sql_filters.append(sql_q.format(sql.Identifier(col), sql.Literal(filter_value)))
+                return sql.SQL(filter_model.get('operator')).join(sql_filters)
+            else:
+                sql_template, value_formatter = text_type_map[filter_model['type']]
+                sql_q = sql.SQL(sql_template)
+                filter_value = value_formatter(filter_model['filter'])
+                return sql_q.format(sql.Identifier(col), sql.Literal(filter_value))
+        elif filter_model['filterType'] == 'date':
+            if filter_model.get('operator') is not None:
+                sql_filters = []
+                for i in range(5):
+                    condition = filter_model.get(f'condition{i}')
+                    if condition is not None:
+                        sql_template, value_formatter = date_type_map[condition['type']]
+                        dateFrom = condition.get('dateFrom')
+                        dateTo = condition.get('dateTo')
+                        sql_q = sql.SQL(sql_template)
+                        filter_value = value_formatter(dateFrom, dateTo)
+                        sql_filters.append(sql_q.format(sql.Identifier(col), sql.Literal(filter_value)))
+                return sql.SQL(filter_model.get('operator')).join(sql_filters)
+            else:
+                sql_template, value_formatter = date_type_map[filter_model['type']]
+                sql_q = sql.SQL(sql_template)
+                dateFrom = filter_model.get('dateFrom')
+                dateTo = filter_model.get('dateTo')
+                filter_value = value_formatter(dateFrom, dateTo)
+                return sql_q.format(sql.Identifier(col), sql.Literal(filter_value))
+        else:
+            return None
+
+    def construct_sort_code(self, sort_model):
+        if sort_model['sort'] == 'asc':
+            return sql.SQL("ORDER BY {} ASC").format(sql.Identifier(sort_model['colId']))
+        elif sort_model['sort'] == 'desc':
+            return sql.SQL("ORDER BY {} DESC").format(sql.Identifier(sort_model['colId']))
+        else:
+            return None
+            
+    @only_rank_0
+    @debounced_query
+    def _get_ag_grid_row_request_query(
+        self,
+        columns:list[str],
+        getRowsRequest:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):  
+        with DBConnection() if conn is None else conn as conn:
+
+            # WHERE clauses
+            sql_filters = []
+            for column, filter_model in getRowsRequest['filterModel'].items():
+                sql_filters.append(self.construct_filter_code(filter_model, column))
+            
+            # ORDER BY clauses
+            sql_sorts = []
+            for sort_model in getRowsRequest['sortModel']:
+                sql_sorts.append(self.construct_sort_code(sort_model))
+
+            cte_query = sql.SQL("""
+                WITH filtered_data AS (
+                    SELECT {columns} FROM {table} {where}
+                    {sort}
+                )
+                SELECT 
+                    (SELECT COUNT(*) FROM filtered_data) AS total_count,
+                    f.*
+                FROM filtered_data f
+                {limit}
+            """).format(
+                columns=sql.SQL(',').join([sql.Identifier(c) for c in columns]),
+                table=self.get_jobs_table_sql_identifier(),
+                where=sql.SQL(" ").join(sql_filters),
+                sort=sql.SQL(" ").join(sql_sorts),
+                limit=sql.SQL("LIMIT {} OFFSET {}").format(
+                    sql.Literal(getRowsRequest['endRow'] - getRowsRequest['startRow']),
+                    sql.Literal(getRowsRequest['startRow']),
+                )
+            )
+            
+            cur = conn.cursor()
+            cur.execute(cte_query)
+            result = cur.fetchall()
+        if result:
+            total_count = result[0][0]
+            jobs_rows = [row[1:] for row in result]
+            df = pd.DataFrame(jobs_rows, columns=columns)
+            return df, total_count
+        else:
+            return pd.DataFrame(columns=columns), 0
+
+    def get_jobs_request(
+        self,
+        columns:list[str],
+        start_row:int,
+        end_row:int,
+    ):
+        res = self._get_jobs_request_query(columns=columns, start_row=start_row, end_row=end_row)
+        return MPI.COMM_WORLD.bcast(res, root=0)
+    
+    @only_rank_0
+    @debounced_query
+    def _set_jsonb_column_query(
+        self,
+        signature:str,
+        column:str,
+        value:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("UPDATE {} SET {} = %s WHERE signature = %s")
+            query = query.format(self.get_jobs_table_sql_identifier(), sql.Identifier(column))
+            cur = conn.cursor()
+            cur.execute(query, (json.dumps(value), signature))
+            conn.commit()
+
+    @only_rank_0
+    @debounced_query
+    def _append_jsonb_column_query(
+        self,
+        signature:str,
+        column:str,
+        value:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("UPDATE {} SET {} = {} || %s WHERE signature = %s")
+            query = query.format(self.get_jobs_table_sql_identifier(), sql.Identifier(column))
+            cur = conn.cursor()
+            cur.execute(query, (json.dumps(value), signature))
+            conn.commit()
+
+    @only_rank_0
+    @debounced_query
+    def _get_jsonb_column_query(
+        self,
+        signature:str,
+        column:str,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("SELECT {} FROM {} WHERE signature = %s")
+            query = query.format(sql.Identifier(column), self.get_jobs_table_sql_identifier())
+            cur = conn.cursor()
+            cur.execute(query, (signature, ))
+            res = cur.fetchone()[0]
+        return res
+
+    def _set_output_build_query(
+        self,
+        signature:str,
+        output:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        self._set_jsonb_column_query(
+            signature=signature,
+            column='output_build',
+            value=output,
+            conn=conn,
+        )
+
+    def set_output_build(self, signature:str, output:dict):
+        self._set_output_build_query(
+            signature=signature,
+            output=output,
+        )
+
+    def _set_postprocess_output_query(
+        self,
+        signature:str,
+        output:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        self._set_jsonb_column_query(
+            signature=signature,
+            column='output_postprocess',
+            value=output,
+            conn=conn,
+        )
+
+    def set_postprocess_output(self, signature:str, output:dict):
+        self._set_postprocess_output_query(
+            signature=signature,
+            output=output,
+        )
+
+    @only_rank_0
+    @debounced_query
+    def _append_output_build_query(
+        self,
+        signature:str,
+        output:dict,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("UPDATE {} SET output_build = output_build || %s WHERE signature = %s")
+            query = query.format(self.get_jobs_table_sql_identifier())
+            cur = conn.cursor()
+            cur.execute(query, (json.dumps(output), signature))
+            conn.commit()
+
+    def append_output_build(self, signature:str, output:dict):
+        self._append_output_build_query(
+            signature=signature,
+            output=output,
+        )
 
     @only_rank_0
     @debounced_query
@@ -1419,12 +1687,12 @@ class Project:
         conn:psycopg2.extensions.connection=None,
     ):
         with DBConnection() if conn is None else conn as conn:
-            query = sql.SQL("SELECT p_inputs, output FROM {} WHERE signature = %s")
+            query = sql.SQL("SELECT p_inputs, output_build, output_postprocess, error_log FROM {} WHERE signature = %s")
             query = query.format(self.get_jobs_table_sql_identifier())
             cur = conn.cursor()
             cur.execute(query, (signature, ))
             res = cur.fetchone()
-            return {'inputs': res[0], 'outputs': res[1]}
+            return {'inputs': res[0], 'output_build': res[1], 'output_postprocess': res[2], 'error_log': res[3]}
 
     def get_input_outputs(self, signature:str):
         res = self._get_input_outputs_query(signature=signature)
@@ -1871,7 +2139,7 @@ class Project:
             df:pd.DataFrame, 
         ):
         self._upload_result_table_query(signature=signature, df=df)
- 
+    
     def __repr__(self):
         return f"Project(name={self.project_name})"
 

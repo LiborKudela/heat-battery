@@ -1,14 +1,15 @@
 from heat_battery.visualization.pages.base import dash_enrich, ClientsideFunction, dbc      
 from heat_battery.visualization.components.grids import GridLayout
 from heat_battery.simulations.postgresql_project import Project
-from heat_battery.visualization.components.figures_serial import TimeSeriesResamplingFigure
+from heat_battery.visualization.components.figures_serial import TimeSeriesResamplingFigure, BaseFigureItem
+from heat_battery.visualization.components.figure_updaters import *
 import pandas as pd
 import time
 import numpy as np
 import plotly.express as px
 from dash_bootstrap_templates import load_figure_template, dbc_templates
 from heat_battery.visualization.linux_shm_cache import SHMCache
-
+import dash_chart_editor as dce
 
 DEFAULT_RESULT_VIEWER_REFRESH_INTERVAL = 10000 # miliseconds
 
@@ -18,38 +19,14 @@ class ResultViewerComponent(GridLayout):
     def __init__(
             self, 
             project: Project, 
-            result_chart_data: dict, 
-            figure_creators_getters: dict|None=None,
             parent=None,
             fig_theme:str='bootstrap',
+            initial_figures: list|None=None,
         ):
-        if fig_theme in dbc_templates:
-            load_figure_template(fig_theme)
-        else:
-            print(f'Warning: {fig_theme} is not in dbc_templates, skipping the loading')
-        self.fig_theme = fig_theme
-        figure_creators = []
-        self.dataset_columns = ['t_sim_days']
-        for fig_name, data in result_chart_data.items():
-            self.dataset_columns += data[1]
-            if fig_name in figure_creators_getters:
-                figure_creators.append(figure_creators_getters[fig_name](data[0], data[1]))
-            else:
-                figure_creators.append(self.get_figure_creator(data[0], data[1]))
 
-        dummy_array = np.ones((2, len(self.dataset_columns)))
-        self.dummy_data = pd.DataFrame(columns=self.dataset_columns, data=dummy_array)
-            
-        overview_items = [TimeSeriesResamplingFigure(
-            fig_i, 
-            id_int=i,
-            x_name='t_timestamp', 
-            x_to_date=True,
-            rolling_span=24*7,
-            parent=self,
-            animate=False,
-            fig_theme=fig_theme,
-        ) for i, fig_i in enumerate(figure_creators)]
+        self.fig_theme = fig_theme
+        self.initial_figures = initial_figures or []
+
 
         self.project = project
         self.n_rows_loaded = 0
@@ -57,13 +34,8 @@ class ResultViewerComponent(GridLayout):
         self.first_data_updata_call = True
         self.client_signature_map = {}
         self.cache = SHMCache(f'ResultViewer-{self.project.project_name}')
-        #self.cache = LocalCache(f'ResultViewer-{self.project.project_name}')
-        super().__init__(overview_items, parent=parent)
+        super().__init__([], parent=parent)
 
-    # def get_fresh_data(self, signature:str):
-    #     last_update = self.project._get_last_updated_query(signature)
-    #     df = self.project._get_result_dataframe(signature)
-    #     return df
   
     def get_layout(self, qs_data:dict|None=None):
         start_time = time.time()
@@ -80,16 +52,45 @@ class ResultViewerComponent(GridLayout):
         top_bar = dash_enrich.html.Div(
             id=f'{self.id}-top-bar',
             children=[
-                dbc.Button(
-                    'Add graph', 
-                    id=f'{self.id}-add-figure-button', 
+                dbc.DropdownMenu(
+                    label='Add graph',
+                    id=f'{self.id}-add-figure-dropdown', 
                     color='success',
+                    menu_variant='dark',
                     size='sm',
                     style={
                         'margin': '0px', 
                         #'fontSize': '12px', 
-                        'fontWeight': 'bold',
+                        'fontWeight': 'bold',   
                     },
+                    children=[
+                        dbc.DropdownMenuItem("Graph templates", header=True),
+                        *[],
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("Timeseries graphs", header=True),
+                        dbc.DropdownMenuItem(
+                            children='Timeseries',
+                            id=f'{self.id}-add-timeseries-figure-button',
+                            n_clicks=0,
+                        ),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("Aggregated graphs", header=True),
+                        dbc.DropdownMenuItem(
+                            children='Last value',
+                            id=f'{self.id}-add-last-value-aggregated-figure-button',
+                            n_clicks=0,
+                        ),
+                        dbc.DropdownMenuItem(
+                            children='Monthly',
+                            id=f'{self.id}-add-monthly-aggregated-figure-button',
+                            n_clicks=0,
+                        ),
+                        dbc.DropdownMenuItem(
+                            children='Yearly',
+                            id=f'{self.id}-add-yearly-aggregated-figure-button',
+                            n_clicks=0,
+                        ),
+                    ],
                 ),
                 dbc.Button(
                     dbc.Label(
@@ -109,7 +110,7 @@ class ResultViewerComponent(GridLayout):
                     },
                 ),
                 dbc.DropdownMenu(   
-                    label='Rolling span',
+                    label='Timeseries rolling span',
                     id=f'{self.id}-rolling-span-dropdown', 
                     color='info',
                     size='sm',
@@ -137,25 +138,6 @@ class ResultViewerComponent(GridLayout):
     
             },
         )
-
-        ready_store = dash_enrich.dcc.Store(
-            id='ready-store',
-            data=signature,
-        )
-
-        # def make_expandable_file(file_name):
-        #     return dbc.Text(
-        #         [], 
-        #         style={"paddingTop": 10}
-        #     )
-
-        # modal_selector = dbc.Modal(
-        #     children=[
-        #         dbc.ModalHeader(dbc.ModalTitle("Select case from project")),
-        #         dbc.ModalBody(),
-        #         dbc.ModalFooter(),
-        #     ],
-        # )
 
         job_status = self.project._get_status_query(signature)
         disable_autorefresh = not ("RUNNING" in job_status)
@@ -185,18 +167,85 @@ class ResultViewerComponent(GridLayout):
             qs_data.update({'auto-refresh': [0] if disable_autorefresh else [1]})
             qs_data.update({'bar-title': [job_status]}) 
             qs_data.update({'signature': [signature]})
-            #self.update_source_data_cache(signature)
             last_update = self.project._get_last_updated_query(signature) 
             if self.cache.read_object(("hbres", "last_update", signature)) != last_update:
                 self.cache.write_object(("hbres", "last_update", signature), last_update)
                 df = self.project._get_result_dataframe(signature)
                 self.cache.write_hbres_dataframe(("hbres", "data", signature), df, expiration_time=600)
-                #grid_div = self.get_grid_div(df, qs_data)  
-                #self.cache.write_object(("hbres", "init_grid_div", signature), grid_div, expiration_time=600)
             else:
                 df = self.cache.read_hbres_dataframe(("hbres", "data", signature))
-                #grid_div = self.cache.read_object(("hbres", "init_grid_div", signature)) 
             grid_div = self.get_grid_div(df, qs_data)
+
+        signature_store = dash_enrich.dcc.Store(
+            id='signature-store',
+            data=signature,
+        )
+        figure_updaters_store = dash_enrich.dcc.Store(
+            id='figure-updaters-store',
+            data=[],
+        )
+        remove_figure_store = dash_enrich.dcc.Store(
+            id='remove-figure-store',
+            data=[],
+        )
+
+        chart_editor_store = dash_enrich.dcc.Store(
+            id="chart-editor-store",
+            data=None,
+        )
+
+        chart_editor_modal = dbc.Modal(
+            id="chart-editor-modal",
+            fullscreen=True,
+            is_open=False,
+            children=[
+                dbc.ModalHeader(
+                    close_button=False,
+                    style={'gap': 4},
+                    children=[
+                        dbc.ModalTitle(
+                            id="chart-editor-modal-title", 
+                            children="Chart editor"),
+                        dbc.Button(
+                            "Close without saving", 
+                            id="close-chart-editor-no-save", 
+                            color="danger",
+                            size="sm",
+                            style={'marginLeft': 'auto'},
+                        ),
+                        dbc.Button(
+                            "Save", 
+                            id="save-chart-editor", 
+                            color="primary",
+                            size="sm",
+                        ),
+                        dbc.Button(
+                            "Save & Close", 
+                            id="save-and-close-chart-editor", 
+                            color="success",
+                            size="sm",
+                        ),
+                    ],
+                ),
+                dce.DashChartEditor(
+                    id="chart-editor-editor",
+                    dataSources={'dummy_data': []},
+                    # saveState=True,
+                    style={'width': '100%', 'height': '100%'},
+                ),
+            ],
+            style={'width': '100%', 'height': '100%'},
+        )
+
+        for fig in self.initial_figures:
+            if fig['active']:
+                if fig['updater_type'] == 'timeseries':
+                    fill_timeseries_figure_initial(df, fig)
+
+        initial_figures_store = dash_enrich.dcc.Store(
+            id='initial-figures-store',
+            data=self.initial_figures,
+        )
 
         div = dash_enrich.html.Div(
             children=[
@@ -206,7 +255,12 @@ class ResultViewerComponent(GridLayout):
                     children=[
                         grid_div,
                         cache_interval,
-                        ready_store,
+                        signature_store,
+                        chart_editor_modal,
+                        chart_editor_store,
+                        figure_updaters_store,
+                        remove_figure_store,
+                        initial_figures_store,
                     ],  
                     style={
                         "height":"calc(100% - 32px)",
@@ -220,18 +274,139 @@ class ResultViewerComponent(GridLayout):
         return div
 
     def set_callbacks(self, server):
-        for item in self.get_children():
-            item.set_clientside_callbacks(server)
+
+        # add timeseries graph to grid
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='add_timeseries_graph_to_grid'
+            ),
+            dash_enrich.Input(f'{self.id}-add-timeseries-figure-button', 'n_clicks'),
+            dash_enrich.State(f'grid-div-{self.id}', 'children'),
+            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
+            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            prevent_initial_call=True
+        )
+
+        # add last value aggregated graph to grid
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='add_last_value_aggregated_graph_to_grid'
+            ),
+            dash_enrich.Input(f'{self.id}-add-last-value-aggregated-figure-button', 'n_clicks'),
+            dash_enrich.State(f'grid-div-{self.id}', 'children'),
+            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
+            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            prevent_initial_call=True
+        )
+
+        # add monthly aggregated graph to grid
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='add_monthly_aggregated_graph_to_grid'
+            ),
+            dash_enrich.Input(f'{self.id}-add-monthly-aggregated-figure-button', 'n_clicks'),
+            dash_enrich.State(f'grid-div-{self.id}', 'children'),
+            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
+            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            prevent_initial_call=True
+        )
+
+        # add yearly aggregated graph to grid
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='add_yearly_aggregated_graph_to_grid'
+            ),
+            dash_enrich.Input(f'{self.id}-add-yearly-aggregated-figure-button', 'n_clicks'),
+            dash_enrich.State(f'grid-div-{self.id}', 'children'),
+            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
+            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            prevent_initial_call=True
+        )
+
+        # remove figure from grid
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='remove_figure_from_grid'
+            ),
+            dash_enrich.Input('remove-figure-store', 'data'),
+            dash_enrich.State(f'grid-div-{self.id}', 'children'),
+            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
+            dash_enrich.Output('remove-figure-store', 'data', allow_duplicate=True),
+            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            prevent_initial_call=True
+        )
+
+        # save chart editor and close
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='save_and_close_chart_editor',
+            ),
+            dash_enrich.Input("save-and-close-chart-editor", "n_clicks"), 
+            dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
+            dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
+            prevent_initial_call=True,
+        )
+
+        # save chart editor without closing
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='save_chart_editor',
+            ),
+            dash_enrich.Input("save-chart-editor", "n_clicks"), 
+            dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
+            prevent_initial_call=True,
+        )
+
+        # close chart editor without saving
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='close_no_save_chart_editor',
+            ),
+            dash_enrich.Input("close-chart-editor-no-save", "n_clicks"), 
+            dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
+            prevent_initial_call=True,
+        )
+
+        # replace figure on save in editor
+        server.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='replace_figure_on_save',
+            ),
+            dash_enrich.Input("chart-editor-editor", "saveState"),
+            dash_enrich.State("chart-editor-editor", "figure"),
+            dash_enrich.State("chart-editor-store", "data"),
+            dash_enrich.State("figure-updaters-store", "data"),
+            prevent_initial_call=True,
+        ) 
 
         # periodicaly update cache for the selected signature
         @server.app.callback(
             dash_enrich.Input(f'{self.id}-cache-interval', 'n_intervals'),
-            dash_enrich.State('ready-store', 'data'),
+            dash_enrich.State('signature-store', 'data'),
+            dash_enrich.State('chart-editor-modal', 'is_open'),
             dash_enrich.State({'type': 'graph', 'index': dash_enrich.ALL}, 'relayoutData'),
+            dash_enrich.State('figure-updaters-store', 'data'),
             dash_enrich.Output({'type': 'graph', 'index': dash_enrich.ALL}, 'figure', allow_duplicate=True),
             prevent_initial_call=True,
         )
-        def update_figures(n_intervals, signature, relayout_data):
+        def update_figures(n_intervals, signature, is_open, relayout_data, updater_data):
+            print(f'Updating figures: {updater_data}')
+            if is_open:
+                return [no_update_patch()] * len(dash_enrich.ctx.outputs_list)
             start_time = time.time()
             last_update = self.project._get_last_updated_query(signature)
             if self.cache.read_object(("hbres", "last_update", signature)) != last_update:
@@ -242,90 +417,97 @@ class ResultViewerComponent(GridLayout):
                 print(f'Time taken to update figures: {time.time() - start_time:.5f}s')
                 return [dash_enrich.no_update] * len(dash_enrich.ctx.outputs_list)
             patches = []
+            for ud in updater_data:
+                print(ud)
+            for f in dash_enrich.ctx.outputs_list:
+                print(f)
             for output, rd in zip(dash_enrich.ctx.outputs_list, relayout_data):
                 i = int(output['id']['index'])
-                patches.append(self.items[i].get_update_data(df, rd))
+                ud = updater_data[i]
+                if ud.get('y_names') is None:
+                    patches.append(dash_enrich.no_update)
+                else:
+                    patches.append(get_timeseries_figure_update(df, ud['y_names'], ud['x_name'], rd))
+
             print(f'Time taken to update figures: {time.time() - start_time:.5f}s')
             return patches
         
-        # update figure on relayout event
+        #update figure on relayout event
         @server.app.callback(
-            dash_enrich.State('ready-store', 'data'),
             dash_enrich.Input({'type': 'graph', 'index': dash_enrich.MATCH}, 'relayoutData'),
+            dash_enrich.State('signature-store', 'data'),
+            dash_enrich.State('figure-updaters-store', 'data'),
             dash_enrich.Output({'type': 'graph', 'index': dash_enrich.MATCH}, 'figure'),
             prevent_initial_call=True,
         )
-        def update_figure(signature, relayout_data):
+        def update_figure(relayout_data, signature, updater_data):
             #{'xaxis.autorange': True, 'xaxis.showspikes': False, 'yaxis.autorange': True, 'yaxis.showspikes': False}
             start_time = time.time()
-            if (
-                relayout_data.get('yaxis.autorange', False)
-                or relayout_data.get('autosize', False)
-                and not relayout_data.get('xaxis.autorange', False)
-            ):
+            if relayout_data.get('autosize') is not None:
+                return dash_enrich.no_update
+            if relayout_data is None:
+                relayout_data = {}
+            if {'xaxis.autorange': True, 'xaxis.showspikes': False, 'yaxis.autorange': True, 'yaxis.showspikes': False} == relayout_data:
+                relayout_data = {}
+            if relayout_data =={'xaxis.autorange': True, 'yaxis.autorange': True}:
                 return dash_enrich.no_update
             df = self.cache.read_hbres_dataframe(("hbres", "data", signature))
-            index = int(dash_enrich.ctx.triggered_id['index'])
-            patch = self.items[index].get_update_data(df, relayout_data)
+            index = int(dash_enrich.ctx.inputs_list[0]['id']['index'])
+            ud = updater_data[index]
+            if ud['y_names'] is None:
+                return dash_enrich.no_update
+            if ud['updater_type'] == 'timeseries':
+                patch = get_timeseries_figure_update(df, ud['y_names'], ud['x_name'], relayout_data)
+            elif ud['updater_type'] == 'aggregated':
+                patch = get_aggregated_figure_update(df, ud['y_names'], ud['x_name'], relayout_data)
             print(f'Time taken to relayout figure: {time.time() - start_time:.5f}s')
             return patch
-
-        # sets up new buttons in figures bacause it canot be done in python
-        # FIXME: this is a hack, it should be done in the figure item itself
-        #        maybe we can overload some chunk of plotly codebase for this?
-        # FIXME: this is not working as expected, buttons are not visible on first load
-        #        the page needs refresh, we have to use diferent trigger for this that
-        #        runs after the fugures are fully loaded
+        
+        @server.app.callback(
+            dash_enrich.Input('chart-editor-store', 'data'),
+            dash_enrich.State('signature-store', 'data'),
+            dash_enrich.Output('chart-editor-editor', 'dataSources'),   
+            prevent_initial_call=True,
+        )
+        def replace_chart_editor_dataSources_on_chart_edit(chart_editor_store_data, signature):
+            if chart_editor_store_data is None:
+                return dash_enrich.no_update    
+            id = chart_editor_store_data['id']
+            chart_type = chart_editor_store_data['type']
+            if chart_type == 'timeseries':
+                df = self.cache.read_hbres_dataframe(("hbres", "data", signature))
+                df_minified = minify_for_chart_editor(df)
+                df_minified['t_timestamp'] = pd.to_datetime(df_minified['t_timestamp'], unit='s', origin='unix', utc=True)
+                print("sending data to editor - timeseries")
+                return df_minified.to_dict('list')
+            elif chart_type == 'last_value_aggregated':
+                df = self.cache.read_hbres_dataframe(("hbres", "data", signature))
+                values = df.iloc[-1].values.tolist()
+                labels = df.columns.tolist()
+                print("sending data to editor - last value aggregated")
+                return {'values': values, 'labels': labels}
+            elif chart_type == 'monthly_aggregated':
+                print("sending data to editor - monthly aggregated")
+                dummy_df = pd.DataFrame(columns=['t_sim_days', 'value'])
+                dummy_df['t_sim_days'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                dummy_df['value'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                return dummy_df.to_dict('list')
+            elif chart_type == 'yearly_aggregated':
+                print("sending data to editor - yearly aggregated")
+                dummy_df = pd.DataFrame(columns=['t_sim_days', 'value'])
+                dummy_df['t_sim_days'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                dummy_df['value'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                return dummy_df.to_dict('list')
+            
+        # Add the initialization callback
         server.app.clientside_callback(
             ClientsideFunction(
                 namespace='clientside',
-                function_name='update_graph_config'
+                function_name='initialize_figures'
             ),
-            dash_enrich.Input({'type': 'graph', 'index': dash_enrich.MATCH}, 'config'),
-            dash_enrich.State({'type': 'graph', 'index': dash_enrich.MATCH}, 'id'),
-            dash_enrich.Output({'type': 'graph', 'index': dash_enrich.MATCH}, 'config'),
-            prevent_initial_call=False
+            dash_enrich.Input('initial-figures-store', 'data'),
+            dash_enrich.State('signature-store', 'data'),
+            dash_enrich.Output(f'grid-div-{self.id}', 'children'),
+            dash_enrich.Output('figure-updaters-store', 'data'),
+            prevent_initial_call=False  # This is important - it runs on page load
         )
-
-    def get_figure_creator(self, unit_title, y_names, y_range=[None, None]):
-        layout_args = dict(
-            uirevision="None",
-            legend=dict(
-                orientation="v",
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01,
-            ),
-            margin=dict(l=10, r=10, t=10, b=10),
-            xaxis_title="Time",
-            yaxis_title=unit_title,
-            yaxis_range=y_range,
-        )
-        def create_figure(df):
-            fig = px.line(
-                df,
-                template=self.fig_theme,
-                x='t_sim_days', 
-                y=y_names,
-            ).update_layout(**layout_args,
-                title=dict(
-                    text="Live data plot",
-                    x=0.5,
-                    y=0.98,
-                    xanchor='center',
-                    yanchor='top',
-                    font=dict(
-                        size=10,
-                    ),
-                ),
-                xaxis_tickfont=dict(
-                    size=10,
-                ),
-                yaxis_tickfont=dict(
-                    size=10,
-                ),
-            )
-
-            return fig
-        return create_figure

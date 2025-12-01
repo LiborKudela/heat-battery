@@ -44,17 +44,6 @@ class GridLayout(ContentItem):
     def get_children(self):
         return self.items
 
-    # def subplot_grid_size(self, n):
-    #     rows, cols = 1, 1
-    #     for i in range(n):
-    #         if rows*cols >= n:
-    #             break
-    #         else:
-    #             if rows + 1 > cols:
-    #                 cols += 1
-    #             else:
-    #                 rows += 1
-    #     return rows, cols
     
     def get_grid_items(self, df=None, qs_data:dict|None=None) -> list:
         '''defined in subclass'''
@@ -65,8 +54,8 @@ class GridLayout(ContentItem):
             children=[
                 item.get_layout(df, qs_data),
             ],
+            className='grid-item',
             style={
-                'className': 'grid-item', 
                 'display': 'flex', 
                 'flexDirection': 'column', 
                 }

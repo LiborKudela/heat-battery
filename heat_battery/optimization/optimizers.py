@@ -195,7 +195,91 @@ class GradientSearch(Optimizer):
         k, l = line_search(self.loss, k, -g, alpha0=self.alpha, tol=1e-12)
         return k
 
+class QuasiNewtonBFGS(Optimizer):
+    def __init__(self, grad, alpha_init=1e-4, c=1e-4, alpha_min=1e-12, alpha_max=1.0):
+        """
+        Quasi-Newton (BFGS) optimiser.
+        
+        Parameters
+        ----------
+        grad : callable
+            Must return (g, l) where g is gradient vector and l is scalar loss.
+        alpha : float
+            Initial step size for line search.
+        c : float
+            Armijo condition constant for line search.
+        alpha_min : float
+            Minimum step size before fallback.
+        """
+        self.grad = grad
+        self.alpha_init = alpha_init
+        self.alpha_min = alpha_min
+        self.alpha_max = alpha_max
+        self.c = c
+        
+        # Optimizer state
+        self.H = None  # Hessian inverse approximation
+        self.g = None
+        self.l = None
+        
+        super().__init__()
+    
+    def step(self, k):
+        # Initialize Hessian inverse approximation on first step
+        if self.H is None:
+            n = len(k)
+            self.H = np.eye(n)
+        
+        # Compute gradient and loss
+        g, l = self.grad(k)
+        #g_norm = np.linalg.norm(g)
+        
+        # Search direction: p = -H g
+        p = -self.H @ g
+        
+        # Backtracking line search
+        alpha = self.alpha_init
+        l0 = l
+        
+        while True:
+            k_new = k + alpha * p
+            try:
+                g_new, l_new = self.grad(k_new)
+            except:
+                alpha *= 0.1
+                if alpha < self.alpha_min:
+                    raise Exception("Alpha too small")
+                continue
+            
+            # Armijo condition
+            if l_new <= l0 + self.c * alpha * g.dot(p): 
+                break
+            
+            alpha *= 0.5
+            if alpha < self.alpha_min:
+                # Fall back to small gradient step
+                alpha = 1e-3
+                break
+        
+        # Step update
+        s = alpha * p
+        k_new = k + s
+        y = g_new - g
+        
+        # BFGS update of Hessian inverse
+        ys = y @ s
+        if ys > 1e-12:  # safeguard
+            Hy = self.H @ y
+            self.H += (1 + (y @ Hy) / ys) * np.outer(s, s) / ys \
+                     - (np.outer(Hy, s) + np.outer(s, Hy)) / ys
+        
+        # Update state
+        self.g = g_new
+        self.l = l_new
+        self.g_norm = np.linalg.norm(self.g)
+        self.alpha_init = min(self.alpha_init*1.5, self.alpha_max)
+        return k_new
+
 # TODO: Provide Newton solver
-# TODO: Provide Broyden–Fletcher–Goldfarb–Shanno algorithm
 # TODO: Provide L-BFGS
 

@@ -1,0 +1,50 @@
+[project]
+name = "heat_battery"
+version = "0.0.1"
+description = "FEM simulation/optimization of solid thermal storages"
+# The long description is read from the README file.
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [
+    { name = "Libor Kudela", email = "libor.kudela1@gmail.com" }
+]
+keywords = ["finite element method", "thermal storage", "simulation", "optimization"]
+urls = { "Homepage" = "https://github.com/LiborKudela/heat-battery" }
+dependencies = [
+    "mpi4py==3.1.5",
+    "cloudpickle>=3.0.0",
+    "pandas>=2.1.2",
+    "plotly>=5.18.0",
+    "numba>=0.58.1",
+    "numpy==1.26.4",
+    "dash-extensions>=1.0.4",
+    "dash-bootstrap-components>=1.5.0",
+    "dash-mantine-components>=0.1.1",
+    "dash-vtk>=0.0.9",
+    "dash-iconify>=0.1.0",
+    "dash-chart-editor",
+    "dash>=2.14.1",
+    "gmsh>=4.11.1",
+    "meshio>=5.3.4",
+    "scipy>=1.11.3",
+    "pyvista==0.42.3",
+    "psycopg2>=2.9.9",
+    "pyyaml>=6.0.2",
+    "adios4dolfinx>=0.9.1.post0"
+]
+requires-python = ">=3.8"
+classifiers = [
+    "Natural Language :: English",
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: POSIX :: Linux"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+include = [""]
+
+[tool.setuptools.packages.find]
+where = ["."]

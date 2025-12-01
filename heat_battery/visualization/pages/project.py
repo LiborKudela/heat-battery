@@ -45,10 +45,11 @@ class ProjectViewerSuperApp(VisualizerApp):
     def __init__(
             self, 
             project: Project, 
-            result_chart_data: dict,
-            figure_creators_getters: dict|None=None,
+            #result_chart_data: dict,
+            #figure_creators_getters: dict|None=None,
             parent=None,
             fig_theme:str='bootstrap',
+            initial_figures: list|None=None,
         ):
         self.project = project
         super().__init__(name=project.project_name, parent=parent)
@@ -63,9 +64,10 @@ class ProjectViewerSuperApp(VisualizerApp):
                 "Result viewer", 
                 ResultViewerComponent(
                     project, 
-                    result_chart_data, 
-                    figure_creators_getters,
+                    #result_chart_data, 
+                    #figure_creators_getters,
                     fig_theme=fig_theme,
+                    initial_figures=initial_figures,
                 ), 
                 parent=self
             ),
@@ -109,18 +111,6 @@ class ProjectViewerSuperApp(VisualizerApp):
             ),
             ],
         )
-
-        # overview_chart = dbc.Card(
-        #     children=[
-        #         dbc.CardBody(
-        #             dash_enrich.dcc.Graph(
-        #                 figure=get_overview_chart(df_test),
-        #                 style={'border-radius': '10px'},
-        #             ),
-        #         ),
-        #     ],
-        #     style={"width": "calc(54rem + 30px)", 'margin-bottom':'15px'},
-        # )
 
         overview_chart = dash_enrich.html.Div(
             children=[

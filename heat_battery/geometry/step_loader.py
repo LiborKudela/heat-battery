@@ -116,6 +116,7 @@ def build_geometry_from_stepfile(
         spec = inspect.getfullargspec(build_geometry_from_stepfile).args
         local_scope = locals()
         call_data = dict(zip(spec, [eval(arg, local_scope) for arg in spec]))
+        del call_data['custom_data']
 
         save_mesh_add_data(
             add_data_file,
@@ -125,5 +126,6 @@ def build_geometry_from_stepfile(
             mats,
             bcs,
             jac_f,
+            custom_data,
         )
     MPI.COMM_WORLD.Barrier()

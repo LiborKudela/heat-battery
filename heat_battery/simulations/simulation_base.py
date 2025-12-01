@@ -101,7 +101,6 @@ class Simulation():
         # load domain
         self.dim = self.geo_meta['dim']
         self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
-
         # instantiate materials
         self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
         self.subdomain_map = self.mats.key_map
@@ -175,7 +174,7 @@ class Simulation():
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
 
     def get_custom_data(self, key):
-        return self.geo_meta['call_data']['custom_data'][key]
+        return self.geo_meta['custom_data'][key]
 
     def compute_subdomain_index(self, domain):
         if np.issubdtype(type(domain), np.integer):
@@ -477,7 +476,13 @@ class Simulation():
             self.root_types = np.concatenate(global_types)
 
     def create_newton_solver(self, F, u):
+        # try:
+        #     #dolfin 0.9
+        #problem = dolfinx.fem.petsc.NewtonSolverNonlinearProblem(F, u)
+        # except ImportError:
+        #dolfin 0.10
         problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
+
         solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
         solver.convergence_criterion = "residual"
         solver.max_it = 30
@@ -540,7 +545,13 @@ class Simulation():
         #FIXME: add update for source_terms and bc_terms before simulation
         #FIXME: this should run in loop when the Terms are implicit in nature
         #FIXME: this whole function will be unusable as of now, I focus on unsteady now!!! SORRY!
-        self.r_steady = self.steady_solver.solve(self.T)
+        try:
+            self.r_steady = self.steady_solver.solve(self.T)
+        except Exception as e:
+            self.steady_probes.close()
+            self.steady_probes.reset_printer()
+            raise e
+
         
         t_start = time.time()
         if MPI.COMM_WORLD.rank == 0:
@@ -1190,5 +1201,57 @@ class Simulation():
                 grid.point_data["T"] = root_vals
                 grid.set_active_scalars("T")
                 data[i] = grid
+        return data
+
+    def get_initial_postprocess_data(self):
+        """This method gets overloaded in the model. The default implementation 
+        returns basic data about the simulation as a dictionary.
+        """
+        data = {}
+
+        # add info about mesh and function space
+        data['fem_space'] = {
+            "dofs": self.V.dofmap.index_map.size_global * self.V.dofmap.index_map_bs,
+            }
+        dim = self.domain.topology.dim
+        for entity in ['cells', 'edges', 'faces', 'nodes']:
+            self.domain.topology.create_entities(dim)
+            data['fem_space'][entity] = self.domain.topology.index_map(dim).size_global
+            dim -= 1
+            if dim < 0:
+                break
+        
+        # add info about subdomains
+        data['subdomains'] = {} 
+        for i, mat in enumerate(self.mats):
+            volume = self.get_subdomain_volume(mat.name)
+            mass = volume * mat.rho.evaluate(20)
+            data['subdomains'][mat.name] = {
+                "material": mat.__class__.__name__,
+                "material_index": i,
+                "volume": {"value": volume, "unit": "m^3"},
+                "mass": {"value": mass, "unit": "kg"},
+                "unit_price": {"value": mat.price, "unit": "EUR/kg"},
+                "total_price": {"value": mass * mat.price, "unit": "EUR"},
+                }
+        data['total_subdomains_price'] = sum([d['total_price']['value'] for d in data['subdomains'].values()])
+            
+        # add info about surfaces
+        data['surfaces'] = {}
+        for i, bcs_name in enumerate(self.bcs):
+            area = self.get_surface_area(bcs_name)
+            data['surfaces'][bcs_name] = {
+                "area": {"value": area, "unit": "m^2"},
+                "price_per_square_meter": {"value": 0.0, "unit": "EUR/m^2"},
+                "total_price": {"value": area * 0.0, "unit": "EUR"},
+                }
+        data['total_surfaces_price'] = {
+            "value": sum([d['total_price']['value'] for d in data['surfaces'].values()]),
+            "unit": "EUR",
+            }
+        data['total_price'] = {
+            "value": data['total_subdomains_price'] + data['total_surfaces_price']['value'],
+            "unit": "EUR",
+            }
         return data
 

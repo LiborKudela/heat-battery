@@ -4,7 +4,7 @@ from dash import ClientsideFunction
 from dash_iconify import DashIconify
 
 class VisualizerApp():
-    def __init__(self, name, parent=None, bootstrap_style:str='bootstrap'):
+    def __init__(self, name, parent=None, bootstrap_style:str='bootstrap', required_permission='authenticated'):
         self.page_ready = False
         self.name = name.capitalize()
         self.href = '/' + name.lower()
@@ -14,10 +14,24 @@ class VisualizerApp():
         self.parent = parent
         self.pages = {}
         self.bootstrap_style = bootstrap_style
+        # Permission required to access this page
+        # Options: 'public', 'authenticated', or any custom permission string
+        self.required_permission = required_permission
 
     def set_subpages_hrefs(self):
         for href, page in self.pages.items():
             page.href = self.href + href
+    
+    def set_permission(self, permission):
+        '''Set the required permission for this page'''
+        self.required_permission = permission
+        return self  # Allow chaining
+    
+    def set_subpages_permissions(self, permission):
+        '''Set permissions for all subpages'''
+        for page in self.pages.values():
+            page.set_permission(permission)
+        return self  # Allow chaining
 
     def preload_cache_data(self):
         for page in self.pages.values():
@@ -41,15 +55,24 @@ class VisualizerApp():
         if not self.pages:
             return dbc.NavLink(self.name, href=self.href, active="exact")
         else:
+            # Include a "Dashboard" link to the main page when there are subpages
+            dropdown_items = [
+                dbc.DropdownMenuItem(
+                    dbc.NavLink("Dashboard", href=self.href, active="exact"),
+                )
+            ]
+            # Add all subpage links
+            dropdown_items.extend([
+                dbc.DropdownMenuItem(page.get_link())
+                for page in self.pages.values()
+            ])
+            
             return dbc.DropdownMenu(
                 label=self.name,
                 nav=True,
                 group=True,
                 direction="bottom",
-                children=[
-                    dbc.DropdownMenuItem(page.get_link())
-                    for page in self.pages.values()
-                ],
+                children=dropdown_items,
             )
     
     def get_page_content(self, qs_data:dict|None=None):
