@@ -227,8 +227,10 @@ class JobsTable(ContentItem):
 
         tools = dash_enrich.html.Div(
             children=[
-                dbc.Button('Show/hide columns', color='primary', size='sm', style={'font-weight':'bold'}, id='select-columns-button'),
-                dbc.Button('Add job', color='success', size='sm', style={'font-weight':'bold'}),
+                dbc.Button('Show/hide columns', color='primary', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}, id='select-columns-button'),
+                dbc.Button('Add job', color='success', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}),
+                dbc.Button('Refresh table', color='info', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}, id=f'{self.id}-refresh-button'),
+                self.parent.parent.get_icons_menu(icon_width=20, dashboard=True),
             ],
             style={
                 'display':'flex',
@@ -349,11 +351,13 @@ class JobsTable(ContentItem):
         @server.app.callback(
             dash_enrich.Output(self.AG_GRID_ID, "getRowsResponse"),
             dash_enrich.Input(self.AG_GRID_ID, "getRowsRequest"),
-            #dash_enrich.Input(self.REFRESH_TRIGGER_ID, 'n_intervals'),
+            dash_enrich.Input(f'{self.id}-refresh-button', 'n_clicks'),
+            dash_enrich.Input(self.REFRESH_TRIGGER_ID, 'n_intervals'),
         )
         def infinite_scroll(
-            request, 
-            #n_intervals
+            request,
+            n_clicks,
+            n_intervals
             ):
 
             if request:
@@ -364,28 +368,7 @@ class JobsTable(ContentItem):
                 )
 
                 lines = max(total_count, 1)
-                return {"rowData": dff.to_dict("records"), "rowCount": lines}
-
-        # updata data in table every refresh period
-        # @server.app.callback(
-        #     dash_enrich.Output(self.AG_GRID_ID, 'rowData'),
-        #     dash_enrich.Output(self.LATEST_DATA_TIMESTAMP_ID, 'data'),
-        #     dash_enrich.Input(self.REFRESH_TRIGGER_ID, 'n_intervals'),
-        #     dash_enrich.State(self.LATEST_DATA_TIMESTAMP_ID, 'data'),
-        #     prevent_initial_call=True,
-        # )
-        # def update_table(n_intervals, client_timestamp):
-        #     df = self.get_fresh_table()
-        #     server_timestamp = df['last_updated'].max()
-        #     client_timestamp = datetime.datetime.fromisoformat(client_timestamp)
-        #     print(server_timestamp, client_timestamp)
-
-        #     if server_timestamp > client_timestamp:
-        #         jobs_table = df[JobsTable.CLIENT_SIDE_COLUMNS].sort_values(by='priority')
-        #         return jobs_table.to_dict('records'), server_timestamp
-        #     else:
-        #         return dash_enrich.no_update
-            
+                return {"rowData": dff.to_dict("records"), "rowCount": lines}   
 
         @server.app.callback(
             dash_enrich.Output('code-modal', 'is_open'),

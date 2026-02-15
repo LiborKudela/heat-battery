@@ -490,3 +490,16 @@ body .dbc .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-in
 }
 
 /* ---- end dbc-row-selectable -------------------------*/
+
+/* ---- Project dashboard nav icons hover effects ---- */
+#project-component-nav-icon:hover {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    opacity: 1 !important;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+#project-component-nav-icon {
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+    opacity: 0.7;
+}
+/* ---- end Project dashboard nav icons hover effects ---- */

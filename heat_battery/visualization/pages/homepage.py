@@ -429,8 +429,8 @@ class HomePage(VisualizerApp):
                                 dash_enrich.html.P([
                                     dash_enrich.html.Strong("To: ", style={'color': '#ffffff'}),
                                     dash_enrich.html.A(
-                                        "admin@hitepoptim.org",
-                                        href="mailto:admin@hitepoptim.org?subject=Account%20Request%20-%20HiTepOptim%20Viewer&body=Hello%2C%0A%0AI%20would%20like%20to%20request%20access%20to%20the%20HiTepOptim%20Project%20Viewer.%0A%0AName%3A%20%0AOrganization%3A%20%0AEmail%3A%20%0AReason%20for%20access%3A%20%0A%0AThank%20you.",
+                                        "libor.kudela@vutbr.cz",
+                                        href="mailto:libor.kudela@vutbr.cz?subject=Account%20Request%20-%20HiTepOptim%20Viewer&body=Hello%2C%0A%0AI%20would%20like%20to%20request%20access%20to%20the%20HiTepOptim%20Project%20Viewer.%0A%0AName%3A%20%0AOrganization%3A%20%0AEmail%3A%20%0AReason%20for%20access%3A%20%0A%0AThank%20you.",
                                         style={'color': '#667eea', 'textDecoration': 'underline'}
                                     ),
                                 ], style={'marginBottom': '15px'}),
@@ -664,18 +664,6 @@ class HomePage(VisualizerApp):
         def toggle_worker_instructions_modal(n_open, n_close, is_open):
             return not is_open
         
-        # Open login modal from homepage
-        @dashboard.app.callback(
-            dash_enrich.Output("login-modal", "is_open", allow_duplicate=True),
-            dash_enrich.Input("open-login-homepage", "n_clicks"),
-            dash_enrich.State("login-modal", "is_open"),
-            prevent_initial_call=True,
-        )
-        def open_login_from_homepage(n_clicks, is_open):
-            if n_clicks:
-                return True
-            return is_open
-        
         # Open/close request access modal
         @dashboard.app.callback(
             dash_enrich.Output("request-access-modal", "is_open"),
@@ -686,3 +674,45 @@ class HomePage(VisualizerApp):
         )
         def toggle_request_access_modal(n_open, n_close, is_open):
             return not is_open
+        
+        # Update login/logout button based on auth state
+        @dashboard.app.callback(
+            dash_enrich.Output("open-login-homepage", "children"),
+            dash_enrich.Output("open-login-homepage", "color"),
+            dash_enrich.Output("open-login-homepage", "id", allow_duplicate=True),
+            dash_enrich.Input("auth-state", "data"),
+            prevent_initial_call=False,
+        )
+        def update_login_button(auth_state):
+            if auth_state and auth_state.get('authenticated'):
+                # User is logged in - show logout button
+                return [
+                    DashIconify(icon="mdi:logout", width=20, style={'marginRight': '8px'}),
+                    "Log Out"
+                ], "danger", "open-login-homepage"
+            else:
+                # User is not logged in - show login button
+                return [
+                    DashIconify(icon="mdi:login", width=20, style={'marginRight': '8px'}),
+                    "Log In"
+                ], "secondary", "open-login-homepage"
+        
+        # Handle login/logout button click
+        @dashboard.app.callback(
+            dash_enrich.Output("login-modal", "is_open", allow_duplicate=True),
+            dash_enrich.Output("auth-state", "data", allow_duplicate=True),
+            dash_enrich.Input("open-login-homepage", "n_clicks"),
+            dash_enrich.State("auth-state", "data"),
+            prevent_initial_call=True,
+        )
+        def handle_login_logout_button(n_clicks, auth_state):
+            if n_clicks:
+                if auth_state and auth_state.get('authenticated'):
+                    # User is logged in - log them out
+                    from flask import session
+                    session.clear()
+                    return False, {'authenticated': False, 'username': None}
+                else:
+                    # User is not logged in - open login modal
+                    return True, dash_enrich.no_update
+            return dash_enrich.no_update, dash_enrich.no_update

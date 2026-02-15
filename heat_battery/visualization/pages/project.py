@@ -2,6 +2,7 @@ from heat_battery.visualization.pages.base import VisualizerApp, dash_enrich
 from heat_battery.simulations.postgresql_project import Project
 import dash_bootstrap_components as dbc
 from dash import get_asset_url
+from dash_iconify import DashIconify
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ import pandas as pd
 from heat_battery.visualization.pages.single_item_page import SingleItemPage
 from heat_battery.visualization.components.tables import JobsTable
 from heat_battery.visualization.components.result_viewer import ResultViewerComponent
-from heat_battery.visualization.components.chart_studio import ChartStudio
+from heat_battery.visualization.components.result_comparator import ResultComparatorComponent
 
 df_test = pd.DataFrame({
     'progress': 100*np.random.rand(10),
@@ -50,6 +51,9 @@ class ProjectViewerSuperApp(VisualizerApp):
             parent=None,
             fig_theme:str='bootstrap',
             initial_figures: list|None=None,
+            initial_comparator_figures: list|None=None,
+            variable_descriptions: dict|None=None,
+            initial_transforms: list|None=None,
         ):
         self.project = project
         super().__init__(name=project.project_name, parent=parent)
@@ -58,7 +62,10 @@ class ProjectViewerSuperApp(VisualizerApp):
             '/jobs-overview': SingleItemPage(
                 "Jobs table", 
                 JobsTable(project), 
-                parent=self),
+                parent=self,
+                icon="mdi:table",
+                tooltip_text="Jobs table",
+            ),
 
             '/result-data': SingleItemPage(
                 "Result viewer", 
@@ -68,14 +75,24 @@ class ProjectViewerSuperApp(VisualizerApp):
                     #figure_creators_getters,
                     fig_theme=fig_theme,
                     initial_figures=initial_figures,
+                    variable_descriptions=variable_descriptions,
+                    initial_transforms=initial_transforms,
                 ), 
-                parent=self
+                parent=self,
+                icon="mdi:chart-line",
+                tooltip_text="Result viewer",
             ),
 
             '/result-comparator': SingleItemPage(
                 "Result comparator", 
-                ChartStudio(project), 
+                ResultComparatorComponent(
+                    project,
+                    fig_theme=fig_theme,
+                    initial_figures=initial_comparator_figures,
+                ), 
                 parent=self,
+                icon="mdi:compare",
+                tooltip_text="Result comparator",
             ),
         }
         self.set_subpages_hrefs()
@@ -83,9 +100,52 @@ class ProjectViewerSuperApp(VisualizerApp):
     def get_children(self):
         return list(self.pages.values())
 
+    # def get_menu(self, dashboard=True, item_style=None, icon_width=30, menu_style=None):
+    #     menu = []
+    #     if dashboard:
+    #         menu.append(dbc.NavLink(
+    #             DashIconify(icon="mdi:home", width=30),
+    #             href=self.href,
+    #             active="exact",
+    #         ))
+    #     for page in self.pages.values():
+    #         btn = dbc.NavLink(
+    #             DashIconify(icon=page.icon, width=30),
+    #             href=page.href,
+    #             active="exact",
+    #         )
+    #         if item_style:
+    #             btn.style = item_style
+    #         menu.append(btn)
+    #     return menu
+
     def preload_cache_data(self):
         for page in self.pages.values():
             page.preload_cache_data()
+
+    def get_link(self):
+        # Override to return a simple NavLink instead of DropdownMenu
+        # This removes the submenu from the side menu
+        return dbc.NavLink(self.name, href=self.href, active="exact")
+
+    def get_icons_menu(self, icon_width=30, dashboard=True, vertical=False):
+        btns = []
+        if dashboard:
+            btns.append(self.get_menu_icon(icon_width=icon_width, tooltip_text="Dashboard", icon="mdi:monitor-dashboard"))
+        for page in self.pages.values():
+            btns.append(page.get_menu_icon(icon_width=icon_width))
+
+        return dbc.Nav(
+            children=btns,
+            pills=False,
+            vertical=vertical,
+            className="bg-dark rounded justify-content-center project-component-nav-icon",
+            style={
+                'width': '100%' if not vertical else 'height: 100%',
+                'padding': '3px',
+            }
+        )
+
 
     def get_layout(self, qs_data:dict|None=None):
 
@@ -131,128 +191,44 @@ class ProjectViewerSuperApp(VisualizerApp):
             }
         )
 
-        overview_card = dbc.Card(
-            children=[
-                dbc.CardImg(src=get_asset_url('images/table.png'), top=True),
-                dbc.CardBody(
-                    [
-                        dash_enrich.html.H4("Jobs Overview", className="card-title"),
-                        dash_enrich.html.P(
-                            "Live data about the running jobs within the project in "
-                            "tabular form",
-                            className="card-text",
-                        ),
-                        dbc.Nav(
-                            dbc.NavItem(
-                                dbc.NavLink(
-                                    dbc.Button(
-                                        "Open overview", 
-                                        style={'width':'100%'}
-                                    ),
-                                    href=self.pages['/jobs-overview'].get_href(), 
-                                    active="exact"
-                                ),
-                                style={'width':'100%'}
-                                
-                            ),
-                        ),
-                    ]
-                ),
-            ],
-            style={"width": "18rem"},
-        )
+        # Navigation icons in horizontal navbar at bottom
+        # nav_icons = dbc.Nav(
+        #     children=[page.get_menu_icon(icon_width=30) for page in self.pages.values()],
+        #     pills=False,
+        #     className="bg-dark justify-content-center project-component-nav-icon",
+        #     style={
+        #         'width': '100%',
+        #         'padding': '10px',
+        #     }
+        # )
 
-        result_data_card = dbc.Card(
-            children=[
-                dbc.CardImg(src=get_asset_url('images/chart.png'), top=True),
-                dbc.CardBody(
-                    [
-                        dash_enrich.html.H4("Result Viewer", className="card-title"),
-                        dash_enrich.html.P(
-                            "Live charts viewer for the simulation data of "
-                            "individual jobs within the project",
-                            className="card-text",
-                        ),
-                        dbc.Nav(
-                            dbc.NavItem(
-                                dbc.NavLink(
-                                    dbc.Button(
-                                        "Open result viewer", 
-                                        style={'width':'100%'}
-                                    ),
-                                    href=self.pages['/result-data'].get_href(), 
-                                    active="exact"
-                                ),
-                                style={'width':'100%'}
-                            ),
-                        ),
-                    ]
-                ),
-            ],
-            style={"width": "18rem"},
-        )
-
-        compare_card = dbc.Card(
-            children=[
-                dbc.CardImg(src=get_asset_url('images/table.png'), top=True),
-                dbc.CardBody(
-                    [
-                        dash_enrich.html.H4("Result Comparator", className="card-title"),
-                        dash_enrich.html.P(
-                            "Compare results of finished jobs from their "
-                            "input/output perspective",
-                            className="card-text",
-                        ),
-                        dbc.Nav(
-                            dbc.NavItem(
-                                dbc.NavLink(
-                                    dbc.Button(
-                                        "Open comparator", 
-                                        style={'width':'100%'}
-                                    ),
-                                    href=self.pages['/result-comparator'].get_href(), 
-                                    active="exact"
-                                ),
-                                style={'width':'100%'}
-                            ),
-                        ),
-                    ]
-                ),
-            ],
-            style={"width": "18rem"},
-        )
-
-        cards = dash_enrich.html.Div(
-            children=dash_enrich.html.Div(
-                children=[
-                    overview_card,
-                    result_data_card,
-                    compare_card,
-                    
-                ],
-                style={
-                'display':'flex', 
-                'flex-wrap':'wrap',
-                'align-items':'stretch', 
-                'height':'100%', 
-                'gap':'15px'
-                },
-                className='card-deck',
-            )
-        )
-
-        div = dash_enrich.html.Div(
-            id=f'project-dashboard-{self.project.project_name}',
+        # Main content area
+        main_content = dash_enrich.html.Div(
             children=[
                 title,
                 overview_chart,
-                cards,
             ],
             style={
-                'height':'90%', 
-                'width':'90%', 
-                'margin':'auto',
-                'text-align':'center'
+                'flex': '1',
+                'text-align': 'center',
+                'overflow-y': 'auto',
+            }
+        )
+
+        # Container with main content and bottom navigation
+        div = dash_enrich.html.Div(
+            id=f'project-dashboard-{self.project.project_name}',
+            children=[
+                self.get_icons_menu(icon_width=20, vertical=False, dashboard=False),
+                main_content,
+            ],
+            style={
+                'height': '100%',
+                'width': '100%',
+                'margin': 'auto',
+                'display': 'flex',
+                'flex-direction': 'column',
+                'align-items': 'stretch',
             },
         )
         return div

@@ -265,8 +265,8 @@ if __name__ == "__main__":
         with open(os.path.join(main_dir, file_name_format.format(**self.data)), 'w') as f:
             f.write(code)
 
-    def run(self):
-        org_status = self.get_status()
+    def run(self, build_only:bool=False):
+        org_status = self.get_status() 
         org_remote_node_name = self.get_remote_node_name()
         try_load_checkpoint = False
         if 'SCHEDULED' in org_status:
@@ -290,7 +290,7 @@ if __name__ == "__main__":
                 "assigning current worker to it to try again..."
             )
             self.set_remote_node_name(self.get_local_worker_id())
-        elif 'INTERRUPTED' in org_status:
+        elif 'INTERRUPTED' in org_status or 'INTERUPTED' in org_status:
             try_load_checkpoint = True
             print_rank_0(
                 f"Job {self.data['signature']} has been INTERRUPTED previously, "
@@ -304,6 +304,20 @@ if __name__ == "__main__":
                 "between job being requested and actual call to run(). Skipping this job..."
             )
             return None
+        elif ('BUILT' in org_status):
+            if not build_only:
+                try_load_checkpoint = True
+                print_rank_0(
+                    f"Job {self.data['signature']} is BUILT. Since build_only is False, "
+                    "assigning current worker to it to run the simulation..."
+                )
+                self.set_remote_node_name(self.get_local_worker_id())
+            else:
+                print_rank_0(
+                    f"Job {self.data['signature']} is BUILT. Since build_only is True, "
+                    "skipping the simulation..."
+                )
+                return None
         else:
             self.set_remote_node_name(None)
             raise ValueError(
@@ -437,12 +451,21 @@ if __name__ == "__main__":
             # run simulation with runner arguments
             self.set_status('RUNNING - SIMULATION')
             self.set_output_build(sim.get_initial_postprocess_data())
-            runner = getattr(sim, self['runner'])
-            runner(**sim_p) # <- THIS IS THE MAIN SIMULATION CALL
+            print_rank_0(f"Simulation build completed!")
+            if not build_only:
+                print_rank_0(f"Running simulation...")
+                runner = getattr(sim, self['runner'])
+                runner(**sim_p) # <- THIS IS THE MAIN SIMULATION CALL
+            else:
+                print_rank_0(f"Simulation build only mode, skipping simulation...")
+                self.set_status('BUILT')
+                self.set_remote_node_name(None)
+                return None
 
             # set job status to completed
             self.set_status('COMPLETED')
             self.set_remote_node_name(None)
+            print_rank_0(f"Job {self.data['signature']} completed!")
 
         except Exception as e:
             print_rank_0(f"Job {self.data['signature']} failed with error:")

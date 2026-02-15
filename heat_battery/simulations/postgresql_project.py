@@ -25,7 +25,7 @@ from ..database.postgresql_connection import (
 )
 from ..config import get_config_item
 
-MAX_WAIT_BEFORE_INTERRUPTED = 60 # seconds
+MAX_WAIT_BEFORE_INTERRUPTED = 600 # seconds
 
 @only_rank_0
 def _create_database_query(if_exists:str='skip'):
@@ -1403,6 +1403,25 @@ class Project:
             jobs_rows = cur.fetchall()
         return jobs_rows
 
+    @only_rank_0
+    @debounced_query
+    def _get_non_scheduled_jobs_query(
+        self,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        with DBConnection() if conn is None else conn as conn:
+            query = sql.SQL("SELECT * FROM {} WHERE status != 'SCHEDULED'")
+            query = query.format(self.get_jobs_table_sql_identifier())
+            cur = conn.cursor()
+            cur.execute(query)
+            jobs_rows = cur.fetchall()
+        return jobs_rows
+
+    def get_non_scheduled_jobs(self):
+        jobs_rows = self._get_non_scheduled_jobs_query()
+        jobs_rows = MPI.COMM_WORLD.bcast(jobs_rows, root=0)
+        return jobs_rows
+
     def get_jobs(
             self, 
             as_dataframe:bool=False,
@@ -1526,7 +1545,9 @@ class Project:
             for column, filter_model in getRowsRequest['filterModel'].items():
                 sql_filters.append(self.construct_filter_code(filter_model, column))
             
-            # ORDER BY clauses
+            # ORDER BY clauses (add priority when nothing specified)
+            if not getRowsRequest['sortModel']:
+                getRowsRequest['sortModel'] = [{"colId": "priority", "sort": "asc"}]
             sql_sorts = []
             for sort_model in getRowsRequest['sortModel']:
                 sql_sorts.append(self.construct_sort_code(sort_model))

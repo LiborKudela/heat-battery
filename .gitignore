@@ -21,3 +21,8 @@ examples/Example_0*/results*
 
 # ignore cloc data
 !/assets/cloc/line_count_cache.csv
+
+# ignore these folders
+docs/
+experimental/
+wheather/

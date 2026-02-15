@@ -3,9 +3,12 @@ from dash_extensions import Lottie
 from dash import get_asset_url
 
 class SingleItemPage(VisualizerApp):
-    def __init__(self, name, item, parent=None):
-        super().__init__(name=name, parent=parent)
+    def __init__(self, name, item, parent=None, icon=None, tooltip_text=None):
+        super().__init__(name=name, parent=parent, icon=icon, tooltip_text=tooltip_text)
         self.item = item
+        # Set this page as the parent of the item so it can access parent methods
+        if hasattr(self.item, 'parent'):
+            self.item.parent = self
 
     def get_children(self):
         return [self.item]

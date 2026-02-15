@@ -227,6 +227,9 @@ dagcomponentfuncs.statusBadge = function (props) {
     } else if (props.value.startsWith('INTERRUPTED')) {
         color = 'dark';
         status_text = 'INTERRUPTED';
+    } else if (props.value.startsWith('BUILT')) {
+        color = 'info';
+        status_text = 'BUILT';
     } else {
         color = 'dark';
         status_text = 'UNKNOWN';

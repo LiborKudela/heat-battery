@@ -11,7 +11,7 @@ from..utilities import hash_data
 import random
 from dash_iconify import DashIconify
 from urllib.parse import urlparse, parse_qs
-from flask import send_file, session
+from flask import send_file, session, request
 import os
 import secrets
 _dash_renderer._set_react_version("18.2.0")
@@ -37,8 +37,8 @@ class Dasboard():
         #server
         self.data_time_stamp = self.get_current_time_stamp()
 
-        #TODO: add client counter
-        self.active_session_ids = dict() #id : last ping time
+        # Client tracking: id -> {last_ping, ip, os, timezone, language, connected_at}
+        self.active_session_ids = dict()
         
         # Authentication
         self.credentials = credentials if credentials else {'admin': 'password'}  # Default credentials
@@ -83,10 +83,6 @@ class Dasboard():
     def debug_mode(self, host='127.0.0.1', port=8050):
         '''The dash server runs in serial so it blocks other evaluations'''
         self.app.run(host=host, port=port, debug=True)
-
-    # def stay_alive(self, timeout=365*3600):
-    #     MPI.COMM_WORLD.Barrier()
-    #     time.sleep(timeout)
 
     def register_page(self, page):
         '''All ranks need access to page constructors'''
@@ -167,54 +163,9 @@ class Dasboard():
             else:
                 return "Config template not found", 404
         
-    # def register_data_updater(self, name, updater):
-    #     self.updaters[name] = updater
-    #     self.server_data[name] = None
-
-    # def update_data(self):
-    #     '''Some data need all mpi ranks to evaluate sucesfully'''
-    #     now = time.time()
-    #     active_ids = list(self.active_session_ids.keys())
-    #     for session_id in active_ids:
-    #         if (now - self.active_session_ids[session_id]) > 30:
-    #             self.active_session_ids.pop(session_id)
-    #             print(f'Client disconected with id: {session_id}')
-
-    #     active_client = len(self.active_session_ids) > 0
-    #     active_client = MPI.COMM_WORLD.bcast(active_client)
-    #     total = len(self.updaters) + len(self.pages)
-    #     finished = 0
-    #     self.server_load_progress = 0.0
-    #     self.server_load_progress_info = "initialisation"
-    #     if active_client or not self.server_ready:
-    #         u_start = time.time()
-    #         for name, updater in self.updaters.items():
-    #             self.server_load_progress_info = f"Running updater: {name}"
-    #             self.server_data[name] = updater.reload()
-    #             finished += 1
-    #             self.server_load_progress = finished/total
-    #         print(f"Updaters: {time.time() - u_start}.")
-    #         u_start = time.time()
-    #         for href, page in self.pages.items():
-    #             self.server_load_progress_info = f"Loading page: {href}"
-    #             page._update_data()
-    #             finished += 1
-    #             self.server_load_progress = finished/total
-    #             self.server_load_progress_info = f"Finishing"
-    #         print(f"Apps: {time.time() - u_start}.")
-    #         self.data_time_stamp = self.get_current_time_stamp()
-    #         self.server_ready = True
-
     def preload_cache_data(self):
         for page in self.pages.values():
             page.preload_cache_data()
-
-    # def auto_update(self, freq=10):
-    #     while True:
-    #         u_start = time.time()
-    #         self.update_data()
-    #         print(f"Update time: {time.time() - u_start} -> {len(self.active_session_ids)} clients.")
-    #         time.sleep(freq)
 
     def get_current_time_stamp(self):
         return datetime.datetime.now().strftime(f'%m/%d/%Y, %H:%M:%S.%f')
@@ -300,41 +251,48 @@ class Dasboard():
                     className="btn btn-primary",
                     style={'marginLeft': '0'}
                 ),
-                dbc.Button(
-                        DashIconify(icon="carbon:apps", width=30),
-                        id="open-apps",
-                        n_clicks=0,
-                        size="sm",
-                        className="btn btn-primary",
-                        style={
-                            'marginRight': 4,
-                            'marginLeft': 'auto',
-                            }
-                    ),    
+                # dbc.Button(
+                #         DashIconify(icon="carbon:apps", width=30),
+                #         id="open-apps",
+                #         n_clicks=0,
+                #         size="sm",
+                #         className="btn btn-primary",
+                #         style={
+                #             'marginRight': 4,
+                #             'marginLeft': 'auto',
+                #             }
+                #     ),    
                 dash_enrich.html.Div(
                         id="auth-status-display",
                         children=[
                             dbc.Button(
-                                DashIconify(icon="radix-icons:avatar", width=30),
+                                'Log In',
                                 id="open-login",
                                 n_clicks=0,
                                 size="sm",
-                                className="btn btn-primary",
+                                className="btn btn-success",
                                 style={
-                                    'marginRight': 4,
+                                    'marginRight': 2,
                                 }
                             ),
                         ],
-                        style={'display': 'flex', 'alignItems': 'center', 'gap': '4px'}
+                        style={
+                            'marginLeft': 'auto', 
+                            'display': 'flex', 
+                            'alignItems': 'center', 
+                            'gap': '4px',
+                            'marginRight': 4,
+                            'fontSize': '14px',
+                        }
                     ),
-                dbc.Button(
-                        DashIconify(icon="carbon:help", width=30),
-                        id="open-help",
-                        n_clicks=0,
-                        size="sm",
-                        className="btn btn-primary",
-                        style={'marginLeft': '4'}
-                    ),
+                # dbc.Button(
+                #         DashIconify(icon="carbon:help", width=30),
+                #         id="open-help",
+                #         n_clicks=0,
+                #         size="sm",
+                #         className="btn btn-primary",
+                #         style={'marginLeft': '4'}
+                #     ),
                 ],
         style={
             'padding':4, 
@@ -456,54 +414,6 @@ class Dasboard():
             centered=True,
             )
         
-        # chart_editor_modal = dbc.Modal(
-        #     id="chart-editor-modal",
-        #     fullscreen=True,
-        #     is_open=False,
-        #     children=[
-        #         dbc.ModalHeader(
-        #             close_button=False,
-        #             style={'gap': 4},
-        #             children=[
-        #                 dbc.ModalTitle("Chart editor"),
-        #                 dbc.Button(
-        #                     "Close without saving", 
-        #                     id="close-chart-editor-no-save", 
-        #                     color="danger",
-        #                     size="sm",
-        #                     style={'marginLeft': 'auto'},
-        #                 ),
-        #                 dbc.Button(
-        #                     "Save", 
-        #                     id="save-chart-editor", 
-        #                     color="primary",
-        #                     size="sm",
-        #                 ),
-        #                 dbc.Button(
-        #                     "Save & Close", 
-        #                     id="save-and-close-chart-editor", 
-        #                     color="success",
-        #                     size="sm",
-        #                 ),
-        #             ],
-        #         ),
-        #         dash_enrich.dcc.Store(
-        #             id="chart-editor-store",
-        #             data=None,
-        #         ),
-        #         dce.DashChartEditor(
-        #             id="chart-editor-editor",
-        #             # saveState=True,
-        #             dataSources={
-        #                 'x': [1, 2, 3, 4, 5],
-        #                 'y': [10, 20, 30, 40, 50],
-        #             },
-        #             style={'width': '100%', 'height': '100%'},
-        #         ),
-        #     ],
-        #     style={'width': '100%', 'height': '100%'},
-        # )
-        
         loading_overlay = dash_enrich.html.Div(
             id="page-loading-overlay",
             children=dbc.Card(
@@ -533,7 +443,8 @@ class Dasboard():
                 dash_enrich.dcc.Location(id="url"),
                 EventListener(id='fullscreen-listener', events=[fs_event]),
                 dash_enrich.dcc.Store(id="update-data-status", data=1),
-                dash_enrich.dcc.Store(id="client-session-id", data="initial"),
+                dash_enrich.dcc.Store(id="client-session-id", storage_type='local', data="initial"),
+                dash_enrich.dcc.Store(id="client-info", data=None),  # Stores browser info (OS, timezone, language)
                 dash_enrich.dcc.Store(id="auth-state", storage_type='session', data={'authenticated': False, 'username': None}),
                 side_bar,
                 nav_bar,
@@ -762,78 +673,103 @@ class Dasboard():
             dash_enrich.State("login-modal", "is_open"),
         )
 
-        # insert dataSources to chart editor
-        # @self.app.callback(
-        #     dash_enrich.Input("chart-editor-modal", "is_open"),
-        #     dash_enrich.Output("chart-editor-editor", "dataSources"),
-        #     prevent_initial_call=True,
-        # )
-        # def insert_dataSources_to_chart_editor(is_open):
-        #     if is_open:
-        #         return dash_enrich.no_update
-        #     else:
-        #         return dash_enrich.no_update
-
-        # save and close chart editor
-        # self.app.clientside_callback(
-        #     ClientsideFunction(
-        #         namespace='clientside',
-        #         function_name='save_and_close_chart_editor',
-        #     ),
-        #     dash_enrich.Input("save-and-close-chart-editor", "n_clicks"), 
-        #     dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
-        #     dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
-        #     prevent_initial_call=True,
-        # )
+        # Collect client browser info (OS, timezone, language)
+        self.app.clientside_callback(
+            ClientsideFunction(
+                namespace='clientside',
+                function_name='get_client_info'
+            ),
+            dash_enrich.Output("client-info", "data"),
+            dash_enrich.Input("server-ping-trigger", "n_intervals"),
+        )
         
-        # # save chart editor without closing
-        # self.app.clientside_callback(
-        #     ClientsideFunction(
-        #         namespace='clientside',
-        #         function_name='save_chart_editor',
-        #     ),
-        #     dash_enrich.Input("save-chart-editor", "n_clicks"), 
-        #     dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
-        #     prevent_initial_call=True,
-        # )
-
-        # # close chart editor without saving
-        # self.app.clientside_callback(
-        #     ClientsideFunction(
-        #         namespace='clientside',
-        #         function_name='close_no_save_chart_editor',
-        #     ),
-        #     dash_enrich.Input("close-chart-editor-no-save", "n_clicks"), 
-        #     dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
-        #     prevent_initial_call=True,
-        # )
-
-        # # replace figure on save in editor
-        # self.app.clientside_callback(
-        #     ClientsideFunction(
-        #         namespace='clientside',
-        #         function_name='replace_figure_on_save',
-        #     ),
-        #     dash_enrich.Input("chart-editor-editor", "figure"),
-        #     dash_enrich.State("chart-editor-store", "data"),
-        #     prevent_initial_call=True,
-        # ) 
-
         # client id handling
         @self.app.callback(
             dash_enrich.Output("client-session-id", "data"),
             dash_enrich.Input("server-ping-trigger", "n_intervals"),
             dash_enrich.State("client-session-id", "data"),
+            dash_enrich.State("client-info", "data"),
         )
-        def update_client_counter(n_intervals, data):
-            if data in self.active_session_ids.keys():
-                self.active_session_ids[data] = time.time()
+        def update_client_counter(n_intervals, data, client_info):
+            # Clean up disconnected clients (no ping for more than 1 minute)
+            current_time = time.time()
+            disconnected_clients = []
+            for client_id, client_data in list(self.active_session_ids.items()):
+                time_since_last_ping = current_time - client_data.get('last_ping', 0)
+                if time_since_last_ping > 60:  # 1 minute timeout
+                    disconnected_clients.append(client_id)
+                    print(f"Client disconnected (timeout):")
+                    print(f"  ID: {client_id}")
+                    print(f"  IP: {client_data.get('ip', 'Unknown')}")
+                    print(f"  Last ping: {time_since_last_ping:.1f} seconds ago")
+                    print(f"  Connected at: {client_data.get('connected_at', 'Unknown')}")
+                    del self.active_session_ids[client_id]
+            
+            if disconnected_clients:
+                print(f"Removed {len(disconnected_clients)} disconnected client(s). Active users: {len(self.active_session_ids)}")
+            
+            # Check if client ID is valid and already exists in server memory
+            if data and data != "initial" and data in self.active_session_ids.keys():
+                # Existing active client - just update last ping time
+                self.active_session_ids[data]['last_ping'] = time.time()
+                # Update IP in case it changed
+                self.active_session_ids[data]['ip'] = request.remote_addr
+                if request.headers.get('X-Forwarded-For'):
+                    self.active_session_ids[data]['ip'] = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+                elif request.headers.get('X-Real-IP'):
+                    self.active_session_ids[data]['ip'] = request.headers.get('X-Real-IP')
                 return dash_enrich.no_update
+            
+            # New client or returning client (page refresh after server restart)
+            # Determine if this is a returning client (has saved ID in localStorage)
+            is_returning = False
+            if data and data != "initial":
+                # Client has a saved ID from previous session (in localStorage)
+                is_returning = True
+                client_id = data
             else:
-                new_client_id = hash_data((time.time(), random.random()))
-                print(f"new client connected: {new_client_id}")
-                self.active_session_ids[new_client_id] = time.time()
-                return new_client_id
+                # Truly new client - generate new ID
+                client_id = hash_data((time.time(), random.random()))
+            
+            # Get IP address from Flask request
+            ip_address = request.remote_addr
+            # Check for proxy headers (common in production)
+            if request.headers.get('X-Forwarded-For'):
+                ip_address = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+            elif request.headers.get('X-Real-IP'):
+                ip_address = request.headers.get('X-Real-IP')
+            
+            # Extract client info from browser
+            os_info = client_info.get('os', 'Unknown') if client_info else 'Unknown'
+            timezone = client_info.get('timezone', 'Unknown') if client_info else 'Unknown'
+            language = client_info.get('language', 'Unknown') if client_info else 'Unknown'
+            username = session.get('username', 'Unknown') if session.get('authenticated', False) else 'Unknown'
+            
+            # Store client information
+            self.active_session_ids[client_id] = {
+                'last_ping': time.time(),
+                'username': username,
+                'ip': ip_address,
+                'os': os_info,
+                'timezone': timezone,
+                'language': language,
+                'connected_at': self.get_current_time_stamp(),
+                'is_returning': is_returning
+            }
+            
+            # Print client connection info    
+            print(f"New connection:")
+            print(f"  ID: {client_id}")
+            print(f"  Username: {username}")
+            print(f"  IP: {ip_address}")
+            print(f"  OS: {os_info}")
+            print(f"  Timezone: {timezone}")
+            print(f"  Language: {language}")
+            print(f"  Connected at: {self.active_session_ids[client_id]['connected_at']}")
+            print(f"  Is returning: {is_returning}")
+            print(f"Active users: {len(self.active_session_ids)}")
+            
+            return client_id
         
         # Handle login authentication
         @self.app.callback(
@@ -935,25 +871,21 @@ class Dasboard():
                         style={'color': 'white', 'marginRight': '8px', 'fontSize': '14px'}
                     ),
                     dbc.Button(
-                        children=[
-                            DashIconify(icon="mdi:logout", width=20),
-                        ],
+                        "Log Out",
                         id="logout-button",
                         color="danger",
                         size="sm",
-                        outline=True,
-                        style={'marginRight': 4}
+                        outline=False,
                     ),
                 ]
             else:
                 return [
                     dbc.Button(
-                        DashIconify(icon="radix-icons:avatar", width=30),
+                        "Log In",
                         id="open-login",
                         n_clicks=0,
                         size="sm",
-                        className="btn btn-primary",
-                        style={'marginRight': 4}
+                        className="btn btn-success",
                     ),
                 ]
         
@@ -975,7 +907,7 @@ class Dasboard():
         @self.app.callback(
             dash_enrich.Output("page-content", "children"),
             dash_enrich.Input("url", "href"),
-            dash_enrich.Input("auth-state", "data"),
+            dash_enrich.State("auth-state", "data"),
             running=[
                 (dash_enrich.Output("page-loading-overlay", "hidden"), False, True),
                 (dash_enrich.Output("page-content", "is_in"), False, True),

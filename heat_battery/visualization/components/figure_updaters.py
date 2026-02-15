@@ -2,8 +2,10 @@ from dash import Patch
 import numpy as np
 import pandas as pd
 import datetime
+import dateutil
 import tsdownsample
 import re
+from .data_tramsforms import apply_transform
 
 DEFAULT_TSDOWNSAMPLE_N = 1000
 DEFAULT_TSDOWNSAMPLE_METHOD = tsdownsample.MinMaxLTTBDownsampler()
@@ -23,7 +25,8 @@ def limit_to_number(value):
     if isinstance(value, datetime.datetime):
         return value.timestamp()
     elif isinstance(value, str):
-        return datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
+        return dateutil.parser.parse(value).replace(tzinfo=datetime.timezone.utc).timestamp()
+        #return datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
     elif isinstance(value, float):
         return value
     else:
@@ -91,7 +94,7 @@ def convert_to_patch(data):
     return patch
 
 def get_timeseries_figure_update(df, trace_names, x_name, relayout_data, as_patch=True):
-    print(f"Trace names: {trace_names}")
+    #print(f"Trace names: {trace_names}")
     if 'xaxis.range[0]' not in relayout_data:
         x_min = df[x_name].iloc[0]
     else:
@@ -124,5 +127,23 @@ def fill_timeseries_figure_initial(df, fig_data):
 def no_update_patch():
     return Patch()
 
-def get_aggregated_figure_update(df, trace_names, x_name, relayout_data):
-    return Patch()
+def get_transform_figure_update(transformed_df, y_names, x_name, relayout_data):
+    d = {}
+    d['data'] = []
+    for name in y_names:
+        series = transformed_df[name]
+        x = transformed_df[x_name].values
+        print(f"name: {name}"   )
+        print(f"x: {x}")
+        y = series.values
+        print(f"y: {y}")
+        d['data'].append(
+            {   
+                'x': x, 
+                'y': y,
+                'xsrc': series.index.name,
+                'ysrc': name,
+                'name': name,
+            })
+
+    return convert_to_patch(d)

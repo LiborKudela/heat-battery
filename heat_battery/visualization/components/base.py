@@ -12,6 +12,7 @@ class ContentItem:
         self.update_current_time_stamp()
         self.parent = parent
         self.bootstrap_style = bootstrap_style
+        self.performance_data = {}
 
     def get_children(self):
         return []

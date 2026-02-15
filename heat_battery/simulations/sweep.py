@@ -265,11 +265,17 @@ class ParameterGrid():
         return nested_dict
 
     def kde_parameters(self):
+        """
+        Generate a grid of parameter sets using the KDE algorithm.
+        """
         for priority, idxs in enumerate(self.kde_indexes()):
             values = [pl[idx] for idx, pl in zip(idxs, self.param_lists)]
             yield self.populate_param_dict(values, priority)
     
     def kde_indexes(self):
+        """
+        Generate a grid of parameter sets using the KDE algorithm.
+        """
         indexes = np.array(self.ordered_index_array())
         n = len(indexes)
         flags = np.zeros(indexes.shape[0], dtype=bool)
@@ -289,12 +295,18 @@ class ParameterGrid():
             yield indexes[next_point]
 
     def ordered_index_array(self):
+        """
+        Generate an array of combinations of indices for all parameter sets.
+        """
         out = []
         for i in range(len(self)):
             out.append(self.index_combination(i))
         return out
 
     def index_combination(self, i):
+        """
+        Generate a combination of indices for i-th index in the from ordered product of all parameter list.
+        """
         c = []
         for length in reversed(self.lengths):
             max_index = length - 1 
