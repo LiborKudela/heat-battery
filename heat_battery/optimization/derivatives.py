@@ -5,7 +5,7 @@ import numpy as np
 import ufl
 from petsc4py import PETSc
 
-import dolfinx.nls.petsc
+#import dolfinx.nls.petsc
 import dolfinx.fem.petsc
 
 from ..simulations.probing import FunctionSampler
@@ -55,7 +55,7 @@ class UflObjective:
 
         self.rhs = -ufl.derivative(J, u)
         self.rhs_form = fem.form(self.rhs)
-        self.b = dolfinx.fem.petsc.create_vector(self.rhs_form)
+        self.b = dolfinx.fem.petsc.create_vector(fem.extract_function_spaces(self.rhs_form))
 
         self.vars = wrap_constant_controls(self.controls)
         self.J_var_form = ufl.replace(self.J, self.vars)
@@ -169,7 +169,7 @@ class AdjointDerivative:
         self.var_form = ufl.replace(self.form, self.vars)
 
         self.dFdk_form = [fem.form(ufl.diff(self.var_form, var)) for var in self.vars.values()]
-        self.dFdk = [fem.petsc.create_vector(form) for form in self.dFdk_form]
+        self.dFdk = [fem.petsc.create_vector(fem.extract_function_spaces(form)) for form in self.dFdk_form]
 
         # adjoint problem solver definition
         self.lhs = ufl.adjoint(ufl.derivative(self.form, u))
@@ -186,7 +186,7 @@ class AdjointDerivative:
 
         # lhs assembly
         self.A.zeroEntries()
-        dolfinx.fem.petsc.assemble_matrix_mat(self.A, self.lhs_form, bcs=self.bcs)
+        dolfinx.fem.petsc.assemble_matrix(self.A, self.lhs_form, bcs=self.bcs)
         self.A.assemble()
 
         # rhs assembly
@@ -239,7 +239,7 @@ class ForwardDerivative_dudk:
         self.var_form = ufl.replace(self.form, self.vars)
 
         self.dFdk_form = [fem.form(ufl.diff(self.var_form, var)) for var in self.vars.values()]
-        self.dFdk = [fem.petsc.create_vector(form) for form in self.dFdk_form]
+        self.dFdk = [fem.petsc.create_vector(fem.extract_function_spaces(form)) for form in self.dFdk_form]
 
         # adjoint problem solver definition
         self.lhs = ufl.derivative(self.form, u)
@@ -262,7 +262,7 @@ class ForwardDerivative_dudk:
 
         # lhs assembly
         self.A.zeroEntries()
-        dolfinx.fem.petsc.assemble_matrix_mat(self.A, self.lhs_form, bcs=self.bcs)
+        dolfinx.fem.petsc.assemble_matrix(self.A, self.lhs_form, bcs=self.bcs)
         self.A.assemble()
 
         jac = []

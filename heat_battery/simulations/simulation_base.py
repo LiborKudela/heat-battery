@@ -100,7 +100,10 @@ class Simulation():
 
         # load domain
         self.dim = self.geo_meta['dim']
-        self.domain, self.cell_tags, self.facet_tags = io.gmshio.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
+        mesh_data = io.gmsh.read_from_msh(f'{self.geo_path}.msh', MPI.COMM_WORLD, 0, gdim=self.dim)
+        self.domain = mesh_data.mesh
+        self.cell_tags = mesh_data.cell_tags
+        self.facet_tags = mesh_data.facet_tags
         # instantiate materials
         self.mats = MaterialsSet(self.domain, self.geo_meta['materials'])
         self.subdomain_map = self.mats.key_map
@@ -372,15 +375,15 @@ class Simulation():
 
         @probes.register_probe('NLS_iter', '-', format='d')
         def NLS_iter():
-            return self.r_steady[0]
+            return self.steady_solver.solver.getIterationNumber()
         
         @probes.register_probe('KSP_iter', '-', format='d')
         def KSP_iter():
-            return self.steady_solver.krylov_solver.its
+            return self.steady_solver.solver.getLinearSolveIterations()
         
         @probes.register_probe('ksp_norm', '-')
         def KSP_norm():
-            return self.steady_solver.krylov_solver.norm
+            return self.steady_solver.solver.getKSP().getResidualNorm()
 
         self.create_common_probes(probes)
 
@@ -426,11 +429,11 @@ class Simulation():
         
         @probes.register_probe('NLS_iter', '-', format='d')
         def NLS_iter():
-            return self.r_unsteady[0]
+            return self.unsteady_solver.solver.getIterationNumber()
         
         @probes.register_probe('KSP_iter', '-', format='d')
         def KSP_iter():
-            return self.unsteady_solver.krylov_solver.its
+            return self.unsteady_solver.solver.getLinearSolveIterations()
         
         @probes.register_probe('TERM_iter', '-', format='d')
         def Term_iter():
@@ -442,7 +445,7 @@ class Simulation():
         
         @probes.register_probe('ksp_norm', '-')
         def KSP_norm():
-            return self.unsteady_solver.krylov_solver.norm
+            return self.unsteady_solver.solver.getKSP().getResidualNorm()
         
         self.create_common_probes(probes)
 
@@ -481,22 +484,49 @@ class Simulation():
         #problem = dolfinx.fem.petsc.NewtonSolverNonlinearProblem(F, u)
         # except ImportError:
         #dolfin 0.10
-        problem = dolfinx.fem.petsc.NonlinearProblem(F, u)
+        petsc_options = {
+            "snes_type": "newtonls",
+            "snes_linesearch_type": "bt",
+            "snes_atol": 1e-6,
+            "snes_rtol": 1e-6,
+            "snes_max_it": 30,
+            #"snes_monitor": None,
+            "ksp_error_if_not_converged": "true",
+            "snes_error_if_not_converged": "true",
+            "ksp_rtol": 1e-16,
+            #"ksp_atol": 1e-16,
+            "ksp_max_it": 10000,
+            "ksp_reuse_preconditioner": 'false',
+            #"ksp_monitor": None,
+            # "ksp_type": "gmres",
+            # "pc_type": "gamg",
+            "pc_type": "hypre",
+            "pc_hypre_type": "boomeramg",
+            "pc_hypre_boomeramg_max_iter": 1,
+            "pc_hypre_boomeramg_cycle_type": "v",
+        }
+        problem = dolfinx.fem.petsc.NonlinearProblem(
+            F, 
+            self.T,
+            bcs=[],
+            petsc_options=petsc_options,
+            petsc_options_prefix="nonlinheatbattery_",
+            )
 
-        solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
-        solver.convergence_criterion = "residual"
-        solver.max_it = 30
-        solver.atol = 1e-6
-        solver.rtol = 1e-6
-        opts = PETSc.Options()
-        ksp = solver.krylov_solver
-        pc = ksp.getPC()
-        option_prefix = ksp.getOptionsPrefix()
-        opts[f"{option_prefix}ksp_type"] = 'gmres'
-        opts[f"{option_prefix}pc_type"] = 'gamg'
-        opts[f"{option_prefix}ksp_reuse_preconditioner"] = 'false'
-        ksp.setFromOptions()
-        return solver
+        # solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
+        # solver.convergence_criterion = "residual"
+        # solver.max_it = 30
+        # solver.atol = 1e-6
+        # solver.rtol = 1e-6
+        # opts = PETSc.Options()
+        # ksp = solver.krylov_solver
+        # pc = ksp.getPC()
+        # option_prefix = ksp.getOptionsPrefix()
+        # opts[f"{option_prefix}ksp_type"] = 'gmres'
+        # opts[f"{option_prefix}pc_type"] = 'gamg'
+        # opts[f"{option_prefix}ksp_reuse_preconditioner"] = 'false'
+        # ksp.setFromOptions()
+        return problem
     
     def solve_time_derivative(self,
         dT_guess=None):
@@ -530,8 +560,8 @@ class Simulation():
             self.mats.set_h0_T_ref(20.0)
 
         # set tolerances
-        self.steady_solver.atol = abs_tol
-        self.steady_solver.rtol = rel_tol
+        self.steady_solver.solver.atol = abs_tol
+        self.steady_solver.solver.rtol = rel_tol
 
         # set unsteady probes outputs locations
         if probe_destinations:
@@ -546,7 +576,7 @@ class Simulation():
         #FIXME: this should run in loop when the Terms are implicit in nature
         #FIXME: this whole function will be unusable as of now, I focus on unsteady now!!! SORRY!
         try:
-            self.r_steady = self.steady_solver.solve(self.T)
+            self.r_steady = self.steady_solver.solve()
         except Exception as e:
             self.steady_probes.close()
             self.steady_probes.reset_printer()
@@ -695,13 +725,14 @@ class Simulation():
             prev_checkpoint_t = local_data["prev_checkpoint_t"]
             step = local_data["step"]
         # set tolerances
-        self.unsteady_solver.atol = atol
-        self.unsteady_solver.rtol = rtol
+        #self.unsteady_solver.solver.convergence_criterion = "residual"
+        self.unsteady_solver.solver.atol = atol
+        self.unsteady_solver.solver.rtol = rtol
 
         if datetime_start is not None:
             self.timestamp_start = datetime.datetime.strptime(datetime_start, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
         else:
-            self.datetime_start = 0.0
+            self.timestamp_start = 0.0
 
         # set unsteady probes outputs locations
         if probe_destinations:
@@ -786,7 +817,7 @@ class Simulation():
                 
                 # try to solve the PDE (most cpu intensive code is in this chunk!)
                 try:
-                    self.r_unsteady = self.unsteady_solver.solve(self.T)
+                    self.r_unsteady = self.unsteady_solver.solve()
                 except Exception as e:
                     if MPI.COMM_WORLD.rank == 0:
                         printer(e)

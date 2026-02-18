@@ -39,11 +39,26 @@ class TestDerivative(unittest.TestCase):
         self.bcs = [bc1]
 
         # solve the problem
-        problem = dolfinx.fem.petsc.NonlinearProblem(self.F, self.u, self.bcs)
-        self.solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
-        self.solver.convergence_criterion = "residual"
-        self.solver.rtol = 1e-16
-        self.forward = lambda : self.solver.solve(self.u)
+        petsc_options = {
+            "snes_type": "newtonls",
+            "snes_linesearch_type": "bt",
+            "snes_atol": 1e-16,
+            "snes_rtol": 1e-16,
+            "ksp_rtol": 1e-16,
+            "ksp_type": "preonly",
+            "pc_type": "lu",
+            "pc_factor_mat_solver_type": "mumps",
+            "snes_error_if_not_converged": True,
+            "ksp_error_if_not_converged": True,
+        }
+        self.solver = dolfinx.fem.petsc.NonlinearProblem(
+            self.F,
+            self.u,
+            bcs=self.bcs,
+            petsc_options=petsc_options,
+            petsc_options_prefix="testderivative",
+        )
+        self.forward = lambda: self.solver.solve()
     
     def test_ufl_objective(self):
         J = ufl.inner(self.u, self.u)*self.dx
@@ -59,7 +74,7 @@ class TestDerivative(unittest.TestCase):
 
         def loss(value):
             self.k.value[:] = value
-            self.solver.solve(self.u)
+            self.solver.solve()
             l = Jr.evaluate()
             return l
         
@@ -81,7 +96,7 @@ class TestDerivative(unittest.TestCase):
 
         def loss(value):
             self.k.value[:] = value
-            self.solver.solve(self.u)
+            self.solver.solve()
             l = Jr.evaluate()
             return l
         
