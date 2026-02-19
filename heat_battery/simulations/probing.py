@@ -446,6 +446,7 @@ class Probe_writer:
             try:
                 value = probe()
             except Exception as e:
+                print(f"Error evaluating probe {self.names[i]}: {e}")
                 value = 0
             self.values[i] = value
         self.chained_values = self.chain_values()

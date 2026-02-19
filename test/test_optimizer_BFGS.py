@@ -10,7 +10,7 @@ class TestOptimization(unittest.TestCase):
             geometry_dir='examples/Example_01/meshes/',
             model_name="mesh_2d",
             )
-        inputs = [{'Qc': 100, 'T_amb': 20, 'abs_tol': 1e-7, 'rel_tol': 1e-7}]
+        inputs = [{'Qc': 100, 'T_amb': 20, 'atol': 1e-7, 'rtol': 1e-7}]
         probes = self.sim.solve_steady(**inputs[0])
         outputs = [probes.get_value('T')]
         self.fitter = SteadyStateComparer(self.sim, inputs, outputs)

@@ -381,9 +381,9 @@ class Simulation():
         def KSP_iter():
             return self.steady_solver.solver.getLinearSolveIterations()
         
-        @probes.register_probe('ksp_norm', '-')
-        def KSP_norm():
-            return self.steady_solver.solver.getKSP().getResidualNorm()
+        @probes.register_probe('r_norm', '-')
+        def Residual_norm():
+            return self.steady_solver.solver.getFunctionNorm()
 
         self.create_common_probes(probes)
 
@@ -443,9 +443,9 @@ class Simulation():
         def Total_iter():
             return self.unsteady_total_iter
         
-        @probes.register_probe('ksp_norm', '-')
-        def KSP_norm():
-            return self.unsteady_solver.solver.getKSP().getResidualNorm()
+        @probes.register_probe('r_norm', '-')
+        def Residual_norm():
+            return self.unsteady_solver.solver.getFunctionNorm()
         
         self.create_common_probes(probes)
 
@@ -479,21 +479,18 @@ class Simulation():
             self.root_types = np.concatenate(global_types)
 
     def create_newton_solver(self, F, u, petsc_options_prefix):
-        # try:
-        #     #dolfin 0.9
-        #problem = dolfinx.fem.petsc.NewtonSolverNonlinearProblem(F, u)
-        # except ImportError:
-        #dolfin 0.10
+
         petsc_options = {
             "snes_type": "newtonls",
             "snes_linesearch_type": "bt",
             "snes_atol": 1e-6,
             "snes_rtol": 1e-6,
+            #"snes_stol": 1e-6,
             "snes_max_it": 30,
             #"snes_monitor": None,
             "ksp_error_if_not_converged": "true",
             "snes_error_if_not_converged": "true",
-            "ksp_rtol": 1e-16,
+            "ksp_rtol": 1e-10,
             #"ksp_atol": 1e-16,
             "ksp_max_it": 10000,
             "ksp_reuse_preconditioner": 'false',
@@ -513,19 +510,7 @@ class Simulation():
             petsc_options_prefix=petsc_options_prefix,
             )
 
-        # solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
-        # solver.convergence_criterion = "residual"
-        # solver.max_it = 30
-        # solver.atol = 1e-6
-        # solver.rtol = 1e-6
-        # opts = PETSc.Options()
-        # ksp = solver.krylov_solver
-        # pc = ksp.getPC()
-        # option_prefix = ksp.getOptionsPrefix()
-        # opts[f"{option_prefix}ksp_type"] = 'gmres'
-        # opts[f"{option_prefix}pc_type"] = 'gamg'
-        # opts[f"{option_prefix}ksp_reuse_preconditioner"] = 'false'
-        # ksp.setFromOptions()
+
         return problem
     
     def solve_time_derivative(self,
@@ -544,8 +529,10 @@ class Simulation():
         save_probes=False,
         verbose=False,
         close_probes=True,
-        abs_tol=1e-6,
-        rel_tol=1e-6,
+        atol=None,
+        rtol=None,
+        stol=None,
+        ksp_rtol=None,
         h0_T_ref=None,
         ):
 
@@ -560,8 +547,16 @@ class Simulation():
             self.mats.set_h0_T_ref(20.0)
 
         # set tolerances
-        self.steady_solver.solver.atol = abs_tol
-        self.steady_solver.solver.rtol = rel_tol
+        if atol is not None:
+            self.steady_solver.solver.atol = atol
+        if rtol is not None:
+            self.steady_solver.solver.rtol = rtol
+        if stol is not None:
+            self.steady_solver.solver.stol = stol
+        if ksp_rtol is not None:
+            self.steady_solver.solver.ksp.rtol = ksp_rtol
+        # print(f"SNES Tolerances: {self.steady_solver.solver.getTolerances()}")
+        # print(f"KSP Tolerances: {self.steady_solver.solver.ksp.getTolerances()}")
 
         # set unsteady probes outputs locations
         if probe_destinations:
@@ -619,8 +614,10 @@ class Simulation():
             dt_max=1,
             dt_xdmf=0.1,
             dt_ctrl_interval=(0.1, 0.25),
-            atol=1e-5,
-            rtol=1e-6,
+            atol=None,
+            rtol=None,
+            stol=None,
+            ksp_rtol=None,
             verbose=True,
             xdmf_file=None,
             result_dir=None,
@@ -708,7 +705,7 @@ class Simulation():
             step = 0
         elif True: #os.path.isfile(Path(load_initial_checkpoint).with_suffix('.bp')) and os.path.isfile(Path(load_initial_checkpoint).with_suffix('.json')):
             # set initial state of simulation from checkpoint
-            # this function wills set the terms constants inplace.
+            # this function wills set the terms constants inplace.probe
             # some local data need to be handled by the caller manually.
 
             #TODO: do not mix in place and out of place 
@@ -725,9 +722,16 @@ class Simulation():
             prev_checkpoint_t = local_data["prev_checkpoint_t"]
             step = local_data["step"]
         # set tolerances
-        #self.unsteady_solver.solver.convergence_criterion = "residual"
-        self.unsteady_solver.solver.atol = atol
-        self.unsteady_solver.solver.rtol = rtol
+        if atol is not None:
+            self.unsteady_solver.solver.atol = atol
+        if rtol is not None:
+            self.unsteady_solver.solver.rtol = rtol
+        if stol is not None:
+            self.unsteady_solver.solver.stol = stol
+        if ksp_rtol is not None:
+            self.unsteady_solver.solver.ksp.rtol = ksp_rtol
+        # print(f"SNES Tolerances: {self.unsteady_solver.solver.getTolerances()}")
+        # print(f"KSP Tolerances: {self.unsteady_solver.solver.ksp.getTolerances()}")
 
         if datetime_start is not None:
             self.timestamp_start = datetime.datetime.strptime(datetime_start, '%Y-%m-%d %H:%M:%S.%f').replace(tzinfo=datetime.timezone.utc).timestamp()
