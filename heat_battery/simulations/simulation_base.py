@@ -325,13 +325,13 @@ class Simulation():
         for i, mat in enumerate(self.mats, 1):
             self.Fd += mat.rho(self.T_n)*mat.cp(self.T_n)*self.dT*self.T_v*self.jac*self.dx(i)
         self.Fd += self.get_all_forcing_form_terms(self.T_n, self.t_n)
-        self.derivative_solver = self.create_newton_solver(self.dT, self.Fd)
+        self.derivative_solver = self.create_newton_solver(self.Fd, self.dT, petsc_options_prefix="hbderivative_")
 
     def create_steady_state_form_solver(self):
         # steady state form: 0 = 0
         self.Fss = 0
         self.Fss += self.get_all_forcing_form_terms(self.T, t=None)
-        self.steady_solver = self.create_newton_solver(self.Fss, self.T)
+        self.steady_solver = self.create_newton_solver(self.Fss, self.T, petsc_options_prefix="hbsteady_")
 
     def create_unsteady_form_solver(self):
         #unsteady state form: 0 = 0
@@ -345,7 +345,7 @@ class Simulation():
         self.F += self.theta*self.dt*self.get_all_forcing_form_terms(self.T, self.t)
         self.F += (1-self.theta)*self.dt*self.get_all_forcing_form_terms(self.T_n, self.t_n)
         
-        self.unsteady_solver = self.create_newton_solver(self.F, self.T)
+        self.unsteady_solver = self.create_newton_solver(self.F, self.T, petsc_options_prefix="hbunsteady_")
 
     def create_forms_for_calculating_temperature_spectrum(self):
         # greek-Psi forms for calculating cumulative temperature spectrum of subdomains
@@ -478,7 +478,7 @@ class Simulation():
             self.root_cells = np.concatenate(global_cells)
             self.root_types = np.concatenate(global_types)
 
-    def create_newton_solver(self, F, u):
+    def create_newton_solver(self, F, u, petsc_options_prefix):
         # try:
         #     #dolfin 0.9
         #problem = dolfinx.fem.petsc.NewtonSolverNonlinearProblem(F, u)
@@ -507,10 +507,10 @@ class Simulation():
         }
         problem = dolfinx.fem.petsc.NonlinearProblem(
             F, 
-            self.T,
+            u,
             bcs=[],
             petsc_options=petsc_options,
-            petsc_options_prefix="nonlinheatbattery_",
+            petsc_options_prefix=petsc_options_prefix,
             )
 
         # solver = dolfinx.nls.petsc.NewtonSolver(MPI.COMM_WORLD, problem)
