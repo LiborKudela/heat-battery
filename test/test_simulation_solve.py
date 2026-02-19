@@ -21,7 +21,7 @@ class TestSimulation(unittest.TestCase):
         print(stored_heat)
 
         # ignoring little bit of heat loss but t_max is small so it should be ok
-        self.assertTrue(np.isclose(stored_heat, 6949441, atol=1), "Stored heat is wrong")
+        self.assertTrue(np.isclose(stored_heat, 6949441, atol=1), "Stored heat is wrong - Expected 6949441, got " + str(stored_heat))
 
     def test_unsteady_solve(self):
         T_amb = 20.0
@@ -39,7 +39,7 @@ class TestSimulation(unittest.TestCase):
         stored_heat = self.sim.unsteady_probes.get_value('heat')
 
         # ignoring little bit of heat loss but t_max is small so it should be ok
-        self.assertTrue(np.isclose(stored_heat, Qc*t_max, atol=1), "Stored heat is wrong")
+        self.assertTrue(np.isclose(stored_heat, Qc*t_max, atol=1), "Stored heat is wrong - Expected " + str(Qc*t_max) + ", got " + str(stored_heat))
 
     def tearDown(self) -> None:
         pass

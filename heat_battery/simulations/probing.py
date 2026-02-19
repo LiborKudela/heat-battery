@@ -32,6 +32,13 @@ class FunctionSampler:
 
     def eval(self, f):
         fv = f.eval(self.points_on_proc, self.cells)
+        # print(f"f: {f.x.array}")
+        # print(f"max: {np.max(f.x.array)}")
+        # print(f"min: {np.min(f.x.array)}")
+        # print(f"mean: {np.mean(f.x.array)}")
+        # print(f"cells: {self.cells}")
+        # print(f"points_on_proc: {self.points_on_proc}")
+        # print(f"fv: {fv}")
         fv = self.domain.comm.allgather(fv)
         idx = self.domain.comm.allgather(self.idx_on_proc)
         fv = np.vstack(fv)
