@@ -12,6 +12,7 @@ Help() {
     echo "  --ppass   Set PostgreSQL password for postgres user"
     echo "  --ppassc  Confirm PostgreSQL password for postgres user (must be the same as ppass)"
     echo "  --hbdir   Set heat battery data directory (default: /home/username/heat_battery_data)"
+    echo "  --fenics-from-source   Build and install FEniCSx from source"
     echo
     echo "IMPORTANT:"
     echo "  The options --ppass and --ppassc are required when -p is set."
@@ -39,9 +40,9 @@ install_postgres=false
 postgres_password=""
 postgres_password_confirm=""
 heat_battery_data_dir="home/$user_name/heat_battery_data"
-
+fenics_from_source=false
 # parse options
-VALID_ARGS=$(getopt -o yp --long ppass:,ppassc:,hbdir: -- "$@")
+VALID_ARGS=$(getopt -o yp --long ppass:,ppassc:,hbdir:,fenics-from-source -- "$@")
 
 # exit if getopt fails
 if [ $? -ne 0 ]; then
@@ -105,6 +106,10 @@ while [ : ]; do
     --hbdir)
         heat_battery_data_dir=$2
         shift 2
+        ;;
+    --fenics-from-source)
+        fenics_from_source=true
+        shift
         ;;
     --) shift; 
         break 
@@ -331,7 +336,7 @@ echo "PostgreSQL server installed and configured successfully!"
 # echo "OpenMPI installed!"
 
 
-# # install assimulo
+# install assimulo
 # echo "Installing Assimulo!"
 # sudo apt install libsundials-dev $auto_yes
 # sudo apt install liblapack3 liblapack-dev $auto_yes
@@ -352,7 +357,7 @@ echo "PostgreSQL server installed and configured successfully!"
 # install gmsh
 echo "Installing Gmsh and gmsh python package!"
 sudo apt install gmsh $auto_yes
-pip3 install gmsh
+pip3 install gmsh==4.11.1     # TODO: fix the fragments in the geometry genarators so we can bump this version
 if ! python3 -c "import gmsh"; then
     echo "Failed to import gmsh"
     exit 1
@@ -360,10 +365,23 @@ fi
 echo "Gmsh installed!"
 
 # install fenicsx
-echo "Installing FEniCSx!"
-sudo add-apt-repository ppa:fenics-packages/fenics $auto_yes
-sudo apt update
-sudo apt install fenicsx $auto_yes
+
+if [ "$fenics_from_source" = "true" ]; then
+    # when fenics-from-source
+    echo "Building and installing FEniCSx from source!"
+    # --without-slepc: HeatBattery uses petsc4py only; slepc4py build has petsc4py version mismatch issues
+    bash install_scripts/build_fenicsx_0.9.0_from_source.sh -y --without-slepc
+    echo "FEniCSx built and installed successfully!"
+else
+    # when fenics-from-apt
+    echo "Installing FEniCSx!"
+    sudo add-apt-repository ppa:fenics-packages/fenics $auto_yes
+    sudo apt update
+    sudo apt install fenicsx $auto_yes
+    echo "FEniCSx installed!"
+fi
+
+
 if ! python3 -c "import dolfinx; print(f'dolfinx version: {dolfinx.__version__}')"; then
     echo "Failed to import dolfinx"
     exit 1

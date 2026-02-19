@@ -21,13 +21,13 @@ exit_gracefully() {
 if [ "$1" = "--no-cache" ]; then
     echo "Removing previous VM $vm_name... (--no-cache)"
     multipass stop $vm_name
-    multipass delete --purge $vm_name
+    multipass delete --purge $vm_name || exit_gracefully
 fi
 
 if ! multipass list | grep -q $vm_name; then
     echo "Creating new VM $vm_name..."
     multipass launch $version --name $vm_name --cpus 4 --memory 16384M --disk 20G
-    multipass exec $vm_name -- bash -c "echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . --output=avail | tail -n 1) > vminfo.initial"
+    multipass exec $vm_name -- bash -c "echo avail_df[\$(date '+%d.%m.%Y %H:%M:%S')]=\$(df . --output=avail | tail -n 1) > vminfo.initial" || exit_gracefully
 fi
 
 # create workspace directory and copy git files to it
@@ -80,7 +80,7 @@ echo "Running install script..."
 multipass exec $vm_name -- bash -c "\
     cd $workspace_dir && \
     $activate_venv_cmd && \
-    bash install_scripts/install_ubuntu.sh -y -p --ppass $config_ppass --ppassc $config_ppassc --hbdir $config_hbdir && \
+    bash install_scripts/install_ubuntu.sh -y -p --ppass $config_ppass --ppassc $config_ppassc --hbdir $config_hbdir &&\
     $deactivate_venv_cmd \
     " || exit_gracefully
 
