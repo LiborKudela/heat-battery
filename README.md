@@ -1,83 +1,122 @@
+# HiTepOptim
+
+Battery-included heat-equation simulation and optimization for solid thermal
+storages.
+
 ![osname-ubuntu-22.04](https://img.shields.io/badge/Ubuntu--22.04-8A2BE2?logo=ubuntu)
 [![build-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-build-ubuntu-22.04.json&logo=gnubash)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
 [![unittest-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-unittest-ubuntu-22.04.json&logo=python)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
-[![diskusage-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/disk-usage-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)  
+[![diskusage-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/disk-usage-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
 ![osname-ubuntu-24.04](https://img.shields.io/badge/Ubuntu--24.04-8A2BE2?logo=ubuntu)
-[![build-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-build-ubuntu-24.04.json&logo=gnubash)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml) 
+[![build-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-build-ubuntu-24.04.json&logo=gnubash)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
 [![unittest-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/success-unittest-ubuntu-24.04.json&logo=python)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
-[![diskusage-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/disk-usage-ubuntu-24.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)  
+[![diskusage-ubuntu-24.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/disk-usage-ubuntu-24.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-24.04.yml)
 [![cloc-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/cloc-ubuntu-22.04.json)](assets/readme_cloc_history.md)
 [![coverage-ubuntu-22.04](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/LiborKudela/6f402d08683e16acdfc545b806f60259/raw/coverage-ubuntu-22.04.json)](https://github.com/LiborKudela/heat-battery/actions/workflows/ubuntu-22.04.yml)
 
-## Battery included heat equation solver for solid heat storages
+## Overview
 
-### What is it?
-A python package for thermal storage simulation and optimisation based on finite element method.
+HiTepOptim is a Python package, imported as `heat_battery`, for simulating and
+optimizing solid thermal energy storages with the finite element method. It uses
+DOLFINx/FEniCSx for the numerical model, Gmsh for geometry and mesh workflows,
+MPI for parallel runs, and optional PostgreSQL support for distributed parameter
+studies.
 
-## Table of Contents
+## Contents
+
+- [Requirements](#requirements)
 - [Installation](#installation)
-- [Main Features](#main-features)
+- [Testing](#testing)
+- [Features](#features)
 - [Examples](#examples)
+- [Additional software](#additional-software)
 
-# Installation
-### Ubuntu installation
-First clone this repository:
+## Requirements
+
+- Ubuntu 22.04 or 24.04 is recommended and covered by CI.
+- Python 3.8 or newer is required by the package metadata.
+- The installer sets up system dependencies including FEniCSx/DOLFINx, Gmsh,
+  ADIOS2, PostgreSQL client libraries, and optional PostgreSQL server support.
+- Windows users should install Ubuntu through
+  [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install)
+  and then follow the Ubuntu instructions below.
+
+## Installation
+
+Clone the repository and enter the project directory:
+
 ```bash
 git clone https://github.com/LiborKudela/heat-battery.git
+cd heat-battery
 ```
-The most convenient way to install the package is to use the installation script.  
-Run the script with --help option to see the installation options.
+
+The recommended installation path is the Ubuntu installer:
+
 ```bash
 bash install_scripts/install_ubuntu.sh --help
 ```
 
-The two most common combinations are:
-#### Worker installation:
+For a worker/local simulation installation without a PostgreSQL server:
+
 ```bash
-bash install_scripts/install_ubuntu.sh -y
-```
-#### Worker + database installation:
-```bash
-bash install_scripts/install_ubuntu.sh -y -p --ppass db_password --ppassc db_password
+bash install_scripts/install_ubuntu.sh -y --hbdir "$HOME/heat_battery_data"
 ```
 
-### Windows installation
-If you wish to install under Windows you will need to install Windows subsystem 
-for Linux (WSL) first.  
-Select a Ubuntu distribution (e.g. 22.04 LTS). You can find the details for this step
-[here](#https://learn.microsoft.com/en-us/windows/wsl/install).  
-Then open new terminal with the WSL distribution and proceed with the steps for [Ubuntu installation](#ubuntu-installation).
+For a worker plus local PostgreSQL installation, provide and confirm the
+PostgreSQL `postgres` user password:
 
+```bash
+bash install_scripts/install_ubuntu.sh -y -p --ppass db_password --ppassc db_password --hbdir "$HOME/heat_battery_data"
+```
 
-### Test the package
-After installation you can test the package with the following command:
+If you want to install into a virtual environment, create it with access to
+system site packages before running the installer. This is useful because
+FEniCSx is commonly installed from Ubuntu packages:
+
+```bash
+python3 -m venv --system-site-packages hb_venv
+source hb_venv/bin/activate
+bash install_scripts/install_ubuntu.sh -y --hbdir "$HOME/heat_battery_data"
+```
+
+## Testing
+
+After installation, check that the package imports:
+
 ```bash
 python3 -c "import heat_battery; heat_battery.test_package()"
 ```
-# Other compatible software
-### Paraview (for postprocessing)
-Paraview can be installed in Linux and Windows. 
-Please see the details options [here](#https://www.paraview.org/download/).
 
-## Main Features
-Some of this features are in development  
-- <span text="color: green">Simulation of heat storages with complex geometry,</span>
-- <span style="color: green">Co-simulation of attached controllers (e.g. PID, python code etc.),</span>
-- <span style="color: green">Co-simulation of attached systems (e.g. PV panels, heat pumps, etc.),</span>
-- <span style="color: red">Co-simulation of OpenModelica models (e.g. pipes, heat pumps, etc.),</span>
-- <span style="color: green">Distributed parallel simulation (via MPI),</span>
-- <span style="color: green">Distributed large parameter studies (via MPI, workers send data to master),</span>
-- <span style="color: green">Web based UI for management of the distributed parameter studies (requires database),</span>
-- <span style="color: green">Complex geometry import via STL files import,</span>
-- <span style="color: green">Sensitivity analysis (adjoint derivative),</span>
-- <span style="color: red">Second order sensitivity analysis (Hessian) (in development),</span>
-- <span style="color: orange">Mathematical optimisation (Gradient descent, Newton's method, etc.),</span>
-- <span style="color: orange">Least square fitting to data with SGD</span>
+Run the unit tests from the repository root:
 
-## Examples/Tutorials
+```bash
+python3 -m unittest discover -v -s ./test -p 'test_*.py'
+```
+
+## Features
+
+- Finite element simulation of heat storage systems with complex geometry.
+- Co-simulation with controllers, for example PID or custom Python logic.
+- Co-simulation with attached systems such as PV panels and heat pumps.
+- Parallel simulation and distributed parameter studies via MPI.
+- PostgreSQL-backed project storage and web UI for distributed studies.
+- Geometry import and mesh generation workflows using STL/STEP/Gmsh files.
+- Sensitivity analysis with adjoint derivatives.
+- Optimization tools including gradient-based methods and least-squares fitting.
+- Experimental OpenModelica co-simulation and second-order sensitivity analysis.
+
+## Examples
+
 - [Example_01: Simple cylindrical heat storage](examples/Example_01)
-- [Example_02: Same but STEP file imported geometry](examples/Example_02)
+- [Example_02: STEP-file imported geometry](examples/Example_02)
 - [Example_03: Transient hot wire method simulation](examples/Example_03)
-- [Example_04: Simulation of passive heat storage](examples/Example_04)
+- [Example_04: Passive heat storage simulation](examples/Example_04)
 - [Example_05: Large parameter study of passive heat storage](examples/Example_05)
-- [Example_06: Simulation of active heat storage with controller](examples/Example_06)
+- [Example_06: Active heat storage simulation with controller](examples/Example_06)
+
+## Additional software
+
+[ParaView](https://www.paraview.org/download/) is recommended for inspecting
+spatial simulation outputs such as XDMF files.
+
+For a detailed Czech guide, see [README_NAVOD.md](README_NAVOD.md).
