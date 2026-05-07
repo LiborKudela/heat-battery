@@ -6,7 +6,20 @@ def apply_transform_step(df, step):
         operation = step.get('operation', '')
         
         try:
-            if step_type == 'column_selection' or operation == 'select':
+            if step_type == 'python_transform':
+                func = step.get('function')
+                if func is None:
+                    print("No 'function' provided in custom_function step")
+                elif isinstance(func, str):
+                    func = eval(func)
+                elif callable(func):
+                    pass
+                else:
+                    print(f"Invalid function argument provided in python_transform step: {func}")
+                    return df
+                return func(df.copy())
+
+            elif step_type == 'column_selection' or operation == 'select':
                 column_pattern = step.get('column_pattern', '.*')
                 import re
                 matching_cols = [col for col in df.columns if re.match(column_pattern, col)]
@@ -59,6 +72,7 @@ def apply_transform_step(df, step):
                     suffix = step.get('new_column_suffix', '_diff')
                     for col in matching_cols:
                         df[col + suffix] = df[col].diff()
+                        df.iloc[0, df.columns.get_loc(col + suffix)] = df.iloc[0, df.columns.get_loc(col)]
                 
                 # Ensure t_timestamp is preserved
                 if 't_timestamp' not in df.columns and 't_timestamp' in df.index.names:
@@ -66,11 +80,37 @@ def apply_transform_step(df, step):
                 
                 return df
             
+            elif step_type == 'row_selection' or operation == 'row_select':
+                method = step.get('method', 'nearest')
+                if method == 'earliest':
+                    return df.iloc[[0]]
+                elif method == 'latest':
+                    return df.iloc[[-1]]
+                elif method == 'nearest':
+                    target = step.get('target_time')
+                    if target is None:
+                        print("No 'target_time' provided for nearest row selection")
+                        return df
+                    target_ts = pd.Timestamp(target, utc=True)
+                    idx = df.index.get_indexer([target_ts], method='nearest')[0]
+                    return df.iloc[[idx]]
+                else:
+                    print(f"Unknown row_selection method: {method}")
+                    return df
+
+            elif step_type == 'to_pie' or operation == 'to_pie':
+                #assert len(df.index) == 1, "to_pie transform requires a single row dataframe"
+                labels = df.columns.tolist() 
+                values = df.values.tolist()[0]
+                print(len(labels), len(values))
+                return pd.DataFrame(data={
+                    'labels': labels,
+                    'values': values
+                })
+
             elif step_type == 'formula':
                 formula = step.get('formula', '')
                 new_column = step.get('new_column_name', 'result')
-                # Simple formula evaluation (basic implementation)
-                # In production, use a safer evaluator
                 try:
                     df = df.copy()
                     df[new_column] = df.eval(formula)

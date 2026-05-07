@@ -1,20 +1,32 @@
 from typing import List
+from dataclasses import dataclass
+
 import pandas as pd
 import plotly.graph_objects as go
 from mpi4py import MPI
-import os
 import numpy as np
 from ..simulations import Simulation
 from .derivatives import AdjointDerivative, Point_wise_lsq_objective, ForwardDerivative_dudk
 from scipy.linalg import block_diag
+
+
+@dataclass(frozen=True)
+class JacobianRankAssessment:
+    """Result of :meth:`SteadyStateComparer.get_optimization_problem_posedness`."""
+
+    singular_values: np.ndarray
+    jacobian_shape: tuple[int, int]
+    effective_rank_absolute: int
+    effective_rank_relative: int
+    sigma_lim: float
 
 class SteadyStateComparer:
     def __init__(self, sim: Simulation, inputs, outputs):
         self.sim = sim
         assert len(inputs) == len(outputs), "not the same length"
         self.n = len(inputs)
-        self.inputs = inputs
-        self.outputs = outputs
+        self.inputs: List[dict] = inputs
+        self.outputs: List[np.ndarray] = outputs
         
         self.data = [pd.Series()]*self.n
         self.domain_data = [None]*self.n 
@@ -108,7 +120,85 @@ class SteadyStateComparer:
 
             return j
         return jacobian
-    
+
+    def get_optimization_problem_posedness(
+        self,
+        k=None,
+        m=None,
+        full_domain=False,
+        sigma_lim=1e-15,
+    ):
+        """Screen whether the current experiment set is informative enough to fit ``k``.
+
+        Use this **before or alongside any optimisation** that adjusts ``k``
+        against these steady experiments—gradient methods (e.g. Adam, BFGS).
+        Small singular values or low effective rank relative to the number of ``k`` 
+        coefficients spell trouble for **all** such algorithms (slow progress, 
+        instability, dependence on step size / regularisation).
+
+        It judges whether stacked steady scenarios (boundary inputs + measured
+        probe temperatures in ``inputs`` / ``outputs``) excite the conductivity
+        degrees of freedom sufficiently.
+
+        The method builds the sensitivity matrix
+        ``∂(model probe temperatures) / ∂k`` — same layout as
+        :meth:`generate_solution_jacobian` — at the linearisation point ``k``, runs
+        ``numpy.linalg.svd(..., compute_uv=False)``, and summarises:
+
+        * **singular_values** — strength of each identifiable direction in
+          parameter space. A long tail near zero means some combinations of
+          ``k`` barely move the predictions: the experiment design is **poor**
+          or redundant for those modes. Some experiments or sensor placement
+          do not bring enough new information to the problem (redundancy).
+        * **effective_rank_absolute** / **effective_rank_relative** — counts of
+          singular values above ``sigma_lim`` and above ``sigma_lim * σ_max``.
+          Always ``effective_rank_* ≤ min(n_k, n_o) ≤ n_k``, where ``n_k`` is
+          ``jacobian_shape[0]`` (fitted ``k`` coefficients) and ``n_o`` is
+          ``jacobian_shape[1]`` (stacked model probes × scenarios): the rank of
+          ``J`` cannot exceed the smaller matrix dimension. Compare
+          ``effective_rank_*`` to ``n_k``: if it is much smaller, the fit is
+          **ill-posed** unless you reduce parameters, add richer experiments
+          (more distinct steady boundary conditions, e.g. heating powers or
+          ambient temperatures), or regularise.
+
+        This does **not** replace statistical noise analysis; it only reflects
+        **deterministic sensitivity** of the forward model at ``k``.
+
+        Parameters
+        ----------
+        k
+            Linearisation point for ``k`` (concatenated material coefficients).
+            Uses :meth:`get_k` when omitted (typically current trial ``k``).
+        m
+            Subset of material indices whose ``k`` rows appear in the Jacobian
+            (passed through to :meth:`generate_solution_jacobian`).
+        full_domain
+            Same as :meth:`generate_solution_jacobian` (probe rows vs full DOFs).
+        sigma_lim
+            Absolute cutoff used for ``effective_rank_absolute``; also scaled by
+            ``σ_max`` for ``effective_rank_relative``.
+
+        Returns
+        -------
+        :class:`JacobianRankAssessment`
+            Object containing the singular values, Jacobian shape, effective rank, and sigma_lim.
+        """
+        if k is None:
+            k = self.get_k(m=m)
+        jac_fn = self.generate_solution_jacobian(m=m, full_domain=full_domain)
+        J = jac_fn(np.asarray(k))
+        s = np.linalg.svd(J, compute_uv=False)
+        smax = float(s[0]) if s.size > 0 else 0.0
+        rank_abs = int(np.sum(s >= sigma_lim))
+        rank_rel = int(np.sum(s >= sigma_lim * smax)) if smax > 0 else 0
+        return JacobianRankAssessment(
+            singular_values=s,
+            jacobian_shape=(J.shape[0], J.shape[1]),
+            effective_rank_absolute=rank_abs,
+            effective_rank_relative=rank_rel,
+            sigma_lim=float(sigma_lim),
+        )
+
     def generate_loss_component_jacobian(self, m=None):
         return self.generate_solution_jacobian(m=m, full_domain=False)
     

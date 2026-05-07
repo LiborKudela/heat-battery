@@ -155,6 +155,17 @@ class Linear_sand(Material):
             cp = Lagrange_property(domain, [20, 1000], [830, 830], PropertyUnits.cp), 
             name=name)
 
+
+class LinearSand(Material):
+    def __init__(self, domain, name="LinearSand", h0_T_ref=20):
+        super().__init__(
+            domain=domain,
+            h0_T_ref = h0_T_ref,
+            k = Lagrange_property(domain, [0, 1000], [0.3, 0.3], PropertyUnits.k), 
+            rho = Lagrange_property(domain, [0, 1000], [1600, 1600], PropertyUnits.rho),
+            cp = Lagrange_property(domain, [0, 1000], [830, 830], PropertyUnits.cp), 
+            name=name)
+
 class Sand(Material):
     def __init__(self, domain, name="Sand", h0_T_ref=20):
         sigma = 5.670374419e-08

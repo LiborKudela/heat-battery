@@ -5,10 +5,43 @@ import cloudpickle
 from mpi4py import MPI
 import gmsh
 import math
+from pathlib import Path
+from typing import Any
+from dolfinx import fem
+
+
 
 def save_mesh_add_data(
-    add_data_file_path: str, call_data: dict, dim: int, points: dict,
-    mats: dict, bcs: dict, jac_f: Callable, custom_data: dict|None=None):
+    add_data_file_path: str|Path, 
+    call_data: dict[str, Any], 
+    dim: int, 
+    points: dict[str, dict[str, list[float]]],
+    mats: dict[str, tuple[str, list[int]]], 
+    bcs: dict[str, list[int]], 
+    jac_f: Callable[[tuple[float, float, float]], float], 
+    custom_data: dict|None=None):
+    """
+    Saves mesh metadata to binary file.
+    
+    Args:
+        add_data_file_path: Path to the file to save the metadata to
+        call_data: Dictionary containing the call data
+        dim: Dimension of the mesh (2, 3)
+        points: Dictionary containing the points (X, Y, Z) coordinates
+        mats: Dictionary containing the volume materials groups
+        bcs: Dictionary containing the surface boundaries groups
+
+    Examples:
+        >>> save_mesh_add_data(
+        >>>     add_data_file_path='mesh_add_data.ad',
+        >>>     call_data={'diameter': 1.0, 'height': 1.0},
+        >>>     dim=2,
+        >>>     points={'T': {'Tmid_1': [0.0, 0.0, 0.0]}},
+        >>>     mats={'Sand': (heat_battery.materials.Sand, [1])},
+        >>>     bcs={'outer_surface': [1]},
+        >>>     jac_f=lambda x: 2*pi*x[0],
+        >>>     custom_data={'master_key': {'subkey': 'value'}})
+    """
     
     add_data = {
         'call_data':call_data,

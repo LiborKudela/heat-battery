@@ -24,8 +24,9 @@ def run():
 
     # simulate 1000 seconds of sin heat source and save resutls from probes
     sim.solve_unsteady(
-        verbose=False,
-        t_max = 1000.0,
+        verbose=True,
+        t_max = 100.0,
+        dt_max=1.0,
         Qc_t=lambda t: 100+100*math.sin(2*math.pi*0.001*t),
         T_amb_t=lambda t: 20,
         probe_destinations=[{
@@ -34,8 +35,6 @@ def run():
             'result_dir': r_dir,
             'flush': True,
         }],
-        atol=1e-8,
-        rtol=1e-10,
         )
 
 if __name__ == "__main__":

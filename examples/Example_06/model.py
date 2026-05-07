@@ -1,42 +1,31 @@
 from heat_battery.simulations import terms
 from heat_battery.simulations.probing import FunctionSampler
-from heat_battery.simulations.simulation_base import MPI, Simulation, fem, pd, Probe_writer
+from heat_battery.simulations.simulation_base import MPI, Simulation, fem, pd, ufl, Probe_writer
 from heat_battery.simulations.terms_base import Term
 import heat_battery.data.meteodata as meteodata
 import numpy as np
 
-
-# Definition of building and it heating demand characteristics
 class HallC3(Term):
 
     def define_terms(self):
 
-        # building dimensions and properties
-        a, b, c = 37, 18, 8                    # building size
-        V = a*b*c                              # building volume [m^3]
-        rho = 1.33                             # density of air [kg/m^3]
-        cp = 1006.0                            # specific heat of air [J/(kg*K)]
-        self.C = V*rho*cp                      # heat capacity of the building [J/K]
-        self.K_C3 = 1029.4944                  # heat loss coefficient of the building [W/K]
-        self.T_room_ref = 18.0                 # reference temperature of the room [°C]
-        self.T_room_ctrl_interval = (0.1, 0.2) # temperature control interval [°C]
-        self.converge_tol_T_room = 0.1         # convergence tol. for the room temperature [°C]
-        self.converge_tol_Q_amb = 10           # convergence tol. for the ambient temperature [°C]
-        self.alpha_m_lims = (1.0, 20.0)        # limits for the THP heat transfer coefficient [W/(m^2*K)]
-        self.heating_on = lambda t: 1          # heating on function
-        self.max_bivalent_power = 1000         # maximum bivalent source power [W]
-        self.max_mem_power = 1000                             # maximum THP heating power [W]
-
-        # extract total area of all the THP surfaces in battery storage
-        n_mem_pipes = self.sim.get_custom_data('n_mem_pipes') 
-        n_thp_surface_segments = self.sim.get_custom_data('n_thp_surface_segments')
-        self.area_m_total = sum(
-            self.sim.get_surface_area(f'THP_surface_{i}_{j}') 
-            for i in range(n_mem_pipes) 
-            for j in range(n_thp_surface_segments)
-        )
+        # yearly heat demand 352.6632 [GJ]
         
-        #definition of FEM term insertion variables
+        a, b, c = 37, 18, 8 # building size
+        V = a*b*c
+        rho = 1.33
+        cp = 1006.0
+        self.C = V*rho*cp
+        self.K_C3 = 1.105*171.6 + 0.310*691.0 + 1.765*288.8 + 1.1640*99.6
+        self.T_room_ref = 18.0
+        self.abs_ctrl_interval = (0.025, 0.05)
+        self.converge_tol_T_room = 0.05
+        self.converge_tol_Q_amb = 2
+        self.alpha_m_lims = (1.0, 20.0)
+        self.heating_on = lambda t: 1
+        self.max_bivalent_power = 1000
+        self.max_mem_power = 1000
+        
         self.new_constant('T_amb', self.T_room_ref)
         self.set_update('T_amb', lambda t: 20.0)
 
@@ -53,6 +42,12 @@ class HallC3(Term):
 
         self.new_constant('alpha_m', 20.0)
         self.set_update('alpha_m', self.alpha_m_update, prevent_override=True)
+
+        self.new_constant('Q_m', 0.0)
+
+        self.new_constant('Q', 0.0)
+        self.set_update('Q', lambda t: self.get_current_value('Q_s') + self.get_current_value('Q_m'), prevent_override=True)
+        self.new_integral('Q_cumulative', 0.0, 'Q')
 
         self.new_constant('Q_used', 0.0)
         self.set_update('Q_used', lambda t: self.fem_consts['Q'].value[0]*self.heating_on(t), prevent_override=True)
@@ -72,25 +67,10 @@ class HallC3(Term):
         self.Q_s_update = self.update_from_form_integral('Outer_surface')
         self.set_update('Q_s', self.Q_s_update, prevent_override=True)
 
-        # create Q_m for through hole pipe inner surfaces
-        # computes heat flow contribution from the THP surfaces to buidings
-        # then computes total value of heating power and its cumulative equivalent
-        for i in range(n_mem_pipes):
-            for j in range(n_thp_surface_segments):
-                self.new_constant(f'Q_m_{i}_{j}', 0.0)
-                self.set_update(f'Q_m_{i}_{j}', self.update_from_form_integral(f'THP_surface_{i}_{j}'), prevent_override=True)
-        self.new_constant('Q', 0.0)
-        def Q_total_update(t):
-            q_sum = self.get_current_value('Q_s')
-            for i in range(n_mem_pipes):
-                for j in range(n_thp_surface_segments):
-                    q_sum += self.get_current_value(f'Q_m_{i}_{j}')
-            return q_sum
-        self.set_update('Q', Q_total_update, prevent_override=True)
-        self.new_integral('Q_cumulative', 0.0, 'Q')
+        self.Q_m_update = self.update_from_form_integral('Membrane_surface')
+        self.set_update('Q_m', self.Q_m_update, prevent_override=True)
 
-    # definition of static value setters so main simulation
-    # can connect with this Term
+    # static value setters
     def set_alpha_m_lims(self, lims):
         self.alpha_m_lims = lims
 
@@ -105,21 +85,6 @@ class HallC3(Term):
 
     def set_T_room_ref(self, value):
         self.T_room_ref = value
-    
-    def set_T_room_ctrl_interval(self, values):
-        assert len(values) == 2
-        assert values[0] < values[1]
-        assert values[0] > 0.0
-        assert values[1] > 0.0
-        self.T_room_ctrl_interval = values
-
-    def set_converge_tol_T_room(self, value):
-        assert value > 0.0
-        self.converge_tol_T_room = value
-
-    def set_converge_tol_Q_amb(self, value):
-        assert value > 0.0
-        self.converge_tol_Q_amb = value
 
     # dynamic update callbacks
     def alpha_m_update(self, t):
@@ -127,7 +92,7 @@ class HallC3(Term):
         T_amb = self.fem_consts['T_amb'].value[0]
         T_m = self.sim.unsteady_probes.get_value('T_avg_m')  #FIXME: this shoud be passed through setter
         Q_s = self.fem_consts['Q_s'].value[0]
-        m_area = self.area_m_total
+        m_area = self.sim.get_surface_area('Membrane_surface')
         K = self.fem_consts['K'].value[0]
         Q_equitherm = K*(self.T_room_ref - T_amb)
         alpha_m_current = np.clip((Q_equitherm-Q_s)/(m_area*(T_m-T_room)), *self.alpha_m_lims)
@@ -161,20 +126,18 @@ class HallC3(Term):
 
     def adaptation(self):
         adi = abs(self.fem_consts['T_room'].value[0] - self.fem_consts['T_room'].value[1])
-        if adi > self.T_room_ctrl_interval[1]:
-            ref_adi = 0.2*self.T_room_ctrl_interval[0] + 0.8*self.T_room_ctrl_interval[1]
+        if adi > self.abs_ctrl_interval[1]:
+            ref_adi = 0.2*self.abs_ctrl_interval[0] + 0.8*self.abs_ctrl_interval[1]
             return (ref_adi/adi)
-        elif adi < self.T_room_ctrl_interval[0]:
+        elif adi < self.abs_ctrl_interval[0]:
             return 1/0.95
         else:
             return 1.0
 
     def __call__(self, T, x, t=None, domain=None):
         if domain == "Outer_surface":
-            # heat loss from the outer surface to the environment
             return self.get_constant('alpha_s', t)*(T - self.get_constant('T_room', t))
-        elif domain.startswith("THP_surface"):
-            # heat transfer from the THP surface to the room
+        elif domain == "Membrane_surface":
             return self.get_constant('alpha_m', t)*(T - self.get_constant('T_room', t))
         else:
             raise Exception(f"unknown domain {domain}")
@@ -182,47 +145,33 @@ class HallC3(Term):
 class C3_passive(Simulation):
     def define_form_subdomain_terms(self):
 
-        # add electrical cartridge heating to the main simulator
-        # and connect it to apropriate region of the geometry (subdomain marked "Cartridge")
+        # add dynamic source term for malapa cartridge
         self.set_source_term(terms.TemperatureLimitedUniformHeatSource(self), "Cartridge")
 
-        # add the dynamic term controling heat removal from battery to FEM forms
-        # It includes heat loss and coverage of the heating demand
-        # (see the C3Hall model and its __call__ method for details)
-        # the hear is extracted through surfaces, so it is connected as boundary term
-        # to the outer surface of the battery and to each THP surface segment
-        hr_obj = HallC3(self) # instantiate the C3Hall model here
+        # add dynamic boundary term for ambient cooling on the surface
+        hr_obj = HallC3(self)
         self.set_bc_term(hr_obj, "Outer_surface")
-        n_mem_pipes = self.get_custom_data('n_mem_pipes')
-        n_thp_surface_segments = self.get_custom_data('n_thp_surface_segments')
-        for i in range(n_mem_pipes):
-            for j in range(n_thp_surface_segments):
-                self.set_bc_term(hr_obj, f"THP_surface_{i}_{j}")
+        self.set_bc_term(hr_obj, "Membrane_surface")
 
     def create_common_probes(self, probes: Probe_writer):
-        # create probes for the simulation
-        # these are the probes that are saved to the database
-        # these are all the things that we are interested in (results)
 
-        # time of the simulation in days
         @probes.register_probe('t_sim_days', 'day')
         def scale_time():
             return probes.get_value('t_sim')/3600/24
         
-        # relative time of the simulation in seconds per day
+        # power toggle state
         @probes.register_probe('t_cpu_relative', 's/day')
-        def relative_time():
+        def toggle_state():
             return probes.get_value('t_cpu')/probes.get_value('t_sim_days')
         
-        # remaining time of the simulation in hours
+        # power toggle state
         @probes.register_probe('t_remain_2', 'h')
-        def remaining_time_hours():
+        def toggle_state():
             t_cpu = probes.get_value('t_cpu')
             progress = probes.get_value('progress')
             return t_cpu/(progress)*(100-progress)/3600
 
-        # temperature in selected points defined in the geometry
-        # center of a cartridge
+        # temperature in points (cartgridges)
         self.T_probes_coords = list(self.geo_meta["points"]["T"].values())
         self.T_probes_names = list(self.geo_meta["points"]["T"].keys())
         sampler = FunctionSampler(self.T_probes_coords, self.domain)
@@ -230,7 +179,7 @@ class C3_passive(Simulation):
         def Tc_probe():
             return sampler.eval(self.T)
 
-        # form for calculating total heat currently stored in inside the storage
+        # form for calculating heat inside storage
         h_form = 0.0
         for i, mat in enumerate(self.mats, 1):
             h_form += mat.h(self.T)*mat.rho(self.T)*self.jac*self.dx(i)
@@ -246,23 +195,10 @@ class C3_passive(Simulation):
         def loss_probe():
             return self.get_bc_term('Outer_surface').get_current_value('Q_s')
         
-        # Heat flow from THP surfaces of the storage to the room
-        n_mem_pipes = self.get_custom_data('n_mem_pipes')
-        n_thp_surface_segments = self.get_custom_data('n_thp_surface_segments')
-        for i in range(n_mem_pipes):
-            for j in range(n_thp_surface_segments):
-                @probes.register_probe(f'Q_m_{i}_{j}', 'W')
-                def loss_probe(i=i, j=j):
-                    return self.get_bc_term('Outer_surface').get_current_value(f'Q_m_{i}_{j}')
-                
-        # Total heat flow from THP to the room
+        # Heat flow from mem pipes of the storage to the room
         @probes.register_probe('Q_m', 'W')
         def loss_probe():
-            Q_m_sum = 0.0
-            for i in range(n_mem_pipes):
-                for j in range(n_thp_surface_segments):
-                    Q_m_sum += probes.get_value(f'Q_m_{i}_{j}')
-            return Q_m_sum
+            return self.get_bc_term('Outer_surface').get_current_value('Q_m')
         
         # Total Heat flow from the storage to the room
         @probes.register_probe('Q_s2r_total', 'W')
@@ -335,35 +271,22 @@ class C3_passive(Simulation):
             value = fem.assemble_scalar(Tmean_surf)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
-
-        # Create temperature probe for each internal THP surface segment in the battery
-        # computed via integration over FEM mesh and surface values of FEM solution
-        # then compute the surface mean temperature of the THP surface as a whole
-        T_surface_integral_forms = []
-        T_surface_area_forms = []
-        for i in range(n_mem_pipes):
-            for j in range(n_thp_surface_segments):
-                T_surface_integral_forms.append(self.T*self.jac*self.get_measure_ds(f'THP_surface_{i}_{j}'))
-                T_surface_area_forms.append(self.get_surface_area(f'THP_surface_{i}_{j}'))
-                form = fem.form(1/T_surface_area_forms[-1]*T_surface_integral_forms[-1])
-                @probes.register_probe(f'T_m_{i}_{j}', '°C')
-                def temperature_probe(form=form):  # Capture the form in the function parameter
-                    value = fem.assemble_scalar(form)
-                    value = self.domain.comm.allreduce((value), op=MPI.SUM)
-                    return value
-        T_m_mean = fem.form(fem.form(1/sum(T_surface_area_forms))*sum(T_surface_integral_forms))
+        
+        # Mean temperature of the mem pipes surfaces
+        area_surf = self.get_surface_area('Membrane_surface')
+        Tmean_m_surf = fem.form(self.T/area_surf*self.jac*self.get_measure_ds('Membrane_surface'))
         @probes.register_probe('T_avg_m', '°C')
         def average_temp():
-            value = fem.assemble_scalar(T_m_mean)
+            value = fem.assemble_scalar(Tmean_m_surf)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
         
-        # Mean well-mixed temperature of the room
+        # Mean mixed tempearture of the room
         @probes.register_probe('T_avg_room', '°C')
         def average_temp():
             return self.get_bc_term('Outer_surface').get_current_value('T_room')
         
-        # Mean temperature of the sand in the battery
+        # Mean temperature of the sand
         V_sand = self.get_subdomain_volume('Sand')
         T_mean_sand = fem.form(self.T/V_sand*self.jac*self.get_measure_dx('Sand'))
         @probes.register_probe('T_avg_sand', '°C')
@@ -372,57 +295,51 @@ class C3_passive(Simulation):
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
 
-        # Ambient temperature at the given moment, read from C3 building model
+        # Ambient temperature at the given moment
         @probes.register_probe('T_amb', '°C')
         def average_temp():
             return self.get_bc_term('Outer_surface').get_current_value('T_amb')
 
-        # Heating season active or not probe 
+        # Heating season
         @probes.register_probe('Heating_on', '-')
         def average_temp():
             return self.get_bc_term('Outer_surface').heating_on(self.t.value)
         
-        # How much stored heat was not lost from storage (storage efficiency)
+        # How much stored heat was not lost from storage (a.k.a. storage efficiency)
         @probes.register_probe('Eff_storage', '-')
         def average_temp():
             return (probes.get_value('H_c')-probes.get_value('H_s2r_loss'))/probes.get_value('H_c')
         
-        # How much PV energy converted to heat was used for heating sof far
-        # (the portion of energy send to storage actualy used for heating)
+        # How much PV energy converted to heat was used for heating
         @probes.register_probe('Eff_used', '-')
         def average_temp():
             return probes.get_value('H_s2r_used')/probes.get_value('H_c')
         
-        # How much energy generated by PV was used for heating so far
-        # (the portion of energy generated by PV actualy used for heating)
+        # How much energy generated by PV was used for heating
         @probes.register_probe('Eff_used_pv', '-')
         def average_temp():
             return probes.get_value('H_s2r_used')/probes.get_value('H_pv')
 
-        # How much heat demand was coverd by the heat from the storage so far
+        # How much heat demand was coverd by the storage
         @probes.register_probe('Eff_demand_covered', '-')
         def average_temp():
             return probes.get_value('H_s2r_used')/probes.get_value('H_demand')
         
         # How much energy was generated with pv vs actual heat demand of building
-        # (Do we have enough PV to even cover the heat demand?)
         @probes.register_probe('Eff_pv_vs_demand', '-')
         def average_temp():
             return probes.get_value('H_pv')/probes.get_value('H_demand')
         
-        # How much of generated PV power was converted to heat so far
-        # (the portion of energy generated by PV that was pushed to storage)
-        @probes.register_probe('Eff_pv_converted', '-')
+        # How much of generated PV power was converted to heat
+        @probes.register_probe('Eff_pv_used', '-')
         def average_temp():
             return probes.get_value('H_c')/probes.get_value('H_pv')
         
         # PV system power toggle state
-        # (sometimes we must reject PV power due to overheating of cartridges)
         @probes.register_probe('power_toggle', '-')
         def toggle_state():
             return self.get_source_term('Cartridge').get_current_value('toggle')
 
-    # steady state solver for the simulation (limited meanigful usage for this context)
     def solve_steady(self, Qc=10, T_amb=20, xdmf_file=None, alpha=6.3):
         obj = self.get_source_term("Cartridge")
         obj.set_steady_state_value('Qc', Qc)
@@ -438,38 +355,30 @@ class C3_passive(Simulation):
             name="Simulation",
         )
 
-    # unsteady state solver for the simulation (this is the main purpose of the model)
     def solve_unsteady(self,
-            alpha_s=5.0,                              # heat loss of battery [W/(m^2*K)]
-            alpha_m_lims=(1.0, 30.0),                 # limits for the THP heat transfer [W/(m^2*K)]
-            location=meteodata.locations['Brno-FME'], # geographical location of the suystem (our Faculty)
-            pv_peak=1000,                             # peak power of installed PV panels [W]
-            Tc_limit=500.0,                           # temperature limit of the cartridges [°C]
-            max_bivalent_power=30000,                 # maximum bivalent source power [W]
-            max_mem_power=30000,                      # maximum THP heating power [W]
-            datetime_start='2007-6-1 00:00:00',       # start date of the simulation
-            T_room_ctrl_interval=(0.1, 0.2),          # for adatptive timesteping
-            converge_tol_T_room=0.1,                  # tolerance for interface residuals
-            converge_tol_Q_amb=10,                    # tolerance for interface residuals
+            alpha_s=5.0,
+            alpha_m_lims=(1.0, 30.0),
+            location=meteodata.locations['Brno-FME'],
+            pv_peak=1000,
+            Tc_limit=500.0,
+            max_bivalent_power=30000,
+            max_mem_power=30000,
             **kwargs):
         
-        # get meteorological data from the location
         meteo_loader = meteodata.CachedMeteoDataLoader('wheather')
         meteo_data = meteo_loader.fetch_hourly(location)[0]
         #self.next_event = lambda: (1+int(self.t_n.value/3600))-self.t_n.value
         
-        # convert meteorological data to callable functions y=f(t)
-        T_amb_t = meteodata.to_function(meteo_data, 'temp_air', offset_date=datetime_start)
-        P_pv_t = meteodata.to_function(meteo_data, 'P', offset_date=datetime_start)
+        offset_date = '2007-6-1'
+        T_amb_t = meteodata.to_function(meteo_data, 'temp_air', offset_date=offset_date)
+        P_pv_t = meteodata.to_function(meteo_data, 'P', offset_date=offset_date)
         P_pv_watts_t = lambda t: (pv_peak/1000)*P_pv_t(t)
-        heating_season_t = meteodata.to_function(
-            meteo_data, 'heating_season', offset_date=datetime_start, interpolate=False)
-        heating_pause_t = meteodata.to_function(
-            meteo_data, 'heating_pause', offset_date=datetime_start, interpolate=False)
+        
+        heating_season_t = meteodata.to_function(meteo_data, 'heating_season', offset_date=offset_date, interpolate=False)
+        heating_pause_t = meteodata.to_function(meteo_data, 'heating_pause', offset_date=offset_date, interpolate=False)
         heating_on_t = lambda t: int(heating_season_t(t) and not heating_pause_t(t))
-
-        # COSIMULATION TERMS
-        # FVE powered electrical cartridge storage charging
+        
+        # cartridge heating from PV panels
         obj_cartridge : terms.TemperatureLimitedUniformHeatSource
         obj_cartridge = self.get_source_term("Cartridge")
         obj_cartridge.set_update('T_probe', lambda t: self.unsteady_probes.get_value('T')[0])
@@ -484,13 +393,9 @@ class C3_passive(Simulation):
         obj.set_update('alpha_s', lambda t: alpha_s)
         obj.set_alpha_m_lims(alpha_m_lims)
         obj.set_T_room_ref(18.0)
-        obj.set_T_room_ctrl_interval(T_room_ctrl_interval)
-        obj.set_converge_tol_T_room(converge_tol_T_room)
-        obj.set_converge_tol_Q_amb(converge_tol_Q_amb)
         obj.set_max_bivalent_power(max_bivalent_power)
         obj.set_max_mem_power(max_mem_power)
         obj.set_heating_on(heating_on_t)
   
         return super().solve_unsteady(
-            datetime_start=datetime_start,
             **kwargs)

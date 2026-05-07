@@ -15,29 +15,29 @@ def run():
         mesh_p=ParameterGrid(dict(
             name='mesh',
             dir=os.path.join("meshes/C3_passive"),
-            verbosity=NoNumericalEffect(4),
+            verbosity=NoNumericalEffect(4), # this will not affect the simulation results
             fltk=NoNumericalEffect(False),
-            size=ParameterList([1, 2, 3, 4, 5]),
-            t_insulation=ParameterList([0.6, 0.8, 1.0]),
+            size=ParameterList([1, 3, 5]),  # three different sizes of the geometry
+            t_insulation=ParameterList([0.5, 1.0]),
             mesh_size_max=0.1,
             mesh_size_from_curvature=18,
-            cartridge_n=ParameterList([6, 10]), 
+            cartridge_n=ParameterList([4, 10]), 
             cartridge_d_ratio=0.5,
             cartridge_diameter=0.014,
             cartridge_h_ratio=0.9,
-            cartridge_spreader_lb=ParameterList([0.02, 0.04, 0.06]),
+            cartridge_spreader_lb=ParameterList([0.02, 0.06]),
             cartridge_spreader_nb=3,
             cartridge_spreader_tb=0.005,
             cartridge_spreader_mesh_size_min=0.0025,
             cartridge_spreader_mesh_grow_factor=0.8,
             tht_in_sand=True,
-            tht_d=ParameterList([0.04, 0.06, 0.08]),
+            tht_d=ParameterList([0.04, 0.08]),
             tht_d_ratio=ParameterList([0.1, 0.15]),
-            tht_n_ratio=ParameterList([0.2, 0.3, 0.4, 0.5, 0.6]),
+            tht_n_ratio=ParameterList([0.2, 0.4, 0.6]),
             thp_mesh_size_min=0.0025,
             thp_mesh_grow_factor=0.8,
             tht_spreader_h_ratio=0.9,
-            tht_spreader_lb=ParameterList([0.02, 0.04, 0.06]),
+            tht_spreader_lb=ParameterList([0.02, 0.06]),
             tht_spreader_nb=3,
             tht_spreader_tb=0.005,
             thp_spreader_mesh_size_min=0.0025,
@@ -75,7 +75,7 @@ def run():
             converge_tol_T_room=0.1,
             converge_tol_Q_amb=10,
             alpha_s=5.0,
-            alpha_m_lims=(0.5, 20.0),
+            alpha_m_lims=(0.1, 20.0),
             location=meteodata.locations['Brno-FME'],
             pv_peak=30000,
             Tc_limit=500.0,
@@ -89,19 +89,19 @@ def run():
 
     project = Project(
         'project_example_05',
-        if_exists='override',
+        #if_exists='override',
     )
     
-    jobs_gen = new_jobs_generator(
-        sim_class=C3_passive, 
-        mesh_builder=build_geometry,
-        group_name='Example_5',
-        group_priority=0,
-        runner='solve_unsteady',
-        p_grid=p_grid
-    )
+    # jobs_gen = new_jobs_generator(
+    #     sim_class=C3_passive, 
+    #     mesh_builder=build_geometry,
+    #     group_name='Example_5',
+    #     group_priority=0,
+    #     runner='solve_unsteady', # to whicn method to pass the simulation parameters
+    #     p_grid=p_grid
+    # )
 
-    project.add_jobs(jobs_gen)
+    #project.add_jobs(jobs_gen)
 
     while True:
         df = project.get_jobs(as_dataframe=True)

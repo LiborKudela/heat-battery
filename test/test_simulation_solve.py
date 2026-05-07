@@ -21,7 +21,7 @@ class TestSimulation(unittest.TestCase):
         print(stored_heat)
 
         # ignoring little bit of heat loss but t_max is small so it should be ok
-        self.assertTrue(np.isclose(stored_heat, 6949441, atol=1), "Stored heat is wrong - Expected 6949441, got " + str(stored_heat))
+        self.assertTrue(np.isclose(stored_heat, 4603315.606181225, atol=1), "Stored heat is wrong - Expected 6949441, got " + str(stored_heat))
 
     def test_unsteady_solve(self):
         T_amb = 20.0

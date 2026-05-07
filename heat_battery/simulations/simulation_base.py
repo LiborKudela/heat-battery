@@ -1,3 +1,39 @@
+"""Finite-element heat conduction simulations on DOLFINx (FEniCSx).
+
+This module defines :class:`Simulation`, the base class used to build transient
+and steady thermal models from Gmsh-generated meshes (``.msh``/``.ad``), material
+metadata, and weak-form :mod:`~heat_battery.simulations.terms`.
+
+Typical usage is to subclass ``Simulation``, override hooks such as
+``define_form_subdomain_terms`` and probe setup, then call
+``solve_steady`` or ``solve_unsteady``. The unsteady driver performs adaptive
+time stepping, couples optional :class:`~heat_battery.simulations.terms_base.Term`
+instances, and streams probe data via :class:`~heat_battery.simulations.probing.Probe_writer`
+to CSV files, in-memory buffers, or a PostgreSQL-backed project database.
+
+**Outputs**
+
+* **Probes** — scalar time series (temperatures, fluxes, custom quantities)
+  configured on the steady/unsteady probe writers.
+* **XDMF** — optional full-domain temperature field history when ``xdmf_file``
+  and ``result_dir`` are set in :meth:`Simulation.solve_unsteady`.
+
+**Checkpoints**
+
+:meth:`Simulation.solve_unsteady` supports periodic checkpoints when
+``checkpoint_dir`` and ``checkpoint_dt`` are given. State is written with
+adios4dolfinx; probe destinations participate via their own checkpoint hooks
+(e.g. CSV truncation to a saved byte length). When XDMF output is enabled, a
+copy of the ``.xdmf``/``.h5`` pair is also stored under the checkpoint directory
+so a resume can roll domain output back in sync with the simulation state.
+
+**MPI**
+
+The code assumes a distributed mesh and uses ``MPI.COMM_WORLD`` for barriers and
+collective file semantics; user-facing prints should go through
+:meth:`Simulation.print_r0` where only rank 0 should speak.
+"""
+
 from mpi4py import MPI
 import pandas as pd
 from petsc4py import PETSc
@@ -15,12 +51,19 @@ from ..config import get_config_item
 import adios4dolfinx
 from pathlib import Path
 import datetime
-
+from typing import Callable, Any
 from .probing import Probe_writer
 from ..materials import MaterialsSet
 from ..utilities import save_data_binary, load_data_binary, ProgressBar, save_data_json, load_data_json
+import shutil
 
 class Simulation():
+    """Base class for mesh-backed thermal FEM models and time stepping.
+
+    Constructs solvers, probes, and forms from ``geometry_dir`` and ``model_name``.
+    Subclasses add boundary/source terms and application-specific behaviour.
+    """
+
     def __init__(self,
         geometry_dir='meshes/experiment', 
         model_name='mesh_2d',
@@ -79,20 +122,17 @@ class Simulation():
         self.create_static_vtk_data()
 
     def print_r0(self, *args, **kwargs):
+        """Print only on MPI rank 0 (avoids duplicate console output)."""
         if MPI.COMM_WORLD.rank == 0:
             print(*args, **kwargs)
 
     def load_geometry(self):
-        # """Fills attributes of the class with geometry data:
-        #    dim: topological dimension of the mesh (1D, 2D, 3D)
-        #    domain: mesh data
-        #    cell_tags: integer tags of element-cell subdomain corespondence
-        #    facet_tags: integer tags of element-boundary corespondance 
-        #    mats: Material expresion set of named subdomains
-        #    subdomain_map: dict for maping names to integer indices
-        #    bcs: list of named boundaries
-        #    bcs_map: 
-        # """
+        """Load mesh and metadata from ``geometry_dir`` / ``model_name``.
+
+        Populates ``domain``, ``cell_tags``, ``facet_tags``, ``mats``,
+        boundary name maps, and spatial coordinate ``x`` with Jacobian
+        scaling ``jac`` from the ``.msh`` / ``.ad`` pair.
+        """
         self.geo_path = os.path.join(self.geometry_dir, self.model_name)
 
         # load metadata
@@ -117,15 +157,18 @@ class Simulation():
         self.jac = self.geo_meta['jac_f'](self.x)
 
     def define_measures(self):
+        """Create volumetric ``dx`` and surface ``ds`` / ``dS`` UFL measures on tagged facets."""
         self.dx = ufl.Measure("dx", domain=self.domain, subdomain_data=self.cell_tags)
         self.ds = ufl.Measure("ds", domain=self.domain, subdomain_data=self.facet_tags)
         self.dS = ufl.Measure("dS", domain=self.domain, subdomain_data=self.facet_tags)
 
     def create_function_spaces(self):
+        """Allocate the scalar Lagrange P1 space for temperature."""
         #self.initial_condition = lambda x: np.full((x.shape[1],), self.T0)
         self.V = fem.functionspace(self.domain, ("Lagrange", 1))
 
     def create_functions(self):
+        """Create temperature fields ``T``, ``T_n``, ``dT``, and interpolation helper ``T_temp``."""
         # temperature in current time step
         self.T = fem.Function(self.V)
         self.T_v = ufl.TestFunction(self.V)
@@ -148,6 +191,7 @@ class Simulation():
         self.T_temp.x.array[:] = 20.0
 
     def calculate_volumes_of_subdomains(self):
+        """Fill ``V_subdomain`` with integrated cell volumes per material tag (MPI-reduced)."""
         self.V_subdomain = []
         for i, mat in enumerate(self.mats, 1):
             V = fem.assemble_scalar(fem.form(self.jac*self.dx(i)))
@@ -155,6 +199,7 @@ class Simulation():
             self.V_subdomain.append(V)
 
     def calculate_areas_of_surfaces(self):
+        """Fill ``A_area`` with integrated boundary areas per named boundary (MPI-reduced)."""
         self.A_area = []
         for i, bc_name in enumerate(self.bcs.keys(), 1):
             A = fem.assemble_scalar(fem.form(self.jac*self.ds(i)))
@@ -162,14 +207,17 @@ class Simulation():
             self.A_area.append(A)
 
     def get_subdomain_volume(self, domain):
+        """Return cached volume for subdomain ``domain`` (name or integer tag index)."""
         i = self.compute_subdomain_index(domain)
         return self.V_subdomain[i]
     
     def get_surface_area(self, domain):
+        """Return cached area for boundary ``domain`` (name or integer tag index)."""
         i = self.compute_boundary_index(domain)
         return self.A_area[i]
         
     def create_form_constants(self):
+        """Define Crank–Nicolson weight ``theta``, time step ``dt``, and time ``t`` / ``t_n`` constants."""
         # constants
         self.theta = 0.5
         self.dt = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
@@ -177,49 +225,60 @@ class Simulation():
         self.t_n = fem.Constant(self.domain, PETSc.ScalarType((0.0)))
 
     def get_custom_data(self, key):
+        """Return entry ``key`` from geometry metadata ``custom_data``."""
         return self.geo_meta['custom_data'][key]
 
     def compute_subdomain_index(self, domain):
+        """Map subdomain integer tag or material name to a zero-based list index."""
         if np.issubdtype(type(domain), np.integer):
             return domain
         elif isinstance(domain, str):
             return self.subdomain_map[domain]
         
     def compute_boundary_index(self, boundary):
+        """Map boundary integer tag or boundary name to a zero-based list index."""
         if np.issubdtype(type(boundary), np.integer):
             return boundary
         elif isinstance(boundary, str):
             return self.bcs_map[boundary]
 
     def get_measure_dx(self, domain):
+        """Return the ``dx`` measure restricted to subdomain ``domain``."""
         i = self.compute_subdomain_index(domain)
         return self.dx(i+1)
         
     def get_measure_ds(self, boundary):
+        """Return the exterior ``ds`` measure on boundary ``boundary``."""
         i = self.compute_boundary_index(boundary)
         return self.ds(i+1)
     
     def get_measure_dS(self, boundary):
+        """Return the interior facet ``dS`` measure on boundary ``boundary``."""
         i = self.compute_boundary_index(boundary)
         return self.dS(i+1)
 
     def set_source_term(self, object, domain):
+        """Register a volumetric source :class:`.Term` on subdomain ``domain``."""
         i = self.compute_subdomain_index(domain)
         self.q_source[i] = object
         
     def get_source_term(self, domain):
+        """Return the source term registered on ``domain``, if any."""
         i = self.compute_subdomain_index(domain)
         return self.q_source[i]
         
     def set_bc_term(self, object, boundary):
+        """Register a boundary / surface :class:`.Term` on ``boundary``."""
         i = self.compute_boundary_index(boundary)
         self.bcs_terms[i] = object
         
     def get_bc_term(self, boundary):
+        """Return the boundary term on ``boundary``, if any."""
         i = self.compute_boundary_index(boundary)
         return self.bcs_terms[i]
         
     def create_form_terms_presized_lists(self):
+        """Pre-allocate ``q_source`` / ``bcs_terms`` lists and unsteady callback buckets."""
         self.q_source = [None]*len(self.mats)
         self.bcs_terms = [None]*len(self.bcs)
         self.unsteady_term_update_callbacks = []
@@ -227,26 +286,32 @@ class Simulation():
         self.unsteady_term_converged_callbacks = []
 
     def update_unsteady_form_terms(self, t):
+        """Call each registered Term ``update`` callback at simulation time ``t``."""
         for update_function in self.unsteady_term_update_callbacks:
             update_function(t)
 
     def next_step_unsteady_form_terms(self):
+        """Call each Term ``next_step`` callback after advancing discrete time."""
         for next_step_function in self.unsteady_term_next_step_callbacks:
             next_step_function()
 
     def next_event(self):
+        """Next special time event; default is no event (infinity). Overridable by subclasses."""
         return float("Inf")
 
     def converged_unsteady_form_terms(self):
+        """Return True if every Term ``converged`` callback reports convergence (logical AND)."""
         all_converged = True
         for converged_function in self.unsteady_term_converged_callbacks:
             all_converged *= converged_function()
         return all_converged
 
     def predict_time_step_size(self):
+        """Optional override for event-based ``dt`` prediction; default disables (infinity)."""
         return float('Inf')
     
     def get_unsteady_adaptive_time_step_size(self, dt_ctrl_interval):
+        """Suggest next ``dt`` from max temperature change and Term ``adaptation`` factors."""
         # max T change in domain adaptation
         diff = self.T.x.petsc_vec - self.T_n.x.petsc_vec
         max_T_diff = np.abs(diff.array).max()
@@ -265,9 +330,11 @@ class Simulation():
         return new_dt
 
     def define_form_subdomain_terms(self):
+        """Hook for subclasses to attach source and boundary terms to the weak form."""
         pass
 
     def resolve_term_callbacks(self, callback_name):
+        """Collect unique callables ``getattr(term, callback_name)`` from all Terms."""
         unique_callbacks = []
         # collect all updaters for source terms
         for obj in self.q_source:
@@ -282,22 +349,23 @@ class Simulation():
         return unique_callbacks
 
     def resolve_form_terms_update_callbacks(self):
-        "Collects update callbacks for all instances of Terms in unsteady form"
+        """Wire :meth:`update_unsteady_form_terms` to every Term's ``update`` method."""
         self.unsteady_term_update_callbacks = self.resolve_term_callbacks('update')
 
     def resolve_form_terms_next_step_callbacks(self):
-        "Collects next_steps callbacks for all instances of Terms in unsteady form"
+        """Wire :meth:`next_step_unsteady_form_terms` to every Term's ``next_step``."""
         self.unsteady_term_next_step_callbacks = self.resolve_term_callbacks('next_step')
 
     def resolve_form_terms_converged_callbacks(self):
-        "Collects converged callbacks for all instances of Terms in unsteady form"
+        """Wire :meth:`converged_unsteady_form_terms` to every Term's ``converged``."""
         self.unsteady_term_converged_callbacks = self.resolve_term_callbacks('converged')
 
     def resolve_form_terms_adaptation_callbacks(self):
-        "Collects converged callbacks for all instances of Terms in unsteady form"
+        """Collect Term ``adaptation`` callbacks for time-step control."""
         self.unsteady_term_adaptation_callbacks = self.resolve_term_callbacks('adaptation')
 
     def get_all_forcing_form_terms(self, T, t):
+        """Assemble diffusion, sources, and boundary contributions in the temperature residual."""
         Fd = 0
         for i, mat in enumerate(self.mats, 1):
             domain_name = mat.name
@@ -319,6 +387,7 @@ class Simulation():
         return Fd
 
     def create_time_derivative_form_solver(self):
+        """(Experimental) Build a Newton solver for an intermediate dT/dt projection step."""
         self.Fd = 0.0
         # TODO: complete and test this so we can use RK4 time projection before
         #       Crank Nicolson step in unsteady sim
@@ -328,12 +397,15 @@ class Simulation():
         self.derivative_solver = self.create_newton_solver(self.Fd, self.dT, petsc_options_prefix="hbderivative_")
 
     def create_steady_state_form_solver(self):
+        """Build the steady nonlinear problem ``Fss(T)=0`` and its SNES solver."""
         # steady state form: 0 = 0
         self.Fss = 0
         self.Fss += self.get_all_forcing_form_terms(self.T, t=None)
         self.steady_solver = self.create_newton_solver(self.Fss, self.T, petsc_options_prefix="hbsteady_")
 
     def create_unsteady_form_solver(self):
+        """Build the Crank–Nicolson semidiscrete residual ``F`` and SNES solver for ``T``."""
+        #TODO: Try using h(T) instead of rho(T)*cp(T)*T
         #unsteady state form: 0 = 0
         self.F = 0
         for i, mat in enumerate(self.mats, 1): # i == subdomain index / measure index
@@ -348,6 +420,7 @@ class Simulation():
         self.unsteady_solver = self.create_newton_solver(self.F, self.T, petsc_options_prefix="hbunsteady_")
 
     def create_forms_for_calculating_temperature_spectrum(self):
+        """Preassemble forms for logit-smoothed temperature CDF / PDF per subdomain."""
         # greek-Psi forms for calculating cumulative temperature spectrum of subdomains
         self.T_hat = fem.Constant(self.domain, PETSc.ScalarType((1.0)))
         self.b = fem.Constant(self.domain, PETSc.ScalarType((1.0)))
@@ -361,9 +434,11 @@ class Simulation():
             self.psi_prime_forms.append(fem.form((self.b*ufl.exp(self.b*(self.T-self.T_hat)))/(1+ufl.exp(self.b*(self.T-self.T_hat)))**2/self.V_subdomain[i-1]*self.jac*self.dx(i)))
 
     def create_common_probes(self, probes):
+        """Extension point for probes shared between steady and unsteady runs."""
         pass
         
     def create_steady_probes(self, probes):
+        """Register built-in steady-state diagnostic probes on ``probes``."""
 
         @probes.register_probe('local_timestamp', 's')
         def local_timestamp():
@@ -373,14 +448,19 @@ class Simulation():
         def t_cpu():
             return self.elapsed_steady
 
+        # Iteration counters are snapshotted from SNES inside
+        # _solve_and_record() right after solve() returns; the probes just
+        # surface the cached integers. This avoids querying PETSc at probe
+        # time (which can return stale or zero values depending on solver
+        # state).
         @probes.register_probe('NLS_iter', '-', format='d')
         def NLS_iter():
-            return self.steady_solver.solver.getIterationNumber()
-        
+            return getattr(self, 'steady_nls_iter', 0)
+
         @probes.register_probe('KSP_iter', '-', format='d')
         def KSP_iter():
-            return self.steady_solver.solver.getLinearSolveIterations()
-        
+            return getattr(self, 'steady_ksp_iter', 0)
+
         @probes.register_probe('r_norm', '-')
         def Residual_norm():
             return self.steady_solver.solver.getFunctionNorm()
@@ -388,6 +468,7 @@ class Simulation():
         self.create_common_probes(probes)
 
     def create_unsteady_probes(self, probes):
+        """Register built-in transient diagnostic probes on ``probes``."""
 
         @probes.register_probe('local_timestamp', 's')
         def local_timestamp():
@@ -427,14 +508,29 @@ class Simulation():
         def t_i():
             return self.ielapsed
         
+        # Iteration counters: see note in create_steady_probes. The values
+        # are captured by _solve_and_record() in the time-stepping loop.
+        # `NLS_iter`/`KSP_iter` reflect only the *last* SNES solve in the
+        # step (matches the previous semantics); `NLS_iter_step` /
+        # `KSP_iter_step` accumulate across all attempted SNES solves of
+        # the current step (including failed retries / dt-halving), giving
+        # a more honest picture of the work spent.
         @probes.register_probe('NLS_iter', '-', format='d')
         def NLS_iter():
-            return self.unsteady_solver.solver.getIterationNumber()
-        
+            return getattr(self, 'unsteady_nls_iter', 0)
+
         @probes.register_probe('KSP_iter', '-', format='d')
         def KSP_iter():
-            return self.unsteady_solver.solver.getLinearSolveIterations()
-        
+            return getattr(self, 'unsteady_ksp_iter', 0)
+
+        @probes.register_probe('NLS_iter_step', '-', format='d')
+        def NLS_iter_step():
+            return getattr(self, 'unsteady_nls_iter_step', 0)
+
+        @probes.register_probe('KSP_iter_step', '-', format='d')
+        def KSP_iter_step():
+            return getattr(self, 'unsteady_ksp_iter_step', 0)
+
         @probes.register_probe('TERM_iter', '-', format='d')
         def Term_iter():
             return self.unsteady_term_its
@@ -450,16 +546,19 @@ class Simulation():
         self.create_common_probes(probes)
 
     def create_unsteady_probe_writer(self):
+        """Instantiate ``self.unsteady_probes`` and populate it via :meth:`create_unsteady_probes`."""
         # probe writer
         self.unsteady_probes = Probe_writer()
         self.create_unsteady_probes(self.unsteady_probes)
     
     def create_steady_probe_writer(self):
+        """Instantiate ``self.steady_probes`` and populate it via :meth:`create_steady_probes`."""
         # probe writer
         self.steady_probes = Probe_writer()
         self.create_steady_probes(self.steady_probes)
 
     def create_static_vtk_data(self):    
+        """Gather mesh topology on rank 0 for PyVista plotting (``root_cells``, ``root_x``, ...)."""
         # vtk plot stuff that do not need to be recreated every time
         cells, types, x = plot.vtk_mesh(self.V)
         num_cells_local = self.domain.topology.index_map(self.domain.topology.dim).size_local
@@ -479,6 +578,7 @@ class Simulation():
             self.root_types = np.concatenate(global_types)
 
     def create_newton_solver(self, F, u, petsc_options_prefix):
+        """Build a ``dolfinx.fem.petsc.NonlinearProblem`` with default SNES/KSP options."""
 
         petsc_options = {
             "snes_type": "newtonls",
@@ -512,9 +612,60 @@ class Simulation():
 
 
         return problem
+
+    def _solve_and_record(self, problem, kind):
+        """Run a SNES solve via dolfinx ``NonlinearProblem`` and snapshot the
+        SNES/KSP iteration counts immediately, before anything else can
+        mutate the underlying PETSc state.
+
+        Stores per-solve and cumulative-per-step counters as attributes that
+        probe callbacks can read without ever touching PETSc.
+
+        Args:
+            problem: dolfinx NonlinearProblem (must expose ``.solver``).
+            kind: 'unsteady' or 'steady'. Selects which set of attributes
+                to write to.
+
+        Returns:
+            Whatever ``problem.solve()`` returns.
+        """
+        result = problem.solve()
+        snes = problem.solver
+        # SNESGetIterationNumber: nonlinear iterations completed in the
+        # most recent SNES solve.
+        nls_iter = int(snes.getIterationNumber())
+        # SNESGetLinearSolveIterations: total KSP iterations summed over
+        # every Newton step of the most recent SNES solve.
+        ksp_iter = int(snes.getLinearSolveIterations())
+        # SNESConvergedReason: positive on convergence, negative on failure.
+        # Stored so users can inspect why a solve failed without re-querying
+        # SNES later (which can be misleading if state is reset).
+        conv_reason = int(snes.getConvergedReason())
+
+        if kind == 'unsteady':
+            self.unsteady_nls_iter = nls_iter
+            self.unsteady_ksp_iter = ksp_iter
+            self.unsteady_snes_reason = conv_reason
+            self.unsteady_nls_iter_step += nls_iter
+            self.unsteady_ksp_iter_step += ksp_iter
+        elif kind == 'steady':
+            self.steady_nls_iter = nls_iter
+            self.steady_ksp_iter = ksp_iter
+            self.steady_snes_reason = conv_reason
+        else:
+            raise ValueError(f"unknown solver kind: {kind!r}")
+
+        return result
+
+    def _reset_step_iter_counters(self):
+        """Zero the per-step cumulative iteration counters. Called once at
+        the start of every accepted/attempted unsteady time step."""
+        self.unsteady_nls_iter_step = 0
+        self.unsteady_ksp_iter_step = 0
     
     def solve_time_derivative(self,
         dT_guess=None):
+        """(Incomplete) Solve the auxiliary dT problem if ``create_time_derivative_form_solver`` is used."""
         if dT_guess is not None:
             self.T.x.array[:] = dT_guess
         self.r_derivative = self.derivative_sollver.solve(self.T)
@@ -536,6 +687,23 @@ class Simulation():
         h0_T_ref=None,
         ):
 
+        """Solve the steady thermal balance once and optionally write probes / XDMF.
+
+        Args:
+            T_guess: Initial Newton guess for ``T`` (optional).
+            result_dir: Directory for XDMF output when ``xdmf_file`` is set.
+            probe_destinations: Probe writer destinations (CSV, DB, memory).
+            probes_callbacks: Run after each probe evaluation batch.
+            xdmf_file: If set, write ``T`` once to ``result_dir/xdmf_file``.
+            save_probes: Reserved / unused in current implementation.
+            verbose: If True, print probe table after the solve.
+            close_probes: Whether to close the probe writer at the end (always True here).
+            atol, rtol, stol, ksp_rtol: Nonlinear and linear solver tolerances.
+            h0_T_ref: Enthalpy reference temperature for materials.
+
+        Returns:
+            The :class:`~heat_battery.simulations.probing.Probe_writer` used for this run.
+        """
         # set initial guess for the solver
         if T_guess is not None:
             self.T.x.array[:] = T_guess
@@ -570,9 +738,11 @@ class Simulation():
         #FIXME: add update for source_terms and bc_terms before simulation
         #FIXME: this should run in loop when the Terms are implicit in nature
         #FIXME: this whole function will be unusable as of now, I focus on unsteady now!!! SORRY!
+        T_backup = self.T.x.array.copy()
         try:
-            self.r_steady = self.steady_solver.solve()
+            self.r_steady = self._solve_and_record(self.steady_solver, kind='steady')
         except Exception as e:
+            self.T.x.array[:] = T_backup
             self.steady_probes.close()
             self.steady_probes.reset_printer()
             raise e
@@ -605,70 +775,75 @@ class Simulation():
         return self.steady_probes
 
     def solve_unsteady(self, 
-            T0=None,
-            T_guess=None,
-            h0_T_ref=None,
-            t_max=100,
-            dt_start=1e-3,
-            dt_min=1e-6,
-            dt_max=1,
-            dt_xdmf=0.1,
-            dt_ctrl_interval=(0.1, 0.25),
-            atol=None,
-            rtol=None,
-            stol=None,
-            ksp_rtol=None,
-            verbose=True,
-            xdmf_file=None,
-            result_dir=None,
-            probe_destinations=[],
-            probes_callbacks=[],
-            force_explicit_terms=False,
-            max_term_its=3,
-            use_time_projection=True,
-            call_backs=[],
-            call_back_each_t=None,
-            call_back_each_step=None,
-            custom_xdmf_trigger=None,
-            load_initial_checkpoint=None,
-            checkpoint_dir=None,
-            checkpoint_dt=None,
-            checkpoint_callbacks=[],
-            datetime_start=None,
+            T0: float|None=None,
+            T_guess: float|None=None,
+            h0_T_ref: float|None=None,
+            t_max: float=100,
+            dt_start: float=1e-3,
+            dt_min: float=1e-6,
+            dt_max: float=1,
+            dt_xdmf: float=0.1,
+            dt_ctrl_interval: tuple[float, float]=(0.1, 0.25),
+            atol: float|None=None,
+            rtol: float|None=None,
+            stol: float|None=None,
+            ksp_rtol: float|None=None,
+            verbose: bool=True,
+            xdmf_file: str|None=None,
+            result_dir: str|None=None,
+            probe_destinations: list[dict[str, Any]]=[],
+            probes_callbacks: list[Callable[[], None]]=[],
+            force_explicit_terms: bool=False,
+            max_term_its: int=3,
+            use_time_projection: bool=True,
+            call_backs: list[Callable[[], None]]=[],
+            call_back_each_t: float|None=None,
+            call_back_each_step: int|None=None,
+            custom_xdmf_trigger: Callable[[], bool]|None=None,
+            load_initial_checkpoint: str|None=None,
+            checkpoint_dir: str|None=None,
+            checkpoint_dt: float|None=None,
+            checkpoint_callbacks: list[Callable[[], None]]=[],
+            datetime_start: str|None=None,
             ):
 
         """
-        This is the main method to run unstedy simulations. It handles the time 
-        steping with adaptive time steping, advances and converges all Terms and
-        writes out probes and domain data. It can write domain data (the solution) 
-        to XDMF files and probes data to text files and/or a SQL database.
+        Run the transient heat equation with adaptive time stepping and Term coupling.
+
+        Advances ``t`` from zero (or from ``load_initial_checkpoint``) to ``t_max``,
+        solves the nonlinear system each step, updates all Terms, and streams
+        scalar probes plus optional XDMF temperature history.
 
         Args:
-            T0 (float): initial temperature in domain
-            T_guess (np.ndarray): initial guess for the newton solver
-            h0_T_ref (float): reference temperature for enthalpy
-            t_max (float): maximum simulatated time
-            dt_start (float): initial time step size
-            dt_min (float): minimum time step size
-            dt_max (float): maximum time step size
-            dt_xdmf (float): time step for xdmf output
-            dt_ctrl_interval (tuple of floats): temperature interval for adaptive time step control
-            atol (float): absolute tolerance for the newton solver
-            rtol (float): relative tolerance for the newton solver
-            verbose (bool): print solver iterations
-            xdmf_file (str): name of the xdmf file for domain data
-            result_dir (str): directory for output files
-            probes_file (str): name of the probes file for probe data
-            result_database (str): name of the database for probe data
-            database_table (str): name of the database table for probe data
-            close_probes (bool): close probes file at the end of the simulation
-            force_explicit_terms (bool): force explicit evaluation of the terms
-            max_term_its (int): maximum number of term iterations to solve the terms
-            use_time_projection (bool): use time projection for initial guess evaluations
-            call_back (function): callback function called after specified iterations
-            call_back_each_t (float): trigger callback after simulations advances this many seconds
-            call_back_each_step (int): trigger callback after simulations advances this many steps
-            custom_xdmf_trigger (function): not implemented yet
+            T0: Uniform initial temperature when not loading a checkpoint.
+            T_guess: Initial Newton guess when not loading a checkpoint.
+            h0_T_ref: Reference temperature for material enthalpy.
+            t_max: End time of the simulation (seconds).
+            dt_start, dt_min, dt_max: Time-step bounds.
+            dt_xdmf: Spacing in simulation time between full-field XDMF writes.
+            dt_ctrl_interval: ``(low, high)`` band on max |ΔT| for step-size control.
+            atol, rtol, stol, ksp_rtol: SNES/KSP tolerances.
+            verbose: If True, print probe columns each step; else use a progress bar.
+            xdmf_file: Base filename for XDMF output under ``result_dir`` (or None).
+            result_dir: Output directory for XDMF (required if ``xdmf_file`` is set).
+            probe_destinations: List of probe sink specs for :class:`Probe_writer`.
+            probes_callbacks: Callables invoked after probes are evaluated.
+            force_explicit_terms: Evaluate Term updates in explicit-only mode.
+            max_term_its: Max outer iterations for implicit Term coupling per step.
+            use_time_projection: Linear extrapolation guess for the next Newton solve.
+            call_backs: Arbitrary callbacks triggered by ``call_back_each_t`` / step.
+            call_back_each_t, call_back_each_step: Callback scheduling.
+            custom_xdmf_trigger: Reserved (not implemented).
+            load_initial_checkpoint: Directory with a prior ``save_unsteady_checkpoint``
+                tree; restores state, probes, and optionally XDMF via snapshot.
+            checkpoint_dir: Where to write periodic checkpoints when ``checkpoint_dt`` is set.
+            checkpoint_dt: If set, save full state this often (simulation seconds).
+            checkpoint_callbacks: Run after each checkpoint (e.g. upload to DB).
+            datetime_start: ISO-like string anchoring probe wall-clock timestamps.
+
+        Note:
+            When both checkpoints and XDMF are enabled, domain files are snapshotted
+            alongside each checkpoint so a resume matches CSV probe truncation.
         """
         
         if load_initial_checkpoint is None:
@@ -757,8 +932,29 @@ class Simulation():
         # TODO: check if adios4dolfinx can be used for this instead of io.XDMFFile
         if xdmf_file is not None:
             file_path = os.path.join(result_dir, xdmf_file)
-            xdmf = io.XDMFFile(self.domain.comm, file_path, "w")
-            xdmf.write_mesh(self.domain)
+            # When resuming from a checkpoint, restore the xdmf/.h5 snapshot
+            # taken at that checkpoint and reopen in append mode so previously
+            # written timesteps are preserved and new ones continue from
+            # next_xdmf_t (also restored above). If no snapshot is available
+            # we fall back to a fresh file -- this happens when xdmf output
+            # was not enabled the previous run.
+            if load_initial_checkpoint is not None:
+                restored = self.restore_xdmf_files_from_checkpoint(
+                    load_initial_checkpoint, file_path,
+                )
+                if restored:
+                    xdmf = io.XDMFFile(self.domain.comm, file_path, "a")
+                else:
+                    self.print_r0(
+                        f"WARNING: resuming from checkpoint at "
+                        f"{load_initial_checkpoint} but no XDMF snapshot was "
+                        "found there. Restarting XDMF output from scratch."
+                    )
+                    xdmf = io.XDMFFile(self.domain.comm, file_path, "w")
+                    xdmf.write_mesh(self.domain)
+            else:
+                xdmf = io.XDMFFile(self.domain.comm, file_path, "w")
+                xdmf.write_mesh(self.domain)
 
         if verbose:
             #self.unsteady_probes.pretty_string()
@@ -784,6 +980,10 @@ class Simulation():
             # Keep trying to solve for new time step
             self.unsteady_term_its = 1
             self.unsteady_total_iter = 0
+            # Reset cumulative iteration counters for this new step. They
+            # will be summed up across every SNES re-solve attempt in the
+            # inner loop below.
+            self._reset_step_iter_counters()
             while not success: # solving current time step
                 self.unsteady_total_iter += 1
                 
@@ -821,11 +1021,16 @@ class Simulation():
                 
                 # try to solve the PDE (most cpu intensive code is in this chunk!)
                 try:
-                    self.r_unsteady = self.unsteady_solver.solve()
+                    self.r_unsteady = self._solve_and_record(self.unsteady_solver, kind='unsteady')
                 except Exception as e:
                     if MPI.COMM_WORLD.rank == 0:
-                        printer(e)
-                        #printer(f"Nonlinear solver failed after {self.r_unsteady[0]} NLS iterations and {self.unsteady_solver.krylov_solver.its} KSP iterations -> lowering time step by 30%")
+                        printer(
+                            f"Nonlinear solver failed after "
+                            f"{getattr(self, 'unsteady_nls_iter', 0)} NLS iterations and "
+                            f"{getattr(self, 'unsteady_ksp_iter', 0)} KSP iterations "
+                            f"(reason={getattr(self, 'unsteady_snes_reason', 'n/a')}) "
+                            f"-> lowering time step by 30%: {e}"
+                        )
                     self.dt.value *= 0.7 # lower the step after unexpected fail
                     self.T.x.array[:] = self.T_n.x.array[:]
                     self.unsteady_term_its = 1
@@ -972,6 +1177,14 @@ class Simulation():
                 assert local_data["in_event"] == False, "Checkpoint should not be saved in event"
                 prev_checkpoint_t += checkpoint_dt
                 self.save_unsteady_checkpoint(checkpoint_dir, local_data=local_data)
+                # Snapshot the XDMF output alongside the simulation state so
+                # that a resume rolls the .xdmf/.h5 pair back to exactly this
+                # point (mirrors how CSV probes are truncated to their
+                # checkpointed byte size).
+                if xdmf_file is not None:
+                    xdmf.close()
+                    self.save_xdmf_files_checkpoint(checkpoint_dir, file_path)
+                    xdmf = io.XDMFFile(self.domain.comm, file_path, "a")
                 for call_back in checkpoint_callbacks:
                     call_back()
 
@@ -987,6 +1200,7 @@ class Simulation():
         #     return self.unsteady_probes
 
     def save_function_checkpoint(self, checkpoint_dir, checkpoint_fname='functions'):
+        """Persist ``T_n`` and ``T`` with adios4dolfinx under ``checkpoint_dir``."""
         function_folder = Path(checkpoint_dir, checkpoint_fname)
         # save function of temperature T_n
         adios4dolfinx.write_function_on_input_mesh( 
@@ -1007,6 +1221,7 @@ class Simulation():
         )
 
     def save_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
+        """Pickle scalar time state: ``elapsed``, ``t``, ``t_n``, ``dt``, ``h0_T_ref``."""
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = {}
         data["elapsed"] = self.elapsed
@@ -1017,6 +1232,7 @@ class Simulation():
         save_data_binary(data_file, data)
 
     def save_terms_checkpoint(self, checkpoint_dir, checkpoint_fname='terms'):
+        """Pickle :meth:`get_checkpoint_data` / :meth:`load_checkpoint_data` blobs for each Term."""
         terms_data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = {}
         data["q_source_data"] = [None]*len(self.q_source)
@@ -1033,6 +1249,7 @@ class Simulation():
         save_data_binary(terms_data_file, data)
 
     def save_probe_destination_checkpoints(self, checkpoint_dir, checkpoint_fname='probes'):
+        """Pickle per-destination state (e.g. CSV byte offsets) for ``unsteady_probes``."""
         probe_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = [None]*len(self.unsteady_probes.destinations)
         for i, probe_destination in enumerate(self.unsteady_probes.destinations):
@@ -1041,6 +1258,7 @@ class Simulation():
         save_data_binary(probe_file, data)
 
     def save_metadata_checkpoint(self, checkpoint_dir, checkpoint_fname='metadata'):
+        """Write a small JSON sidecar with probe progress and wall time."""
         metadata_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".json")
         metadata = {
             "progress": self.unsteady_probes.get_value('progress'),
@@ -1049,10 +1267,12 @@ class Simulation():
         save_data_json(metadata_file, metadata)
 
     def save_local_scope_data_checkpoint(self, checkpoint_dir, checkpoint_fname='local_data', data=None):
+        """Pickle the time-stepper's local loop variables (``next_xdmf_t``, ``step``, ...)."""
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         save_data_binary(data_file, data)
 
     def save_unsteady_checkpoint(self, checkpoint_dir, local_data=None):
+        """Full unsteady snapshot: constants, functions, terms, probes, local loop, metadata."""
         self.save_simulation_constants_checkpoint(checkpoint_dir, checkpoint_fname='constants') #must be first
         self.save_function_checkpoint(checkpoint_dir, checkpoint_fname='functions')
         self.save_terms_checkpoint(checkpoint_dir, checkpoint_fname='terms')
@@ -1060,7 +1280,65 @@ class Simulation():
         self.save_local_scope_data_checkpoint(checkpoint_dir, checkpoint_fname='local_data', data=local_data)
         self.save_metadata_checkpoint(checkpoint_dir, checkpoint_fname='metadata')
 
+    @staticmethod
+    def _xdmf_companion_paths(xdmf_file_path):
+        """Return ``(xdmf_path, h5_path)`` for an XDMF output file."""
+        xdmf_path = Path(xdmf_file_path)
+        h5_path = xdmf_path.with_suffix(".h5")
+        return xdmf_path, h5_path
+
+    def save_xdmf_files_checkpoint(
+            self,
+            checkpoint_dir,
+            xdmf_file_path,
+            checkpoint_fname='xdmf',
+        ):
+        """Snapshot the live ``.xdmf`` / ``.h5`` pair into ``checkpoint_dir`` (rank 0 I/O).
+
+        HDF5 cannot be safely byte-truncated like CSV; we copy the pair so a
+        resume can restore consistent domain output. The XDMF file handle must
+        be closed and flushed before calling this method.
+        """
+        if MPI.COMM_WORLD.rank == 0:
+            xdmf_path, h5_path = self._xdmf_companion_paths(xdmf_file_path)
+            backup_dir = Path(checkpoint_dir, checkpoint_fname)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            if xdmf_path.exists():
+                shutil.copy2(xdmf_path, backup_dir / xdmf_path.name)
+            if h5_path.exists():
+                shutil.copy2(h5_path, backup_dir / h5_path.name)
+        MPI.COMM_WORLD.Barrier()
+
+    def restore_xdmf_files_from_checkpoint(
+            self,
+            checkpoint_dir,
+            xdmf_file_path,
+            checkpoint_fname='xdmf',
+        ):
+        """Inverse of :meth:`save_xdmf_files_checkpoint`.
+
+        Copy the snapshot pair from ``checkpoint_dir`` on top of the live
+        files, so that a subsequent open in append mode continues writing
+        from the checkpointed state. Returns ``True`` if a backup was
+        available and restored, ``False`` otherwise.
+        """
+        found = False
+        if MPI.COMM_WORLD.rank == 0:
+            xdmf_path, h5_path = self._xdmf_companion_paths(xdmf_file_path)
+            backup_dir = Path(checkpoint_dir, checkpoint_fname)
+            backup_xdmf = backup_dir / xdmf_path.name
+            backup_h5 = backup_dir / h5_path.name
+            if backup_xdmf.is_file() and backup_h5.is_file():
+                xdmf_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(backup_xdmf, xdmf_path)
+                shutil.copy2(backup_h5, h5_path)
+                found = True
+        found = MPI.COMM_WORLD.bcast(found, root=0)
+        MPI.COMM_WORLD.Barrier()
+        return found
+
     def load_function_checkpoint(self, checkpoint_dir, checkpoint_fname='functions'):
+        """Load ``T_n`` and ``T`` from an adios4dolfinx folder written by :meth:`save_function_checkpoint`."""
         function_folder = Path(checkpoint_dir, checkpoint_fname)
         adios4dolfinx.read_function(
             function_folder, 
@@ -1076,6 +1354,7 @@ class Simulation():
         )
 
     def load_simulation_constants_checkpoint(self, checkpoint_dir, checkpoint_fname='constants'):
+        """Restore scalar time / enthalpy state from :meth:`save_simulation_constants_checkpoint`."""
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(data_file)
         self.elapsed = data["elapsed"]
@@ -1085,6 +1364,7 @@ class Simulation():
         self.mats.set_h0_T_ref(data["h0_T_ref"])
 
     def load_terms_checkpoint(self, checkpoint_dir, checkpoint_fname='terms'):
+        """Push pickled Term state into each non-None ``q_source`` / ``bcs_terms`` entry."""
         terms_data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(terms_data_file)
         # load source Terms data
@@ -1106,6 +1386,7 @@ class Simulation():
                     raise ValueError(f"No data for boundary term[{i}]({bcs_names[i]}) in checkpoint")
 
     def load_probe_destination_checkpoints(self, checkpoint_dir, checkpoint_fname='probes'):
+        """Restore probe destination state (e.g. CSV truncation size) before :meth:`Probe_writer.initialize`."""
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(data_file)
         for i, probe_destination in enumerate(self.unsteady_probes.destinations):
@@ -1117,16 +1398,19 @@ class Simulation():
                 raise ValueError(f"No data for probe destination[{i}]({probe_destination_names[i]}) in checkpoint")
 
     def load_metadata_checkpoint(self, checkpoint_dir, checkpoint_fname='metadata'):
+        """Read JSON metadata written by :meth:`save_metadata_checkpoint`."""
         metadata_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".json")
         metadata = load_data_json(metadata_file)
         return metadata
             
     def load_local_scope_data_checkpoint(self, checkpoint_dir, checkpoint_fname='local_data'):
+        """Load the dict of time-stepper locals saved beside each checkpoint."""
         data_file = Path(checkpoint_dir, checkpoint_fname).with_suffix(".pickle")
         data = load_data_binary(data_file)
         return data
 
     def load_unsteady_checkpoint(self, checkpoint_dir):
+        """Convenience wrapper: reload all unsteady checkpoint shards; returns ``local_data`` dict."""
         self.load_simulation_constants_checkpoint(checkpoint_dir, checkpoint_fname='constants')
         self.load_terms_checkpoint(checkpoint_dir, checkpoint_fname='terms')
         self.load_probe_destination_checkpoints(checkpoint_dir, checkpoint_fname='probes')
@@ -1136,7 +1420,7 @@ class Simulation():
         return local_data
 
     def get_temperature_range(self, cell_tag=None):
-        'This method must run on all rank to work properly'
+        """Global min/max of ``T`` over ``cell_tag`` (or whole domain). Collective on all ranks."""
         if cell_tag is not None:
             cells = self.cell_tags.find(cell_tag)
             dofs = fem.locate_dofs_topological(self.V, 2, cells)
@@ -1151,8 +1435,11 @@ class Simulation():
         return T_min, T_max
     
     def get_temperature_spectrum(self, T=None, cell_tag=None, sampling=1, smoothness=1, cumulative=False):
+        """Evaluate the logit-smoothed temperature CDF (``cumulative``) or PDF on subdomain ``cell_tag``.
+
+        Must be called collectively. If ``T`` is passed, temporarily swaps ``self.T`` for the scan.
+        """
         #TODO: find more efficient method for calculationg this
-        'This method must run on all rank to work properly'
         assert isinstance(cell_tag, int), "cell_tag must be integer"
         if T is not None:
             T_original = T.x.array.copy()
@@ -1175,7 +1462,7 @@ class Simulation():
         return T_hat, c
 
     def material_plot(self, m=None, property='k', include_density=False, T=None):
-        'This method must run on all rank to work properly'
+        """Plot material conductivity (or other ``property``) per subdomain; optionally overlay spectra."""
         m = m or range(len(self.mats))
         m = [m] if isinstance(m, int) else m
         figs = self.mats.plot_property(m=m, property=property)
@@ -1185,7 +1472,7 @@ class Simulation():
         return figs
 
     def add_temperature_spectrum_trace(self, fig, m=None, T=None):
-        '''This runs on all ranks, but mutates the fig only at rank=0'''
+        """Append a secondary-axis spectrum trace to a Plotly ``fig`` (rank 0 only mutates ``fig``)."""
         T = T or [self.T]
         T = T if isinstance(T, list) else [T]
         for i, _T in enumerate(T):
@@ -1207,6 +1494,7 @@ class Simulation():
                         side="right"))
                 
     def probes_time_plot(self, *args, **kwargs):
+        """Line plot of ``unsteady_probes.df`` via Plotly Express (rank 0 only)."""
         if MPI.COMM_WORLD.rank == 0:
             fig = px.line(self.unsteady_probes.df, *args, **kwargs)
             fig.update_layout(
@@ -1222,7 +1510,7 @@ class Simulation():
             return fig
 
     def domain_state_plot(self, T=None):
-        'This method must run on all rank to work properly'
+        """Build PyVista ``UnstructuredGrid``(s) with temperature on rank 0 (collective gather)."""
         root = 0
         T = T if T is not None else self.T
         T = T if isinstance(T, list) else [T]

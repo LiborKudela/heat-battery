@@ -44,31 +44,19 @@ myIcons = {
     }
 };
 
-function GraphContainer(index, figure, updater_data) {
+function GraphContainer(index, figure, updater_data, viewer_id) {
     var type = updater_data.updater_type;
-    var grid_item_id_obj = {type: 'grid-item', index: `container-${index}`};
+    var grid_item_id_obj = {type: 'grid-item', viewer_id: viewer_id, index: `container-${index}`};
     var grid_item_id_str = stringify_sorted(grid_item_id_obj);
-    var fig_id_obj = {type: 'graph-container', index: index};
+    var fig_id_obj = {type: 'graph-container', viewer_id: viewer_id, index: index};
     var fig_id_str = stringify_sorted(fig_id_obj);
-    var relayout_id_obj = {type: 'relayout-store', index: index};
+    var relayout_id_obj = {type: 'relayout-store', viewer_id: viewer_id, index: index};
     var relayout_id_str = stringify_sorted(relayout_id_obj);
-    // var updater_data_id_obj = {type: 'updater-data-store', index: index};
-    // var updater_data_id_str = stringify_sorted(updater_data_id_obj);
-    var graph_id_obj = {type: 'graph', index: index.toString()};
+    var graph_id_obj = {type: 'graph', viewer_id: viewer_id, index: index.toString()};
     var graph_id_str = stringify_sorted(graph_id_obj);
     
     // Store transform_index in a variable for the click handler
     var transform_index = updater_data && updater_data.transform_index !== undefined ? updater_data.transform_index : null;
-    // var relayout_store = {
-    //     type: "Store",
-    //     namespace: "dash_core_components",
-    //     props: {
-    //         id: relayout_id_obj,
-    //         data: {
-    //             autosize: true
-    //         }
-    //     }
-    // };
     var graph = {
         type: "Graph",
         namespace: "dash_core_components",  // ensures it's a dcc.Graph
@@ -112,9 +100,7 @@ function GraphContainer(index, figure, updater_data) {
                         title: "Delete graph",
                         icon: myIcons.DeleteIcon,
                         click: function(gd) {
-                            //var fig_div = document.getElementById(`${fig_id_str}`);
-                            dash_clientside.set_props('remove-figure-store', {data: [index]});
-                            //fig_div.remove();
+                            dash_clientside.set_props(viewer_id + '-remove-figure-store', {data: [index]});
                         }   
                     },
                     {
@@ -128,11 +114,10 @@ function GraphContainer(index, figure, updater_data) {
                             if (type === 'transform' && transform_index !== null && transform_index !== undefined) {
                                 editor_store_data.transform_index = transform_index;
                             }
-                            dash_clientside.set_props('chart-editor-modal', {is_open: true}); //open the editor modal
-                            dash_clientside.set_props('chart-editor-modal-title', {children: "Chart editor - " + type}); //set the title of the editor modal    
-                            dash_clientside.set_props('chart-editor-store', {data: editor_store_data}); //set outp  ut id for the editor
-                            //dash_clientside.set_props('chart-editor-editor', {saveState: false}); //set saveState to false
-                            dash_clientside.set_props('chart-editor-editor', {loadFigure: figure}); //load the figure into the editor
+                            dash_clientside.set_props(viewer_id + '-chart-editor-modal', {is_open: true}); //open the editor modal
+                            dash_clientside.set_props(viewer_id + '-chart-editor-modal-title', {children: "Chart editor - " + type}); //set the title of the editor modal
+                            dash_clientside.set_props(viewer_id + '-chart-editor-store', {data: editor_store_data}); //set output id for the editor
+                            dash_clientside.set_props(viewer_id + '-chart-editor-editor', {loadFigure: figure}); //load the figure into the editor
                         }
                     }
                 ]
@@ -202,7 +187,7 @@ function get_empty_figure(title_text, plotly_type) {
     };
 }
 
-function add_graph_to_grid(n_clicks, title_text, currentChildren, updaters_data, plotly_type, updater_data) {
+function add_graph_to_grid(n_clicks, title_text, currentChildren, updaters_data, plotly_type, updater_data, viewer_id) {
     // If no clicks, keep the current state
     if (!n_clicks) {
         return currentChildren;
@@ -214,16 +199,10 @@ function add_graph_to_grid(n_clicks, title_text, currentChildren, updaters_data,
     }
     figure = get_empty_figure(title_text, plotly_type)  
     var graphIndex = currentChildren.length;
-    var newGraph = GraphContainer(graphIndex, figure, updater_data);
+    var newGraph = GraphContainer(graphIndex, figure, updater_data, viewer_id);
 
     // Append the new div to the current children array
     currentChildren.push(newGraph);
-
-    // var updater_data = {
-    //     updater_type: data_source_type,
-    //     y_names: null,
-    //     x_name: 't_sim_days',
-    // }
 
     updaters_data.push(updater_data);
     return [currentChildren, updaters_data];  
@@ -252,7 +231,7 @@ function deepMergeLayout(target, source) {
     return target;
 }
 
-function initialize_figures_on_load(initial_figures, signature) {
+function initialize_figures_on_load(initial_figures, signature, viewer_id) {
     // If no initial figures or no signature, return empty defaults
     if (!initial_figures || !initial_figures.length || !signature) {
         return [[], []];
@@ -305,7 +284,7 @@ function initialize_figures_on_load(initial_figures, signature) {
             updater_data.transform_index = figConfig.transform_index;
             updater_data.transform_name = figConfig.transform_name;
         }
-        const graphContainer = GraphContainer(index, figure, updater_data);
+        const graphContainer = GraphContainer(index, figure, updater_data, viewer_id);
         gridChildren.push(graphContainer);
         
         // Add updater data
@@ -402,38 +381,49 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 
                 var newDefaults = [];
                 initial_transforms.forEach(function(defaultTransform) {
+                    // Ensure default transforms have an id
+                    if (!defaultTransform.id) {
+                        defaultTransform.id = 'default_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    }
+                    // Ensure defaults have steps array (convert if needed)
+                    if (!defaultTransform.steps && defaultTransform.config) {
+                        var config = defaultTransform.config;
+                        var stepType = defaultTransform.type || 'column_transform';
+                        var operation = config.operation || 'unknown';
+                        var step = {
+                            type: stepType,
+                            description: defaultTransform.description || operation,
+                            operation: operation
+                        };
+                        for (var key in config) {
+                            if (config.hasOwnProperty(key) && key !== 'operation') {
+                                step[key] = config[key];
+                            }
+                        }
+                        defaultTransform.steps = [step];
+                        delete defaultTransform.config;
+                        delete defaultTransform.type;
+                    }
+
                     // Check if this default already exists
-                    var exists = false;
-                    if (defaultTransform.id && existingIds.has(defaultTransform.id)) {
-                        exists = true;
-                    } else if (defaultTransform.name && existingNames.has(defaultTransform.name)) {
-                        exists = true;
+                    var existingIndex = -1;
+                    for (var ei = 0; ei < existingTransforms.length; ei++) {
+                        if (defaultTransform.id && existingTransforms[ei].id === defaultTransform.id) {
+                            existingIndex = ei;
+                            break;
+                        }
                     }
                     
-                    if (!exists) {
-                        // Ensure default transforms have an id
-                        if (!defaultTransform.id) {
-                            defaultTransform.id = 'default_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    if (existingIndex >= 0) {
+                        // Update existing transform's steps from the server-defined default
+                        var defaultStepsStr = JSON.stringify(defaultTransform.steps);
+                        var existingStepsStr = JSON.stringify(existingTransforms[existingIndex].steps);
+                        if (defaultStepsStr !== existingStepsStr) {
+                            existingTransforms[existingIndex].steps = defaultTransform.steps;
+                            existingTransforms[existingIndex].name = defaultTransform.name;
+                            existingTransforms[existingIndex].description = defaultTransform.description;
                         }
-                        // Ensure defaults have steps array (convert if needed)
-                        if (!defaultTransform.steps && defaultTransform.config) {
-                            var config = defaultTransform.config;
-                            var stepType = defaultTransform.type || 'column_transform';
-                            var operation = config.operation || 'unknown';
-                            var step = {
-                                type: stepType,
-                                description: defaultTransform.description || operation,
-                                operation: operation
-                            };
-                            for (var key in config) {
-                                if (config.hasOwnProperty(key) && key !== 'operation') {
-                                    step[key] = config[key];
-                                }
-                            }
-                            defaultTransform.steps = [step];
-                            delete defaultTransform.config;
-                            delete defaultTransform.type;
-                        }
+                    } else {
                         newDefaults.push(defaultTransform);
                         if (defaultTransform.id) existingIds.add(defaultTransform.id);
                         if (defaultTransform.name) existingNames.add(defaultTransform.name);
@@ -475,7 +465,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             return [];
         },
         // Display transforms list with expandable step editing
-        display_transforms_list: function(transforms, expanded_index) {
+        display_transforms_list: function(transforms, expanded_index, viewer_id) {
             if (!transforms || transforms.length === 0) {
                 return {
                     type: 'P',
@@ -614,7 +604,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                                     namespace: 'dash_bootstrap_components',
                                                     props: {
                                                         children: '↑',
-                                                        id: {'type': 'move-step-up-button', 'index': stepIdx},
+                                                        id: {'type': 'move-step-up-button', 'viewer_id': viewer_id, 'index': stepIdx},
                                                         color: 'secondary',
                                                         size: 'sm',
                                                         className: 'me-1',
@@ -627,7 +617,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                                     namespace: 'dash_bootstrap_components',
                                                     props: {
                                                         children: '↓',
-                                                        id: {'type': 'move-step-down-button', 'index': stepIdx},
+                                                        id: {'type': 'move-step-down-button', 'viewer_id': viewer_id, 'index': stepIdx},
                                                         color: 'secondary',
                                                         size: 'sm',
                                                         className: 'me-1',
@@ -640,7 +630,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                                     namespace: 'dash_bootstrap_components',
                                                     props: {
                                                         children: 'Preview',
-                                                        id: {'type': 'preview-step-button', 'index': stepIdx},
+                                                        id: {'type': 'preview-step-button', 'viewer_id': viewer_id, 'index': stepIdx},
                                                         color: 'info',
                                                         size: 'sm',
                                                         className: 'me-1',
@@ -652,7 +642,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                                     namespace: 'dash_bootstrap_components',
                                                     props: {
                                                         children: 'Remove',
-                                                        id: {'type': 'remove-step-button', 'index': stepIdx},
+                                                        id: {'type': 'remove-step-button', 'viewer_id': viewer_id, 'index': stepIdx},
                                                         color: 'danger',
                                                         size: 'sm',
                                                         n_clicks: 0
@@ -707,7 +697,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                         namespace: 'dash_bootstrap_components',
                         props: {
                             children: '+ Add Step',
-                            id: {'type': 'add-step-button', 'index': index},
+                            id: {'type': 'add-step-button', 'viewer_id': viewer_id, 'index': index},
                             color: 'success',
                             size: 'sm',
                             n_clicks: 0
@@ -726,7 +716,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                             namespace: 'dash_bootstrap_components',
                                             props: {
                                     children: isThisExpanded ? 'Collapse' : 'Expand',
-                                                id: {'type': 'edit-transform-button', 'index': index},
+                                                id: {'type': 'edit-transform-button', 'viewer_id': viewer_id, 'index': index},
                                                 color: 'primary',
                                                 size: 'sm',
                                                 className: 'me-2',
@@ -738,7 +728,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                 namespace: 'dash_bootstrap_components',
                                 props: {
                                     children: 'Preview',
-                                    id: {'type': 'preview-transform-button', 'index': index},
+                                    id: {'type': 'preview-transform-button', 'viewer_id': viewer_id, 'index': index},
                                     color: 'info',
                                     size: 'sm',
                                     className: 'me-2',
@@ -750,7 +740,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                                             namespace: 'dash_bootstrap_components',
                                             props: {
                                                 children: 'Delete',
-                                                id: {'type': 'delete-transform-button', 'index': index},
+                                                id: {'type': 'delete-transform-button', 'viewer_id': viewer_id, 'index': index},
                                                 color: 'danger',
                                                 size: 'sm',
                                                 n_clicks: 0
@@ -781,7 +771,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                             }
                         ],
                         action: false,
-                        id: {'type': 'transform-item', 'index': index},
+                        id: {'type': 'transform-item', 'viewer_id': viewer_id, 'index': index},
                         style: {
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -1122,16 +1112,16 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             };
             return newColumnDefs;
         },
-        add_timeseries_graph_to_grid: function(n_clicks, currentChildren, updaters_data) {
+        add_timeseries_graph_to_grid: function(n_clicks, currentChildren, updaters_data, viewer_id) {
             var new_updater_data = {
                 updater_type: 'timeseries',
                 y_names: null,
                 x_name: 't_timestamp',
             }
-            return add_graph_to_grid(n_clicks, 'Timeseries data', currentChildren, updaters_data, 'scattergl', new_updater_data);    
+            return add_graph_to_grid(n_clicks, 'Timeseries data', currentChildren, updaters_data, 'scattergl', new_updater_data, viewer_id);    
         },
         // Update transform graphs menu items
-        update_transform_graphs_menu: function(transforms) {
+        update_transform_graphs_menu: function(transforms, viewer_id) {
             if (!transforms || transforms.length === 0) {
                 return [];
             }
@@ -1144,7 +1134,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                     namespace: 'dash_bootstrap_components',
                     props: {
                         children: transformName,
-                        id: {'type': 'add-transform-graph-button', 'index': i},
+                        id: {'type': 'add-transform-graph-button', 'viewer_id': viewer_id, 'index': i},
                         n_clicks: 0
                     }
                 });
@@ -1152,7 +1142,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             return menuItems;
         },
         // Add transform graph to grid
-        add_transform_graph_to_grid: function(n_clicks_array, transforms, currentChildren, updaters_data) {
+        add_transform_graph_to_grid: function(n_clicks_array, transforms, currentChildren, updaters_data, viewer_id) {
             if (!n_clicks_array || !transforms) {
                 return window.dash_clientside.no_update;
             }
@@ -1181,7 +1171,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 x_name: 't_timestamp',
             };
             
-            return add_graph_to_grid(n_clicks_array[clickedIndex], 'Transform data (' + transformName + ')', currentChildren, updaters_data, 'scattergl', new_updater_data);
+            return add_graph_to_grid(n_clicks_array[clickedIndex], 'Transform data (' + transformName + ')', currentChildren, updaters_data, 'scattergl', new_updater_data, viewer_id);
         },
         remove_figure_from_grid: function(remove_index, grid_div_children, updaters_data) {
             grid_div_children.splice(remove_index, 1);
@@ -1200,7 +1190,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             console.log("Closing chart editor without saving changes to grid");
             return false; //set modal is_open to false
         },
-        replace_figure_on_save: function(saveState, figure, chart_editor_store_data, updaters_data) {
+        replace_figure_on_save: function(saveState, figure, chart_editor_store_data, updaters_data, viewer_id) {
 
             //check for initial editor load
             if (figure.data && figure.data.length === 0) {
@@ -1233,19 +1223,19 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 };
             }
             console.log("Updating figure and updaters data");
-            dash_clientside.set_props('figure-updaters-store', {data: updaters_data});
+            dash_clientside.set_props(viewer_id + '-figure-updaters-store', {data: updaters_data});
             // Use Plotly.react to replace the entire figure (data + layout)
             Plotly.react(plotly_obj, figure.data, figure.layout);
         },
-        initialize_figures: function(initial_figures, signature) {
-            return initialize_figures_on_load(initial_figures, signature);
+        initialize_figures: function(initial_figures, signature, viewer_id) {
+            return initialize_figures_on_load(initial_figures, signature, viewer_id);
         },
         
         // ========================================================================
         // COMPARATOR CALLBACKS
         // ========================================================================
         
-        add_comparator_scatter_chart: function(n_clicks, currentChildren, updaters_data) {
+        add_comparator_scatter_chart: function(n_clicks, currentChildren, updaters_data, viewer_id) {
             if (!n_clicks) {
                 return window.dash_clientside.no_update;
             }
@@ -1256,10 +1246,10 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 y_column: null,
             };
             
-            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'scatter', new_updater_data);
+            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'scatter', new_updater_data, viewer_id);
         },
         
-        add_comparator_bar_chart: function(n_clicks, currentChildren, updaters_data) {
+        add_comparator_bar_chart: function(n_clicks, currentChildren, updaters_data, viewer_id) {
             if (!n_clicks) {
                 return window.dash_clientside.no_update;
             }
@@ -1270,10 +1260,10 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 y_column: null,
             };
             
-            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'bar', new_updater_data);
+            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'bar', new_updater_data, viewer_id);
         },
         
-        add_comparator_box_chart: function(n_clicks, currentChildren, updaters_data) {
+        add_comparator_box_chart: function(n_clicks, currentChildren, updaters_data, viewer_id) {
             if (!n_clicks) {
                 return window.dash_clientside.no_update;
             }
@@ -1284,7 +1274,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 y_column: null,
             };
             
-            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'box', new_updater_data);
+            return add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 'box', new_updater_data, viewer_id);
         },
         
         remove_comparator_chart: function(remove_index, grid_div_children, updaters_data) {
@@ -1321,7 +1311,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             return false;
         },
         
-        replace_comparator_figure_on_save: function(saveState, figure, chart_editor_store_data, updaters_data) {
+        replace_comparator_figure_on_save: function(saveState, figure, chart_editor_store_data, updaters_data, viewer_id) {
             // Check for initial editor load (same pattern as result_viewer)
             if (figure.data && figure.data.length === 0) {
                 console.log("Initial load of comparator chart editor");
@@ -1342,12 +1332,12 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             };
             
             console.log("Updating comparator figure and updaters data");
-            dash_clientside.set_props('comparator-updaters-store', {data: updaters_data});
+            dash_clientside.set_props(viewer_id + '-comparator-updaters-store', {data: updaters_data});
             // Use same pattern as result_viewer - pass figure object, not just layout
             Plotly.react(plotly_obj, figure.data, figure.layout);
         },
         
-        initialize_comparator_charts: function(initial_figures, dataset) {
+        initialize_comparator_charts: function(initial_figures, dataset, viewer_id) {
             if (!initial_figures || initial_figures.length === 0) {
                 let status = dataset && dataset.length > 0 
                     ? `Dataset loaded: ${dataset.length} jobs - add charts using the dropdown`
@@ -1402,7 +1392,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                 }
                 
                 // Create the graph container
-                const graphContainer = ComparatorChartContainer(chartIndex, figure, figConfig.chart_type);
+                const graphContainer = ComparatorChartContainer(chartIndex, figure, figConfig.chart_type, viewer_id);
                 gridChildren.push(graphContainer);
                 
                 // Add updater data
@@ -1432,7 +1422,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
 // COMPARATOR HELPER FUNCTIONS
 // ============================================================================
 
-function add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, chart_type, updater_data) {
+function add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, chart_type, updater_data, viewer_id) {
     if (!n_clicks) {
         return currentChildren;
     }
@@ -1442,7 +1432,7 @@ function add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 
     }
     
     const figure = get_empty_figure(`${chart_type.charAt(0).toUpperCase() + chart_type.slice(1)} Chart`, chart_type);
-    const newChart = ComparatorChartContainer(currentChildren.length, figure, chart_type);
+    const newChart = ComparatorChartContainer(currentChildren.length, figure, chart_type, viewer_id);
     
     currentChildren.push(newChart);
     updaters_data.push(updater_data);
@@ -1450,11 +1440,11 @@ function add_comparator_chart_to_grid(n_clicks, currentChildren, updaters_data, 
     return [currentChildren, updaters_data];
 }
 
-function ComparatorChartContainer(index, figure, chart_type) {
-    var grid_item_id_obj = {type: 'comparator-grid-item', index: `container-${index}`};
-    var fig_id_obj = {type: 'comparator-graph-container', index: index};
+function ComparatorChartContainer(index, figure, chart_type, viewer_id) {
+    var grid_item_id_obj = {type: 'comparator-grid-item', viewer_id: viewer_id, index: `container-${index}`};
+    var fig_id_obj = {type: 'comparator-graph-container', viewer_id: viewer_id, index: index};
     var fig_id_str = stringify_sorted(fig_id_obj);
-    var graph_id_obj = {type: 'comparator-graph', index: index.toString()};
+    var graph_id_obj = {type: 'comparator-graph', viewer_id: viewer_id, index: index.toString()};
     var graph_id_str = stringify_sorted(graph_id_obj);
     
     var graph = {
@@ -1498,7 +1488,7 @@ function ComparatorChartContainer(index, figure, chart_type) {
                         title: "Delete chart",
                         icon: myIcons.DeleteIcon,
                         click: function(gd) {
-                            dash_clientside.set_props('remove-comparator-chart-store', {data: [index]});
+                            dash_clientside.set_props(viewer_id + '-remove-comparator-chart-store', {data: [index]});
                         }   
                     },
                     {
@@ -1508,10 +1498,10 @@ function ComparatorChartContainer(index, figure, chart_type) {
                         click: function(gd) {
                             var figure = document.getElementById(`${graph_id_str}`).getElementsByClassName("js-plotly-plot")[0];
                             var editor_store_data = {id: graph_id_obj, chart_type: chart_type};
-                            dash_clientside.set_props('comparator-chart-editor-modal', {is_open: true});
-                            dash_clientside.set_props('comparator-chart-editor-modal-title', {children: "Chart editor - " + chart_type});
-                            dash_clientside.set_props('comparator-chart-editor-store', {data: editor_store_data});
-                            dash_clientside.set_props('comparator-chart-editor-editor', {loadFigure: figure});
+                            dash_clientside.set_props(viewer_id + '-comparator-chart-editor-modal', {is_open: true});
+                            dash_clientside.set_props(viewer_id + '-comparator-chart-editor-modal-title', {children: "Chart editor - " + chart_type});
+                            dash_clientside.set_props(viewer_id + '-comparator-chart-editor-store', {data: editor_store_data});
+                            dash_clientside.set_props(viewer_id + '-comparator-chart-editor-editor', {loadFigure: figure});
                         }
                     }
                 ]
@@ -1559,11 +1549,31 @@ document.addEventListener('contextmenu', function(event) {
     event.preventDefault();
     event.stopPropagation();
     
+    // Extract graph ID from the plotly element (we need it to figure out which
+    // viewer instance owns this graph so we can route the click to the right
+    // line-click-store).
+    var graphContainer = plotlyGraph.closest('[id]');
+    var graphId = null;
+    var viewer_id = null;
+    if (graphContainer) {
+        try {
+            graphId = JSON.parse(graphContainer.id);
+        } catch (e) {
+            graphId = graphContainer.id;
+        }
+        if (graphId && typeof graphId === 'object' && graphId.viewer_id) {
+            viewer_id = graphId.viewer_id;
+        }
+    }
+    // Without a viewer_id we can't route the click back; give up silently.
+    if (!viewer_id) return;
+    var line_click_store_id = viewer_id + '-line-click-store';
+
     // Check if we have hover data (point under cursor)
     var hoverData = plotlyGraph._hoverdata;
     if (!hoverData || hoverData.length === 0) {
         // No point hovered - still show our modal but with a message
-        dash_clientside.set_props('line-click-store', {data: {
+        dash_clientside.set_props(line_click_store_id, {data: {
             point: {
                 traceName: 'No line selected',
                 x: 'N/A',
@@ -1571,7 +1581,7 @@ document.addEventListener('contextmenu', function(event) {
                 pointIndex: 'N/A',
                 curveNumber: 'N/A'
             },
-            graphId: null,
+            graphId: graphId,
             timestamp: Date.now(),
             message: 'Hover over a line/point before right-clicking to see details'
         }});
@@ -1580,17 +1590,6 @@ document.addEventListener('contextmenu', function(event) {
     
     // Get the first hovered point
     var point = hoverData[0];
-    
-    // Extract graph ID from the plotly element
-    var graphContainer = plotlyGraph.closest('[id]');
-    var graphId = null;
-    if (graphContainer) {
-        try {
-            graphId = JSON.parse(graphContainer.id);
-        } catch (e) {
-            graphId = graphContainer.id;
-        }
-    }
     
     // Build click data object similar to Dash's clickData format
     var clickData = {
@@ -1607,6 +1606,6 @@ document.addEventListener('contextmenu', function(event) {
     };
     
     // Update the store to trigger the modal
-    dash_clientside.set_props('line-click-store', {data: clickData});
+    dash_clientside.set_props(line_click_store_id, {data: clickData});
 }, true);  // Use capture phase
 

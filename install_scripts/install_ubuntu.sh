@@ -39,10 +39,10 @@ auto_yes_bool=false
 install_postgres=false
 postgres_password=""
 postgres_password_confirm=""
-heat_battery_data_dir="home/$user_name/heat_battery_data"
+heat_battery_data_dir="/home/$user_name/heat_battery_data"
 fenics_from_source=false
 # parse options
-VALID_ARGS=$(getopt -o yp --long ppass:,ppassc:,hbdir:,fenics-from-source -- "$@")
+VALID_ARGS=$(getopt -o yp --long help,ppass:,ppassc:,hbdir:,fenics-from-source -- "$@")
 
 # exit if getopt fails
 if [ $? -ne 0 ]; then

@@ -1,4 +1,4 @@
-from heat_battery.simulations.simulation_base import MPI, Simulation, fem, pd, ufl
+from heat_battery.simulations.simulation_base import MPI, Simulation, fem, pd
 from heat_battery.simulations.probing import FunctionSampler
 from heat_battery.simulations import terms
 
@@ -14,8 +14,7 @@ class PassiveStorage(Simulation):
         # add dynamic boundary term for ambient cooling on the tubes surface
         self.set_bc_term(terms.AmbientCooling(self), "mebrane_surface")
 
-    def create_unsteady_probes(self, probes):
-        super().create_unsteady_probes(probes)
+    def create_common_probes(self, probes):
 
         self.T_probes_coords = list(self.geo_meta["points"]["T"].values())
         self.T_probes_names = list(self.geo_meta["points"]["T"].keys())
@@ -31,11 +30,11 @@ class PassiveStorage(Simulation):
             h_form += mat.h(self.T)*mat.rho(self.T)*self.jac*self.dx(i)
         H_form = fem.form(h_form)
 
-        @probes.register_probe("heat", "kWh")
+        @probes.register_probe("heat", "J")
         def H_probe():
             H = fem.assemble_scalar(H_form)
             H = self.domain.comm.allreduce((H), op=MPI.SUM)
-            return H*2.77777778e-7
+            return H
         
         bc_obj = self.get_bc_term('outer_surface')
         qloss_form = fem.form(bc_obj(self.T, self.x, self.t)*self.jac*self.get_measure_ds('outer_surface'))
@@ -61,33 +60,26 @@ class PassiveStorage(Simulation):
             q_power = self.domain.comm.allreduce((q_power), op=MPI.SUM)
             return q_power
         
-        area_surf = fem.assemble_scalar(fem.form(self.jac*self.get_measure_ds('outer_surface')))
-        area_surf = self.domain.comm.allreduce((area_surf), op=MPI.SUM)
+        area_surf = self.get_surface_area('outer_surface')
         Tmean_surf = fem.form(self.T/area_surf*self.jac*self.get_measure_ds('outer_surface'))
-        @probes.register_probe('Ts_avg', 'T')
+        @probes.register_probe('Ts_avg', '°C')
         def average_temp():
             value = fem.assemble_scalar(Tmean_surf)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
         
-        area_mem = fem.assemble_scalar(fem.form(self.jac*self.get_measure_ds('mebrane_surface')))
-        area_mem = self.domain.comm.allreduce((area_mem), op=MPI.SUM)
-        Tmean_mem = fem.form(self.T/area_mem*self.jac*self.get_measure_ds('outer_surface'))
-        @probes.register_probe('Tm_avg', 'T')
+        area_mem = self.get_surface_area('mebrane_surface')
+        Tmean_mem = fem.form(self.T/area_mem*self.jac*self.get_measure_ds('mebrane_surface'))
+        @probes.register_probe('Tm_avg', '°C')
         def average_temp():
             value = fem.assemble_scalar(Tmean_mem)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
             return value
         
-        #TODO: This is temporary fix when using dS measures for https://fenicsproject.discourse.group/t/scallar-assembly-of-a-internal-surface-integral-misbehaves-in-parallel/14655/3
-        #      remove this for loop when PR from @dokken is merged and backported to 0.8
-        for i in range(self.domain.topology.dim + 1):
-            self.domain.topology.create_entities(i)
-
         area_cartridge = fem.assemble_scalar(fem.form(8*self.get_measure_dS('cartridge_surface')))
         area_cartridge = self.domain.comm.allreduce((area_cartridge), op=MPI.SUM)
         Tmean_cartridge = fem.form(self.T/area_cartridge*self.jac*self.get_measure_dS('cartridge_surface'))
-        @probes.register_probe('Tc_avg', 'T')
+        @probes.register_probe('Tc_avg', '°C')
         def average_temp():
             value = fem.assemble_scalar(Tmean_cartridge)
             value = self.domain.comm.allreduce((value), op=MPI.SUM)
@@ -98,21 +90,12 @@ class PassiveStorage(Simulation):
         def pid_vals():
             return pid_obj.get_current_pid_values()
 
-    def solve_steady(self, Qc=10, T_amb=20, xdmf_file=None, alpha=6.3):
-        #FIXME: This will not work for currente version of PID type Term
-        obj = self.get_source_term("heated cartridge")
-        obj.Qc.value = Qc
-
+    def solve_steady(self, Qc=10, T_amb=20, alpha=6.3, **kwargs):
         obj = self.get_bc_term("outer_surface")
-        obj.T_amb.value = T_amb
-        obj.alpha.value = alpha
-        super().solve_steady(xdmf_file=xdmf_file)
-
-        return pd.Series(
-            data=self.probes.get_value("T"),
-            index=self.T_probes_names,
-            name="Simulation",
-        )
+        obj.set_steady_state_value('T_amb', T_amb)
+        obj.set_steady_state_value('alpha', alpha)
+        probes = super().solve_steady(**kwargs)
+        return probes
 
     def solve_unsteady(self, 
         T_pid_input_control=lambda t: 400.0,

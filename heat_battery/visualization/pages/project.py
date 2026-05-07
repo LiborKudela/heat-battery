@@ -175,7 +175,7 @@ class ProjectViewerSuperApp(VisualizerApp):
         overview_chart = dash_enrich.html.Div(
             children=[
                 dash_enrich.dcc.Graph(
-                    id='overview-chart',
+                    id=f'overview-chart-{self.project.project_name}',
                     figure=get_overview_chart(df_test),
                     style={
                         'border-radius': '10px', 

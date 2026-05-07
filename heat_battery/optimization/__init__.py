@@ -1,4 +1,4 @@
-from .optimization import SteadyStateComparer
+from .optimization import JacobianRankAssessment, SteadyStateComparer
 from . import optimizers
 from .derivatives import (
     AdjointDerivative, UflObjective, 

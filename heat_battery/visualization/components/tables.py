@@ -227,7 +227,7 @@ class JobsTable(ContentItem):
 
         tools = dash_enrich.html.Div(
             children=[
-                dbc.Button('Show/hide columns', color='primary', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}, id='select-columns-button'),
+                dbc.Button('Show/hide columns', color='primary', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}, id=f'{self.id}-select-columns-button'),
                 dbc.Button('Add job', color='success', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}),
                 dbc.Button('Refresh table', color='info', size='sm', style={'font-weight':'bold','whiteSpace':'nowrap'}, id=f'{self.id}-refresh-button'),
                 self.parent.parent.get_icons_menu(icon_width=20, dashboard=True),
@@ -243,7 +243,7 @@ class JobsTable(ContentItem):
         )
 
         select_columns_modal = dbc.Modal(
-            id='select-columns-modal',
+            id=f'{self.id}-select-columns-modal',
             is_open=False,
             size='lg',
             children=[
@@ -251,14 +251,14 @@ class JobsTable(ContentItem):
                 dbc.ModalBody(
                     children=[
                         dbc.Checklist(
-                            id='select-all-columns-checklist',
+                            id=f'{self.id}-select-all-columns-checklist',
                             options=[
                                 {'label': 'Select all', 'value': 1} 
                             ],
                             value=[1],
                         ),
                         dbc.Checklist(
-                            id='select-columns-checklist',
+                            id=f'{self.id}-select-columns-checklist',
                             options=[
                                 {'label': " - ".join([cd['headerName'], cd['headerTooltip']]), 'value': i} for i, cd in enumerate(table_columnDefs)
                             ],
@@ -370,10 +370,14 @@ class JobsTable(ContentItem):
                 lines = max(total_count, 1)
                 return {"rowData": dff.to_dict("records"), "rowCount": lines}   
 
+        # `code-modal*` ids live in the dashboard's shared layout (server.py),
+        # so when more than one Project is registered we need allow_duplicate
+        # on each output, otherwise both JobsTable instances would try to
+        # claim the same output and trigger Dash's duplicate-callback guard.
         @server.app.callback(
-            dash_enrich.Output('code-modal', 'is_open'),
-            dash_enrich.Output('code-modal-title', 'children'),
-            dash_enrich.Output('code-modal-content', 'code'),
+            dash_enrich.Output('code-modal', 'is_open', allow_duplicate=True),
+            dash_enrich.Output('code-modal-title', 'children', allow_duplicate=True),
+            dash_enrich.Output('code-modal-content', 'code', allow_duplicate=True),
             dash_enrich.Input(self.AG_GRID_ID, 'cellRendererData'),
             prevent_initial_call=True,
         )
@@ -437,7 +441,7 @@ class JobsTable(ContentItem):
                 function_name='showhide_columns'
             ),
             dash_enrich.Output(self.AG_GRID_ID, "columnDefs"),
-            dash_enrich.Input("select-columns-checklist", "value"),
+            dash_enrich.Input(f'{self.id}-select-columns-checklist', "value"),
             dash_enrich.State(self.AG_GRID_ID, "columnDefs"),
             prevent_initial_call=True,
         )
@@ -447,7 +451,7 @@ class JobsTable(ContentItem):
                 namespace='clientside',
                 function_name='show_select_columns_modal'
             ),
-            dash_enrich.Input('select-columns-button', 'n_clicks'),
-            dash_enrich.Output('select-columns-modal', 'is_open'),
+            dash_enrich.Input(f'{self.id}-select-columns-button', 'n_clicks'),
+            dash_enrich.Output(f'{self.id}-select-columns-modal', 'is_open'),
             prevent_initial_call=True,
         )

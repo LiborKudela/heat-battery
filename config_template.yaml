@@ -1,0 +1,20 @@
+user: 
+    first_name: Firstname                    #first name of the user
+    last_name: Lastname                      #last name of the user
+    github_username: github_username         #github username of the user
+    email: email@email.com                   #email of the user
+    x_handle: x_handle                       #x_handle of the user
+    avatar_url: null                         #avatar url of the user (optional)
+    link: https://github.com/github_username #link to the user's github profile (optional)
+    force_avatar_key: x_handle               #select avatar source to show in database (optional)
+
+database:
+    use_engine: postgresql                   #only available option is postgresql for now
+    
+    postgres:
+        db_name: heat_battery                #name of the database
+        user: postgres                       #user of the database
+        password: YOUR_PASSWORD              #passsword use during installation
+        host: HOST_IP                        #IP of the host machine running the database
+        port: 5432                           #port of the database
+        bin_files_folder_prefix: /home/username/heat_battery_data/ #folder to store binary files on host

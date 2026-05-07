@@ -12,14 +12,38 @@ class Optimizer:
 
         #TODO: add state tracker for visualization
 
-    def optimise(self, k0, tol=1e-6, max_iter=100, verbose=True, callback=None, callback_freq=1) -> np.ndarray:
+    def optimise(self, k0, tol=1e-6, rtol=1e-12, stol=1e-12, max_iter=100,
+                 max_stall=3, verbose=True, callback=None, callback_freq=1) -> np.ndarray:
         k = k0.copy()
+        prev_l = np.inf
+        stall_count = 0
+        alg_name = self.__class__.__name__
         for i in range(max_iter):
+            k_prev = k.copy()
             k = self.step(k)
             if MPI.COMM_WORLD.rank == 0 and verbose:
-                print(f"{self.__class__.__name__} step {i+1}: k: {k}", f"loss: {self.l}")
+                print(f"{alg_name} step {i+1}: k: {k}", f"loss: {self.l}")
             if self.l < tol:
+                if MPI.COMM_WORLD.rank == 0 and verbose:
+                    print(f"{alg_name}: converged (loss {self.l:.2e} < tol {tol:.2e})")
                 break
+            if prev_l < np.inf and abs(prev_l - self.l) / max(abs(prev_l), 1e-30) < rtol:
+                if MPI.COMM_WORLD.rank == 0 and verbose:
+                    print(f"{alg_name}: converged (relative loss change < rtol {rtol:.2e})")
+                break
+            if np.linalg.norm(k - k_prev) / max(np.linalg.norm(k), 1e-30) < stol:
+                if MPI.COMM_WORLD.rank == 0 and verbose:
+                    print(f"{alg_name}: converged (relative step size < stol {stol:.2e})")
+                break
+            prev_l = self.l
+            if getattr(self, 'stalled', False):
+                stall_count += 1
+                if stall_count >= max_stall:
+                    if MPI.COMM_WORLD.rank == 0:
+                        print(f"{alg_name}: stopped after {stall_count} consecutive stalled steps")
+                    break
+            else:
+                stall_count = 0
             if callback is not None and (i % callback_freq == 0):
                 callback(k)
         return k
@@ -196,7 +220,8 @@ class GradientSearch(Optimizer):
         return k
 
 class QuasiNewtonBFGS(Optimizer):
-    def __init__(self, grad, alpha_init=1e-4, c=1e-4, alpha_min=1e-12, alpha_max=1.0):
+    def __init__(self, grad, alpha_init=1e-4, c=1e-4, alpha_min=1e-12, alpha_max=1.0,
+                 max_ls_iter=50):
         """
         Quasi-Newton (BFGS) optimiser.
         
@@ -204,80 +229,123 @@ class QuasiNewtonBFGS(Optimizer):
         ----------
         grad : callable
             Must return (g, l) where g is gradient vector and l is scalar loss.
-        alpha : float
+        alpha_init : float
             Initial step size for line search.
         c : float
             Armijo condition constant for line search.
         alpha_min : float
-            Minimum step size before fallback.
+            Minimum step size before giving up in line search.
+        alpha_max : float
+            Maximum step size / cap for alpha growth.
+        max_ls_iter : int
+            Maximum number of line search iterations.
         """
         self.grad = grad
         self.alpha_init = alpha_init
         self.alpha_min = alpha_min
         self.alpha_max = alpha_max
+        self.max_ls_iter = max_ls_iter
         self.c = c
         
-        # Optimizer state
-        self.H = None  # Hessian inverse approximation
+        self.H = None
         self.g = None
         self.l = None
+        self.stalled = False
         
         super().__init__()
-    
-    def step(self, k):
-        # Initialize Hessian inverse approximation on first step
-        if self.H is None:
-            n = len(k)
-            self.H = np.eye(n)
-        
-        # Compute gradient and loss
-        g, l = self.grad(k)
-        #g_norm = np.linalg.norm(g)
-        
-        # Search direction: p = -H g
-        p = -self.H @ g
-        
-        # Backtracking line search
-        alpha = self.alpha_init
-        l0 = l
-        
-        while True:
-            k_new = k + alpha * p
+
+    def _line_search(self, k, p, g, l0, alpha0=None):
+        """Backtracking line search with Armijo condition.
+        Returns (k_new, g_new, l_new, success) where g_new/l_new are
+        always evaluated at the returned k_new."""
+        alpha = alpha0 if alpha0 is not None else self.alpha_init
+        best_k, best_g, best_l = k, g, l0
+
+        for _ in range(self.max_ls_iter):
+            k_trial = k + alpha * p
             try:
-                g_new, l_new = self.grad(k_new)
-            except:
+                g_trial, l_trial = self.grad(k_trial)
+            except Exception:
                 alpha *= 0.1
                 if alpha < self.alpha_min:
-                    raise Exception("Alpha too small")
+                    return best_k, best_g, best_l, best_l < l0
                 continue
-            
-            # Armijo condition
-            if l_new <= l0 + self.c * alpha * g.dot(p): 
-                break
-            
+
+            if l_trial < best_l:
+                best_k, best_g, best_l = k_trial, g_trial, l_trial
+
+            if l_trial <= l0 + self.c * alpha * g.dot(p):
+                return k_trial, g_trial, l_trial, True
+
             alpha *= 0.5
             if alpha < self.alpha_min:
-                # Fall back to small gradient step
-                alpha = 1e-3
-                break
-        
-        # Step update
-        s = alpha * p
-        k_new = k + s
+                return best_k, best_g, best_l, best_l < l0
+
+        return best_k, best_g, best_l, best_l < l0
+
+    def step(self, k):
+        n = len(k)
+
+        try:
+            g, l = self.grad(k)
+        except Exception:
+            if MPI.COMM_WORLD.rank == 0:
+                print("BFGS: gradient evaluation failed at current k")
+            self.stalled = True
+            if self.l is None:
+                self.l = np.inf
+            return k
+
+        g_norm = np.linalg.norm(g)
+
+        if self.H is None:
+            if g_norm > 1e-15:
+                self.H = (1.0 / g_norm) * np.eye(n)
+            else:
+                self.H = np.eye(n)
+
+        p = -self.H @ g
+        k_new, g_new, l_new, success = self._line_search(k, p, g, l)
+
+        if not success:
+            if MPI.COMM_WORLD.rank == 0:
+                print("BFGS direction failed, falling back to steepest descent")
+            if g_norm > 1e-15:
+                p_sd = -g / g_norm
+                alpha0 = min(self.alpha_max,
+                             max(self.alpha_init, 0.1 * np.max(np.abs(k)) / g_norm))
+            else:
+                p_sd = -g
+                alpha0 = self.alpha_init
+            k_new, g_new, l_new, success = self._line_search(k, p_sd, g, l, alpha0=alpha0)
+            if not success:
+                if MPI.COMM_WORLD.rank == 0:
+                    print("Steepest descent also failed, keeping current k")
+                self.g, self.l = g, l
+                self.g_norm = g_norm
+                self.stalled = True
+                return k
+
+        self.stalled = False
+        s = k_new - k
         y = g_new - g
-        
-        # BFGS update of Hessian inverse
+
         ys = y @ s
-        if ys > 1e-12:  # safeguard
+        if ys > 1e-12:
             Hy = self.H @ y
             self.H += (1 + (y @ Hy) / ys) * np.outer(s, s) / ys \
                      - (np.outer(Hy, s) + np.outer(s, Hy)) / ys
-        
-        # Update state
+            self.alpha_init = min(self.alpha_init * 1.5, self.alpha_max)
+        else:
+            g_norm_new = np.linalg.norm(g_new)
+            if g_norm_new > 1e-15:
+                self.H = (1.0 / g_norm_new) * np.eye(n)
+            else:
+                self.H = np.eye(n)
+
         self.g = g_new
         self.l = l_new
         self.g_norm = np.linalg.norm(self.g)
-        self.alpha_init = min(self.alpha_init*1.5, self.alpha_max)
         return k_new
 
 # TODO: Provide Newton solver

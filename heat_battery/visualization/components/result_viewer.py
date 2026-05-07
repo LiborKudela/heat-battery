@@ -83,7 +83,7 @@ class ResultViewerComponent(GridLayout):
                             'fontWeight': 'bold',
                         }
                     ), 
-                    id=f'data-transforms-button', 
+                    id=f'{self.id}-data-transforms-button', 
                     color='secondary',
                     size='sm',
                     style={
@@ -205,43 +205,49 @@ class ResultViewerComponent(GridLayout):
                 df = self.cache.read_hbres_dataframe(("hbres", "data", signature))
             grid_div = self.get_grid_div(df, qs_data)
 
+        # Per-instance viewer id store so clientside JS can read self.id and
+        # build correctly-namespaced target IDs for dash_clientside.set_props.
+        viewer_id_store = dash_enrich.dcc.Store(
+            id=f'{self.id}-viewer-id-store',
+            data=self.id,
+        )
         signature_store = dash_enrich.dcc.Store(
-            id='signature-store',
+            id=f'{self.id}-signature-store',
             data=signature,
         )
         reriodic_relayout_data_store = dash_enrich.dcc.Store(
-            id='reriodic-relayout-data-store',
+            id=f'{self.id}-reriodic-relayout-data-store',
             data={},
         )
         figure_updaters_store = dash_enrich.dcc.Store(
-            id='figure-updaters-store',
+            id=f'{self.id}-figure-updaters-store',
             data=[],
         )
         remove_figure_store = dash_enrich.dcc.Store(
-            id='remove-figure-store',
+            id=f'{self.id}-remove-figure-store',
             data=[],
         )
 
         chart_editor_store = dash_enrich.dcc.Store(
-            id="chart-editor-store",
+            id=f'{self.id}-chart-editor-store',
             data=None,
         )
 
         data_transforms_store = dash_enrich.dcc.Store(
-            id='data-transforms-store',
+            id=f'{self.id}-data-transforms-store',
             data=[],
         )
         initial_transforms_store = dash_enrich.dcc.Store(
-            id='initial-transforms-store',
+            id=f'{self.id}-initial-transforms-store',
             data=self.initial_transforms,
         )
         expanded_transform_store = dash_enrich.dcc.Store(
-            id='expanded-transform-store',
+            id=f'{self.id}-expanded-transform-store',
             data=None,  # Stores the index of the expanded transform
         )
 
         data_transforms_modal = dbc.Modal(
-            id="data-transforms-modal",
+            id=f'{self.id}-data-transforms-modal',
             size='xl',
             centered=True,
             is_open=False,
@@ -254,7 +260,7 @@ class ResultViewerComponent(GridLayout):
                             children=[
                                 dbc.Button(
                                     "Add Transform",
-                                    id="add-transform-button",
+                                    id=f'{self.id}-add-transform-button',
                                     color="success",
                                     size="sm",
                                 ),
@@ -268,7 +274,7 @@ class ResultViewerComponent(GridLayout):
                         dash_enrich.html.Hr(),
                         dash_enrich.html.H5("Current Transforms:", style={'marginBottom': '10px'}),
                         dbc.ListGroup(
-                            id="transforms-list",
+                            id=f'{self.id}-transforms-list',
                             children=[],
                             style={'maxHeight': '600px', 'overflowY': 'auto'},
                         ),
@@ -276,35 +282,35 @@ class ResultViewerComponent(GridLayout):
                     className='bg-body',
                 ),
                 dbc.ModalFooter(
-                    dbc.Button("Close", id="close-data-transforms-button", color="secondary", size="sm")
+                    dbc.Button("Close", id=f'{self.id}-close-data-transforms-button', color="secondary", size="sm")
                 ),
             ],
         )
 
         step_preview_modal = dbc.Modal(
-            id="step-preview-modal",
+            id=f'{self.id}-step-preview-modal',
             size='xl',
             centered=True,
             is_open=False,
             children=[
                 dbc.ModalHeader(
-                    dbc.ModalTitle(id="step-preview-modal-title", children="Step Preview"),
+                    dbc.ModalTitle(id=f'{self.id}-step-preview-modal-title', children="Step Preview"),
                     close_button=True,
                 ),
                 dbc.ModalBody(
-                    id="step-preview-modal-body",
+                    id=f'{self.id}-step-preview-modal-body',
                     children="Preview will appear here",
                     style={'fontSize': '14px'},
                     className='bg-body',
                 ),
                 dbc.ModalFooter(
-                    dbc.Button("Close", id="close-step-preview-button", color="secondary", size="sm"),
+                    dbc.Button("Close", id=f'{self.id}-close-step-preview-button', color="secondary", size="sm"),
                 ),
             ],
         )
 
         chart_editor_modal = dbc.Modal(
-            id="chart-editor-modal",
+            id=f'{self.id}-chart-editor-modal',
             fullscreen=True,
             is_open=False,
             children=[
@@ -313,31 +319,31 @@ class ResultViewerComponent(GridLayout):
                     style={'gap': 4},
                     children=[
                         dbc.ModalTitle(
-                            id="chart-editor-modal-title", 
+                            id=f'{self.id}-chart-editor-modal-title', 
                             children="Chart editor"),
                         dbc.Button(
                             "Close without saving", 
-                            id="close-chart-editor-no-save", 
+                            id=f'{self.id}-close-chart-editor-no-save', 
                             color="danger",
                             size="sm",
                             style={'marginLeft': 'auto'},
                         ),
                         dbc.Button(
                             "Save", 
-                            id="save-chart-editor", 
+                            id=f'{self.id}-save-chart-editor', 
                             color="primary",
                             size="sm",
                         ),
                         dbc.Button(
                             "Save & Close", 
-                            id="save-and-close-chart-editor", 
+                            id=f'{self.id}-save-and-close-chart-editor', 
                             color="success",
                             size="sm",
                         ),
                     ],
                 ),
                 dce.DashChartEditor(
-                    id="chart-editor-editor",
+                    id=f'{self.id}-chart-editor-editor',
                     dataSources={'dummy_data': []},
                     # saveState=True,
                     style={'width': '100%', 'height': '100%'},
@@ -348,31 +354,31 @@ class ResultViewerComponent(GridLayout):
 
         # Modal for displaying clicked line info (right-click context)
         line_click_modal = dbc.Modal(
-            id="line-click-modal",
+            id=f'{self.id}-line-click-modal',
             is_open=False,
             centered=True,
             children=[
                 dbc.ModalHeader(
-                    dbc.ModalTitle(id="line-click-modal-title", children="Line Info"),
+                    dbc.ModalTitle(id=f'{self.id}-line-click-modal-title', children="Line Info"),
                     close_button=True,
                 ),
                 dbc.ModalBody(
-                    id="line-click-modal-body",
+                    id=f'{self.id}-line-click-modal-body',
                     children="Click on a line in any chart to see details here.",
                 ),
                 dbc.ModalFooter(
-                    dbc.Button("Close", id="line-click-modal-close", color="secondary", size="sm"),
+                    dbc.Button("Close", id=f'{self.id}-line-click-modal-close', color="secondary", size="sm"),
                 ),
             ],
         )
 
         line_click_store = dash_enrich.dcc.Store(
-            id='line-click-store',
+            id=f'{self.id}-line-click-store',
             data=None,
         )
 
         variable_descriptions_store = dash_enrich.dcc.Store(
-            id='variable-descriptions-store',
+            id=f'{self.id}-variable-descriptions-store',
             data=self.variable_descriptions,
         )
 
@@ -382,7 +388,7 @@ class ResultViewerComponent(GridLayout):
                     fill_timeseries_figure_initial(df, fig)
 
         initial_figures_store = dash_enrich.dcc.Store(
-            id='initial-figures-store',
+            id=f'{self.id}-initial-figures-store',
             data=self.initial_figures,
         )
 
@@ -394,6 +400,7 @@ class ResultViewerComponent(GridLayout):
                     children=[
                         grid_div,
                         cache_interval,
+                        viewer_id_store,
                         signature_store,
                         data_transforms_modal,
                         step_preview_modal,
@@ -423,6 +430,8 @@ class ResultViewerComponent(GridLayout):
 
     def set_callbacks(self, server):
 
+        viewer_id = self.id
+
         # add timeseries graph to grid
         server.app.clientside_callback(
             ClientsideFunction(
@@ -431,9 +440,10 @@ class ResultViewerComponent(GridLayout):
             ),
             dash_enrich.Input(f'{self.id}-add-timeseries-figure-button', 'n_clicks'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-figure-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -443,7 +453,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='update_transform_graphs_menu'
             ),
-            dash_enrich.Input('data-transforms-store', 'data'),
+            dash_enrich.Input(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'{self.id}-transform-graphs-menu-items', 'children'),
         )
         
@@ -453,12 +464,13 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='add_transform_graph_to_grid'
             ),
-            dash_enrich.Input({'type': 'add-transform-graph-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
+            dash_enrich.Input({'type': 'add-transform-graph-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-figure-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -468,12 +480,12 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='remove_figure_from_grid'
             ),
-            dash_enrich.Input('remove-figure-store', 'data'),
+            dash_enrich.Input(f'{self.id}-remove-figure-store', 'data'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('remove-figure-store', 'data', allow_duplicate=True),
-            dash_enrich.Output('figure-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-remove-figure-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-figure-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -483,9 +495,9 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='save_and_close_chart_editor',
             ),
-            dash_enrich.Input("save-and-close-chart-editor", "n_clicks"), 
-            dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
-            dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-save-and-close-chart-editor', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-chart-editor-modal', "is_open", allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-chart-editor-editor', "saveState", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -495,8 +507,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='save_chart_editor',
             ),
-            dash_enrich.Input("save-chart-editor", "n_clicks"), 
-            dash_enrich.Output("chart-editor-editor", "saveState", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-save-chart-editor', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-chart-editor-editor', "saveState", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -506,8 +518,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='close_no_save_chart_editor',
             ),
-            dash_enrich.Input("close-chart-editor-no-save", "n_clicks"), 
-            dash_enrich.Output("chart-editor-modal", "is_open", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-close-chart-editor-no-save', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-chart-editor-modal', "is_open", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -517,22 +529,23 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='replace_figure_on_save',
             ),
-            dash_enrich.Input("chart-editor-editor", "saveState"),
-            dash_enrich.State("chart-editor-editor", "figure"),
-            dash_enrich.State("chart-editor-store", "data"),
-            dash_enrich.State("figure-updaters-store", "data"),
+            dash_enrich.Input(f'{self.id}-chart-editor-editor', "saveState"),
+            dash_enrich.State(f'{self.id}-chart-editor-editor', "figure"),
+            dash_enrich.State(f'{self.id}-chart-editor-store', "data"),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', "data"),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             prevent_initial_call=True,
         ) 
 
         # periodicaly update cache for the selected signature
         @server.app.callback(
             dash_enrich.Input(f'{self.id}-cache-interval', 'n_intervals'),
-            dash_enrich.State('signature-store', 'data'),
-            dash_enrich.State('chart-editor-modal', 'is_open'),
-            dash_enrich.State({'type': 'graph', 'index': dash_enrich.ALL}, 'relayoutData'),
-            dash_enrich.State('figure-updaters-store', 'data'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.Output({'type': 'graph', 'index': dash_enrich.ALL}, 'figure', allow_duplicate=True),
+            dash_enrich.State(f'{self.id}-signature-store', 'data'),
+            dash_enrich.State(f'{self.id}-chart-editor-modal', 'is_open'),
+            dash_enrich.State({'type': 'graph', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'relayoutData'),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Output({'type': 'graph', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'figure', allow_duplicate=True),
             prevent_initial_call=True,
         )
         def update_figures(n_intervals, signature, is_open, relayout_data, updater_data, transforms):
@@ -585,11 +598,11 @@ class ResultViewerComponent(GridLayout):
         
         #update figure on relayout event
         @server.app.callback(
-            dash_enrich.Input({'type': 'graph', 'index': dash_enrich.MATCH}, 'relayoutData'),
-            dash_enrich.State('signature-store', 'data'),
-            dash_enrich.State('figure-updaters-store', 'data'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.Output({'type': 'graph', 'index': dash_enrich.MATCH}, 'figure'),
+            dash_enrich.Input({'type': 'graph', 'viewer_id': viewer_id, 'index': dash_enrich.MATCH}, 'relayoutData'),
+            dash_enrich.State(f'{self.id}-signature-store', 'data'),
+            dash_enrich.State(f'{self.id}-figure-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Output({'type': 'graph', 'viewer_id': viewer_id, 'index': dash_enrich.MATCH}, 'figure'),
             #dash_enrich.Output('reriodic-relayout-data-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
@@ -640,10 +653,10 @@ class ResultViewerComponent(GridLayout):
             return patch#, relayout_data
         
         @server.app.callback(
-            dash_enrich.Input('chart-editor-store', 'data'),
-            dash_enrich.State('signature-store', 'data'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.Output('chart-editor-editor', 'dataSources'),   
+            dash_enrich.Input(f'{self.id}-chart-editor-store', 'data'),
+            dash_enrich.State(f'{self.id}-signature-store', 'data'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Output(f'{self.id}-chart-editor-editor', 'dataSources'),   
             prevent_initial_call=True,
         )
         def replace_chart_editor_dataSources_on_chart_edit(chart_editor_store_data, signature, transforms):
@@ -694,10 +707,11 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='initialize_figures'
             ),
-            dash_enrich.Input('initial-figures-store', 'data'),
-            dash_enrich.State('signature-store', 'data'),
+            dash_enrich.Input(f'{self.id}-initial-figures-store', 'data'),
+            dash_enrich.State(f'{self.id}-signature-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children'),
-            dash_enrich.Output('figure-updaters-store', 'data'),
+            dash_enrich.Output(f'{self.id}-figure-updaters-store', 'data'),
             prevent_initial_call=False  # This is important - it runs on page load
         )
 
@@ -707,8 +721,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='open_data_transforms_modal'
             ),
-            dash_enrich.Input('data-transforms-button', 'n_clicks'),
-            dash_enrich.Output('data-transforms-modal', 'is_open'),
+            dash_enrich.Input(f'{self.id}-data-transforms-button', 'n_clicks'),
+            dash_enrich.Output(f'{self.id}-data-transforms-modal', 'is_open'),
         )
 
         # Handle data transforms modal - close modal when close-data-transforms-button is clicked
@@ -717,8 +731,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='close_data_transforms_modal'
             ),
-            dash_enrich.Input('close-data-transforms-button', 'n_clicks'),
-            dash_enrich.Output('data-transforms-modal', 'is_open', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-close-data-transforms-button', 'n_clicks'),
+            dash_enrich.Output(f'{self.id}-data-transforms-modal', 'is_open', allow_duplicate=True),
         )
 
         # Initialize default transforms on page load
@@ -727,8 +741,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='initialize_default_transforms'
             ),
-            dash_enrich.Input('initial-transforms-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-initial-transforms-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=False,
         )
 
@@ -738,8 +752,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='load_transforms_from_storage'
             ),
-            dash_enrich.Input('data-transforms-modal', 'is_open'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-data-transforms-modal', 'is_open'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
         )
 
         # Display transforms list
@@ -748,9 +762,10 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='display_transforms_list'
             ),
-            dash_enrich.Input('data-transforms-store', 'data'),
-            dash_enrich.Input('expanded-transform-store', 'data'),
-            dash_enrich.Output('transforms-list', 'children'),
+            dash_enrich.Input(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Input(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
+            dash_enrich.Output(f'{self.id}-transforms-list', 'children'),
         )
 
         # Handle add transform button
@@ -759,9 +774,9 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='add_transform'
             ),
-            dash_enrich.Input('add-transform-button', 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-add-transform-button', 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -771,9 +786,9 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='toggle_transform_expansion'
             ),
-            dash_enrich.Input({'type': 'edit-transform-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.Output('expanded-transform-store', 'data'),
+            dash_enrich.Input({'type': 'edit-transform-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.Output(f'{self.id}-expanded-transform-store', 'data'),
             prevent_initial_call=True,
         )
 
@@ -783,10 +798,10 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='add_step_to_transform'
             ),
-            dash_enrich.Input({'type': 'add-step-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input({'type': 'add-step-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -796,10 +811,10 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='remove_step_from_transform'
             ),
-            dash_enrich.Input({'type': 'remove-step-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input({'type': 'remove-step-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -809,10 +824,10 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='move_step_up'
             ),
-            dash_enrich.Input({'type': 'move-step-up-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input({'type': 'move-step-up-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -822,23 +837,23 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='move_step_down'
             ),
-            dash_enrich.Input({'type': 'move-step-down-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input({'type': 'move-step-down-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
         # Handle step and transform preview modal - merged callback (computes preview and displays modal)
         @server.app.callback(
-            dash_enrich.Input({'type': 'preview-step-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.Input({'type': 'preview-transform-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.State('expanded-transform-store', 'data'),
-            dash_enrich.State('signature-store', 'data'),
-            dash_enrich.Output('step-preview-modal', 'is_open', allow_duplicate=True),
-            dash_enrich.Output('step-preview-modal-title', 'children', allow_duplicate=True),
-            dash_enrich.Output('step-preview-modal-body', 'children', allow_duplicate=True),
+            dash_enrich.Input({'type': 'preview-step-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.Input({'type': 'preview-transform-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.State(f'{self.id}-expanded-transform-store', 'data'),
+            dash_enrich.State(f'{self.id}-signature-store', 'data'),
+            dash_enrich.Output(f'{self.id}-step-preview-modal', 'is_open', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-step-preview-modal-title', 'children', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-step-preview-modal-body', 'children', allow_duplicate=True),
             prevent_initial_call=True,
         )
         def preview_data_trasform(step_n_clicks_array, transform_n_clicks_array, transforms, expanded_index, signature):
@@ -901,8 +916,8 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='close_step_preview_modal'
             ),
-            dash_enrich.Input('close-step-preview-button', 'n_clicks'),
-            dash_enrich.Output('step-preview-modal', 'is_open', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-close-step-preview-button', 'n_clicks'),
+            dash_enrich.Output(f'{self.id}-step-preview-modal', 'is_open', allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -912,9 +927,9 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='delete_transform'
             ),
-            dash_enrich.Input({'type': 'delete-transform-button', 'index': dash_enrich.ALL}, 'n_clicks'),
-            dash_enrich.State('data-transforms-store', 'data'),
-            dash_enrich.Output('data-transforms-store', 'data', allow_duplicate=True),
+            dash_enrich.Input({'type': 'delete-transform-button', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'n_clicks'),
+            dash_enrich.State(f'{self.id}-data-transforms-store', 'data'),
+            dash_enrich.Output(f'{self.id}-data-transforms-store', 'data', allow_duplicate=True),
             prevent_initial_call=True,
         )
         # Handle line click modal - open modal when line-click-store is updated
@@ -923,11 +938,11 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='open_line_click_modal'
             ),
-            dash_enrich.Input('line-click-store', 'data'),
-            dash_enrich.State('variable-descriptions-store', 'data'),
-            dash_enrich.Output('line-click-modal', 'is_open'),
-            dash_enrich.Output('line-click-modal-title', 'children'),
-            dash_enrich.Output('line-click-modal-body', 'children'),
+            dash_enrich.Input(f'{self.id}-line-click-store', 'data'),
+            dash_enrich.State(f'{self.id}-variable-descriptions-store', 'data'),
+            dash_enrich.Output(f'{self.id}-line-click-modal', 'is_open'),
+            dash_enrich.Output(f'{self.id}-line-click-modal-title', 'children'),
+            dash_enrich.Output(f'{self.id}-line-click-modal-body', 'children'),
             prevent_initial_call=True
         )
 
@@ -937,7 +952,7 @@ class ResultViewerComponent(GridLayout):
                 namespace='clientside',
                 function_name='close_line_click_modal'
             ),
-            dash_enrich.Input('line-click-modal-close', 'n_clicks'),
-            dash_enrich.Output('line-click-modal', 'is_open', allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-line-click-modal-close', 'n_clicks'),
+            dash_enrich.Output(f'{self.id}-line-click-modal', 'is_open', allow_duplicate=True),
             prevent_initial_call=True
         )

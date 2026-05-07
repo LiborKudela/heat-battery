@@ -8,10 +8,31 @@ import os
 import math
 import numpy as np
 
-def simple_cartridge(x, y, z, d, h):
+def simple_cartridge(x: float, y: float, z: float, d: float, h: float) -> tuple[int, int]:
+    """
+    Create a simple cartridge.
+    Args:
+        x: x coordinate of the center of the cartridge
+        y: y coordinate of the center of the cartridge
+        z: z coordinate of the center of the cartridge
+        d: diameter of the cartridge
+        h: height of the cartridge
+    """
     return (3, gmsh.model.occ.addCylinder(x, y, z, 0, 0, h, d/2))
 
-def beam_spreader_cartridge(x, y, z, d, h, db, nb, tb):
+def beam_spreader_cartridge(
+    x: float, y: float, z: float, d: float, 
+    h: float, db: float, nb: int, tb: float) -> tuple[int, int]:
+    """
+    Create a cartridge with a beam spreader.
+    Args:
+        x: x coordinate of the center of the cartridge
+        y: y coordinate of the center of the cartridge
+        z: z coordinate of the center of the cartridge
+        d: diameter of the cartridge
+        h: height of the cartridge
+        db: diameter of the beam spreader
+    """
     main_cylinder = [(3, gmsh.model.occ.addCylinder(x, y, z, 0, 0, h, d/2+tb))]
     beams = []
     delta_phi = math.pi/nb
@@ -24,7 +45,23 @@ def beam_spreader_cartridge(x, y, z, d, h, db, nb, tb):
     spreader = gmsh.model.occ.cut(body, hole)
     return spreader[0][0]
 
-def tht_beam_spreader(x, y, z0_pipe, z0_fins, d, h_pipe, h_fins, db, nb, tb):
+def tht_beam_spreader(
+    x: float, y: float, z0_pipe: float, z0_fins: float, d: float, 
+    h_pipe: float, h_fins: float, db: float, nb: int, tb: float) -> tuple[int, int]:
+    """
+    Create a THT pipe with a beam spreader.
+    Args:
+        x: x coordinate of the center of the THT pipe
+        y: y coordinate of the center of the THT pipe
+        z0_pipe: z coordinate of the center of the THT pipe
+        z0_fins: z coordinate of the center of the THT fins
+        d: diameter of the THT pipe
+        h_pipe: height of the THT pipe
+        h_fins: height of the THT fins
+        db: diameter of the beam spreader
+        nb: number of beam spreaders
+        tb: thickness of the beam spreader
+    """
     main_cylinder = [(3, gmsh.model.occ.addCylinder(x, y, z0_pipe, 0, 0, h_pipe, d/2+tb))]
     beams = []
     delta_phi = math.pi/nb
@@ -35,52 +72,102 @@ def tht_beam_spreader(x, y, z0_pipe, z0_fins, d, h_pipe, h_fins, db, nb, tb):
     body = gmsh.model.occ.fuse(main_cylinder, beams)[0]
     return body[0]
 
-def cylinder_spreader(x, y, z, d, db, h, nb, tb):
+def cylinder_spreader(x: float, y: float, z: float, d: float, db: float, h: float, nb: int, tb: float) -> tuple[int, int]:
+    """
+    Create a cylinder with a spreader.
+    Args:
+        x: x coordinate of the center of the cylinder
+        y: y coordinate of the center of the cylinder
+        z: z coordinate of the center of the cylinder
+        d: diameter of the cylinder
+        db: diameter of the spreader
+        h: height of the cylinder
+        nb: number of spreaders
+        tb: thickness of the spreader
+    """
     main_cylinder = [(3, gmsh.model.occ.addCylinder(x, y, z, 0, 0, h, d/2+tb))]
     hole = [(3, gmsh.model.occ.addCylinder(x, y, z, 0, 0, h, d/2))]
     spreader = gmsh.model.occ.cut(main_cylinder, hole)
     return spreader[0][0]
 
 def build_geometry(
-        name='mesh',
-        dir="meshes/C3_passive",
-        verbosity=0,
-        mesh_size_max = 0.1,
-        mesh_size_from_curvature=16,
-        fltk=False,
-        symmetry=False,
-        size=1,
-        t_insulation=0.1,
-        cartridge_n=3, 
-        cartridge_d_ratio=0.5,
-        cartridge_diameter=0.014,
-        cartridge_h_ratio=0.8,
-        cartridge_spreader_lb=0.15,
-        cartridge_spreader_nb=3,
-        cartridge_spreader_tb=0.005,
-        cartridge_spreader_mesh_size_min = 0.002,
-        cartridge_spreader_mesh_grow_factor = 0.8,
-
-        tht_in_sand=True,
-        tht_d=0.05,
-        tht_d_ratio=0.1,
-        tht_n_ratio = 0.5,
-        tht_spreader_h_ratio=0.8,
-        tht_spreader_lb=0.15,
-        tht_spreader_nb=3,
-        tht_spreader_tb=0.005,
-        thp_spreader_mesh_size_min = 0.002,
-        thp_spreader_mesh_grow_factor = 0.8,
-        thp_mesh_size_min = 0.002,
-        thp_mesh_grow_factor = 0.8,
-        thp_surface_segments = 1,
-        
-        sand_material="SandTheory",
-        insulation_material="Standard_insulation",
-        thp_spreader_material="Steel04",
-        cartridge_material="Steel04",
-        cartridge_spreader_material="Steel04",
-        ):
+    name: str='mesh',
+    dir: str="meshes/C3_passive",
+    verbosity: int=0,
+    mesh_size_max: float=0.1,
+    mesh_size_from_curvature: int=16,
+    fltk: bool|list[str]=False,
+    symmetry: bool=False,
+    size: float=1,
+    t_insulation: float=0.1,
+    cartridge_n: int=3, 
+    cartridge_d_ratio: float=0.5,
+    cartridge_diameter: float=0.014,
+    cartridge_h_ratio: float=0.8,
+    cartridge_spreader_lb: float=0.15,
+    cartridge_spreader_nb: int=3,
+    cartridge_spreader_tb: float=0.005,
+    cartridge_spreader_mesh_size_min: float=0.002,
+    cartridge_spreader_mesh_grow_factor: float=0.8,
+    tht_in_sand=True,
+    tht_d: float=0.05,
+    tht_d_ratio: float=0.1,
+    tht_n_ratio: float=0.5,
+    tht_spreader_h_ratio: float=0.8,
+    tht_spreader_lb: float=0.15,
+    tht_spreader_nb: int=3,
+    tht_spreader_tb: float=0.005,
+    thp_spreader_mesh_size_min: float=0.002,
+    thp_spreader_mesh_grow_factor: float=0.8,
+    thp_mesh_size_min: float=0.002,
+    thp_mesh_grow_factor: float=0.8,
+    thp_surface_segments: int=1,
+    sand_material: str="SandTheory",
+    insulation_material: str="Standard_insulation",
+    thp_spreader_material: str="Steel04",
+    cartridge_material: str="Steel04",
+    cartridge_spreader_material: str="Steel04",
+    ):
+    """
+    Build the geometry of the C3 passive storage.
+    Args:
+        name: name of the geometry
+        dir: directory to save the geometry (when building manually)
+        verbosity: verbosity of the Gmsh API (0: silent, 1: verbose, 2: debug)
+        mesh_size_max: maximum mesh element size
+        mesh_size_from_curvature: mesh element size from curvature
+        fltk: stop and show at specific stages (False, 'premesh', 'postmesh')
+        symmetry: True = use segmentation of the geometry, False = use full geometry
+        size: size of the geometry in meters (diameter and height of main cylinder)
+        t_insulation: thickness of the insulation in meters
+        cartridge_n: number of cartridges
+        cartridge_d_ratio: radial position of the cartridge in relation to the main cylinder diameter
+        cartridge_diameter: diameter of the cartridge
+        cartridge_h_ratio: height of the cartridge in relation to the main cylinder height
+        cartridge_spreader_lb: length of fins of the beam spreader
+        cartridge_spreader_nb: number of fins of the beam spreader
+        cartridge_spreader_tb: thickness of the beam spreader
+        cartridge_spreader_mesh_size_min: minimum mesh size of the cartridge spreader
+        cartridge_spreader_mesh_grow_factor: growth factor of element with distance from the cartridge spreader surface
+        tht_in_sand: whether the THT pipes are in the main cylinder or outside in the insulation layer
+        tht_d: diameter of the THT pipe channels
+        tht_d_ratio: relative position of THT in remainign space between cartridge and main cylinder boundary
+        tht_n_ratio: relative number of THT pipes filling the arc
+        tht_spreader_h_ratio: relative height of the THT pipe spreader to the main cylinder height
+        tht_spreader_lb: length of the THT pipe spreader fins
+        tht_spreader_nb: number of THT pipe spreader fins
+        tht_spreader_tb: thickness of the THT pipe spreader fins
+        thp_spreader_mesh_size_min: minimum mesh size of the THT pipe spreader fins
+        thp_spreader_mesh_grow_factor: growth factor of element with distance from the THT pipe spreader surface
+        thp_mesh_size_min: minimum mesh size of the THT pipe channels
+        thp_mesh_grow_factor: growth factor of element with distance from the THT pipe channels surface
+        thp_surface_segments: number of segments of the THT pipe channels surface
+        sand_material: material of the sand (main cylinder)
+        insulation_material: material of the insulation (outer cylinder)
+        thp_spreader_material: material of the THT pipe spreader fins
+        cartridge_material: material of the cartridge
+        cartridge_spreader_material: material of the cartridge spreader fins
+    """
 
     cartridge_spreader_db = cartridge_diameter+cartridge_spreader_tb+2*cartridge_spreader_lb
     tht_spreader_db = tht_d+tht_spreader_tb+2*tht_spreader_lb

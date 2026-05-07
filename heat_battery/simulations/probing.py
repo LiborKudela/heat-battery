@@ -446,7 +446,14 @@ class Probe_writer:
             try:
                 value = probe()
             except Exception as e:
-                print(f"Error evaluating probe {self.names[i]}: {e}")
+                # Surface the error once per failure (rate-limited per probe)
+                # instead of silently masking it as 0.0. Silent zeros made
+                # SNES/KSP iteration probes look broken when in fact a probe
+                # had raised. We still fall back to 0 so the writer can
+                # serialize the row, but at least the user sees something.
+                if MPI.COMM_WORLD.rank == 0:
+                    name = self.names[i] if i < len(self.names) else f'probe[{i}]'
+                    print(f"[probe error] {name}: {type(e).__name__}: {e}")
                 value = 0
             self.values[i] = value
         self.chained_values = self.chain_values()

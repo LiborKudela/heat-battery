@@ -28,6 +28,7 @@ def run():
         Qc_t=lambda t: 100+10*math.sin(2*math.pi*0.01*t),
         T_amb_t=lambda t: 10,
         result_dir=r_dir,
+        xdmf_file=os.path.join(r_dir, 'unsteady.xdmf'),
         probe_destinations=[{
             'type': 'csv',
             'file_name': 'unsteady.csv',

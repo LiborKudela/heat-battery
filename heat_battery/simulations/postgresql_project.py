@@ -368,11 +368,289 @@ class Project:
         self.ensure_database_exists()
         self.create(if_exists=if_exists)
 
-    def load_from_file(self, file_path:str):
-        pass
+    BACKUP_VERSION = 1
+    BACKUP_MANIFEST_NAME = 'manifest.json'
+    BACKUP_JOBS_NAME = 'jobs.bin'
+    BACKUP_FILES_NAME = 'files.bin'
+    BACKUP_RESULTS_PREFIX = 'results/'
+    BACKUP_CHECKPOINTS_PREFIX = 'checkpoints/'
+
+    @staticmethod
+    def _add_bytes_to_tar(tar:tarfile.TarFile, arcname:str, data:bytes):
+        info = tarfile.TarInfo(name=arcname)
+        info.size = len(data)
+        info.mtime = int(time.time())
+        tar.addfile(info, io.BytesIO(data))
+
+    @only_rank_0
+    @debounced_query
+    def _save_to_file_query(
+        self,
+        file_path:str,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        """
+        Dump everything that defines the current state of this Project (database
+        tables under the ``self.project_name`` schema + all binary files stored
+        in the result and checkpoint folders) into a single ``.tar.gz`` archive.
+        """
+        commit = conn is None
+        file_path = os.path.abspath(file_path)
+        parent_dir = os.path.dirname(file_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        with DBConnection() if commit else conn as conn:
+            with tarfile.open(file_path, mode='w:gz') as tar:
+
+                # 1) Manifest with metadata
+                manifest = {
+                    'version': Project.BACKUP_VERSION,
+                    'project_name': self.project_name,
+                    'db_name': self.db_name,
+                    'created_at': str(datetime.datetime.now(datetime.timezone.utc)),
+                    'jobs_columns': list(Job.COLUMNS.keys()),
+                    'files_columns': list(Project.FILES_COLUMNS.keys()),
+                }
+                manifest_bytes = json.dumps(manifest, indent=2).encode('utf-8')
+                self._add_bytes_to_tar(
+                    tar, Project.BACKUP_MANIFEST_NAME, manifest_bytes,
+                )
+
+                # 2) Dump 'jobs' table in PostgreSQL binary format (lossless)
+                print_rank_0(f"Dumping table {self.project_name}.{Job.TABLE_NAME}...")
+                jobs_buf = io.BytesIO()
+                copy_jobs_q = sql.SQL("COPY {} TO STDOUT WITH BINARY").format(
+                    self.get_jobs_table_sql_identifier(),
+                )
+                cur = conn.cursor()
+                cur.copy_expert(copy_jobs_q.as_string(conn), jobs_buf)
+                self._add_bytes_to_tar(
+                    tar, Project.BACKUP_JOBS_NAME, jobs_buf.getvalue(),
+                )
+
+                # 3) Dump 'files' table in PostgreSQL binary format (lossless)
+                print_rank_0(f"Dumping table {self.project_name}.{Project.FILES_TABLE_NAME}...")
+                files_buf = io.BytesIO()
+                copy_files_q = sql.SQL("COPY {} TO STDOUT WITH BINARY").format(
+                    self.get_files_table_sql_identifier(),
+                )
+                cur = conn.cursor()
+                cur.copy_expert(copy_files_q.as_string(conn), files_buf)
+                self._add_bytes_to_tar(
+                    tar, Project.BACKUP_FILES_NAME, files_buf.getvalue(),
+                )
+
+                # 4) Dump on-disk binary files (results and checkpoints) using
+                #    the python procedures so it works even when the local user
+                #    has no permission on the server's filesystem.
+                list_files_q = sql.SQL("SELECT {}.list_files(%s)").format(
+                    sql.Identifier(self.project_name),
+                )
+                read_q = sql.SQL("SELECT {}.read_bytes_from_file(%s, %s)").format(
+                    sql.Identifier(self.project_name),
+                )
+
+                for label, folder, prefix in (
+                    ('result',     self.res_prefix,   Project.BACKUP_RESULTS_PREFIX),
+                    ('checkpoint', self.ckpnt_prefix, Project.BACKUP_CHECKPOINTS_PREFIX),
+                ):
+                    cur = conn.cursor()
+                    cur.execute(list_files_q, (folder,))
+                    file_names = cur.fetchone()[0] or []
+                    print_rank_0(
+                        f"Dumping {len(file_names)} {label} file(s) from {folder}..."
+                    )
+                    for fname in file_names:
+                        remote_path = os.path.join(folder, fname)
+                        cur = conn.cursor()
+                        cur.execute(read_q, (remote_path, 0))
+                        raw = cur.fetchone()[0]
+                        data = bytes(raw) if raw is not None else b''
+                        self._add_bytes_to_tar(tar, prefix + fname, data)
+
+            if commit:
+                conn.commit()
+
+        return file_path
 
     def save_to_file(self, file_path:str):
-        pass
+        """
+        Export this project's full state to a single ``.tar.gz`` archive that
+        can later be restored with :meth:`load_from_file`.
+
+        The archive contains:
+
+        * ``manifest.json``              - project metadata and original name.
+        * ``jobs.bin``                   - PostgreSQL binary dump of the jobs table.
+        * ``files.bin``                  - PostgreSQL binary dump of the files table.
+        * ``results/<signature>.hbres``  - per-job result binary files.
+        * ``checkpoints/<sig>.chkpnt``   - per-job checkpoint archives.
+
+        Args:
+            file_path: Path to the output archive (``.tar.gz`` recommended).
+
+        Returns:
+            Absolute path of the produced archive (only on rank 0; ``None`` on
+            other ranks - use :func:`mpi4py.MPI.COMM_WORLD.bcast` if needed).
+        """
+        return self._save_to_file_query(file_path=file_path)
+
+    @only_rank_0
+    @debounced_query
+    def _load_from_file_query(
+        self,
+        file_path:str,
+        recreate:bool=True,
+        conn:psycopg2.extensions.connection=None,
+    ):
+        """
+        Restore project state from an archive produced by :meth:`save_to_file`
+        into the schema ``self.project_name``. The original project name is
+        ignored (taken only as informational metadata), so a backup of
+        ``project_example_05`` can be loaded into ``project_example_05_copy``.
+        """
+        commit = conn is None
+        file_path = os.path.abspath(file_path)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"Backup archive '{file_path}' does not exist!"
+            )
+
+        # Drop and recreate the project schema and folders in their own
+        # transaction so we always load into a clean state. We deliberately
+        # do NOT pass `conn` here: `_create_query` internally re-enters
+        # `with conn as conn` and so does `_exists_query`/`_drop_query`,
+        # which psycopg2 forbids on an already-entered connection
+        # ("the connection cannot be re-entered recursively").
+        # Doing this first also means the destructive drop is committed
+        # before we start streaming bulk data into the new schema.
+        if recreate:
+            print_rank_0(
+                f"Recreating clean schema '{self.project_name}' before "
+                "restoring backup..."
+            )
+            self._create_query(if_exists='override')
+
+        with DBConnection() if commit else conn as conn:
+
+            with tarfile.open(file_path, mode='r:*') as tar:
+
+                # 1) Manifest
+                manifest_member = tar.getmember(Project.BACKUP_MANIFEST_NAME)
+                manifest = json.loads(
+                    tar.extractfile(manifest_member).read().decode('utf-8'),
+                )
+                if manifest.get('version') != Project.BACKUP_VERSION:
+                    raise ValueError(
+                        f"Unsupported backup version: {manifest.get('version')!r} "
+                        f"(this code expects version {Project.BACKUP_VERSION})."
+                    )
+                src_name = manifest.get('project_name', '<unknown>')
+                print_rank_0(
+                    f"Restoring backup of project '{src_name}' "
+                    f"(created at {manifest.get('created_at', '?')}) "
+                    f"into '{self.project_name}'..."
+                )
+
+                # Sanity check: schemas must match the destination's columns.
+                if manifest.get('jobs_columns') != list(Job.COLUMNS.keys()):
+                    raise ValueError(
+                        "Backup 'jobs' columns do not match current Job.COLUMNS:\n"
+                        f"  backup:  {manifest.get('jobs_columns')}\n"
+                        f"  current: {list(Job.COLUMNS.keys())}"
+                    )
+                if manifest.get('files_columns') != list(Project.FILES_COLUMNS.keys()):
+                    raise ValueError(
+                        "Backup 'files' columns do not match current Project.FILES_COLUMNS:\n"
+                        f"  backup:  {manifest.get('files_columns')}\n"
+                        f"  current: {list(Project.FILES_COLUMNS.keys())}"
+                    )
+
+                # 2) Restore jobs table
+                print_rank_0(f"Restoring table {self.project_name}.{Job.TABLE_NAME}...")
+                jobs_data = tar.extractfile(Project.BACKUP_JOBS_NAME).read()
+                copy_jobs_q = sql.SQL("COPY {} FROM STDIN WITH BINARY").format(
+                    self.get_jobs_table_sql_identifier(),
+                )
+                cur = conn.cursor()
+                cur.copy_expert(copy_jobs_q.as_string(conn), io.BytesIO(jobs_data))
+
+                # 3) Restore files table
+                print_rank_0(f"Restoring table {self.project_name}.{Project.FILES_TABLE_NAME}...")
+                files_data = tar.extractfile(Project.BACKUP_FILES_NAME).read()
+                copy_files_q = sql.SQL("COPY {} FROM STDIN WITH BINARY").format(
+                    self.get_files_table_sql_identifier(),
+                )
+                cur = conn.cursor()
+                cur.copy_expert(copy_files_q.as_string(conn), io.BytesIO(files_data))
+
+                # 4) Restore on-disk binary files. We push them to the server
+                #    via the write_bytes_to_file procedure so it works even if
+                #    the local user has no direct write access to the folder.
+                write_q = sql.SQL("SELECT {}.write_bytes_to_file(%s, %s)").format(
+                    sql.Identifier(self.project_name),
+                )
+
+                results_count = 0
+                checkpoints_count = 0
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    if member.name.startswith(Project.BACKUP_RESULTS_PREFIX):
+                        rel = member.name[len(Project.BACKUP_RESULTS_PREFIX):]
+                        if not rel:
+                            continue
+                        dst = os.path.join(self.res_prefix, rel)
+                        results_count += 1
+                    elif member.name.startswith(Project.BACKUP_CHECKPOINTS_PREFIX):
+                        rel = member.name[len(Project.BACKUP_CHECKPOINTS_PREFIX):]
+                        if not rel:
+                            continue
+                        dst = os.path.join(self.ckpnt_prefix, rel)
+                        checkpoints_count += 1
+                    else:
+                        continue
+                    data = tar.extractfile(member).read()
+                    cur = conn.cursor()
+                    cur.execute(write_q, (dst, data))
+
+                print_rank_0(
+                    f"Restored {results_count} result file(s) and "
+                    f"{checkpoints_count} checkpoint file(s) on the database server."
+                )
+
+            if commit:
+                conn.commit()
+
+        return self.project_name
+
+    def load_from_file(self, file_path:str, recreate:bool=True):
+        """
+        Restore project state from an archive previously produced by
+        :meth:`save_to_file` into this project's schema (``self.project_name``).
+
+        The destination schema name does not need to match the original one
+        stored in the archive - this method effectively acts as a backup
+        restore that can also "rename" a project (e.g. instantiate
+        ``Project('project_example_05_copy')`` and load a backup of
+        ``project_example_05`` into it).
+
+        Args:
+            file_path: Path to a ``.tar.gz`` archive produced by
+                :meth:`save_to_file`.
+            recreate: If True (default), the project's schema and folders are
+                dropped and recreated cleanly before loading the backup data.
+                If False, the project is assumed to already be empty and
+                compatible with the backup.
+
+        Returns:
+            The name of the project that was restored into (only on rank 0).
+        """
+        return self._load_from_file_query(
+            file_path=file_path,
+            recreate=recreate,
+        )
 
     def get_jobs_table_sql_identifier(self, project_name:str|None=None):
         if project_name is not None:
@@ -1748,34 +2026,43 @@ class Project:
     @only_rank_0
     @debounced_query
     def _get_next_scheduled_job_query(
-        self, 
+        self,
+        priority:int|None=None,
         conn:psycopg2.extensions.connection=None,
         ):
         with DBConnection() if conn is None else conn as conn:
-            query = sql.SQL(
-                "SELECT * FROM {} WHERE "
+            base_query = (
+                "SELECT * FROM {} WHERE ("
                 "status = 'SCHEDULED' OR "
                 "status LIKE 'FAILED%%' OR "
-                "status = 'INTERRUPTED' "
-                "ORDER BY priority ASC LIMIT 1"
-            )  
-            query = query.format(
+                "status = 'INTERRUPTED'"
+                ")"
+            )
+            params: tuple = ()
+            if priority is not None:
+                base_query += " AND priority = %s"
+                params = (priority,)
+            base_query += " ORDER BY priority ASC LIMIT 1"
+
+            query = sql.SQL(base_query).format(
                 self.get_jobs_table_sql_identifier(),
                 )
             cur = conn.cursor()
-            cur.execute(query)
+            cur.execute(query, params)
             row = cur.fetchone()
+
+            if row is None:
+                return None
 
             required_source_files = row[Job.COLUMNS_MAP['required_source_files']]
             source_files_rows = self._get_files_query(
-                conn=conn, 
+                conn=conn,
                 signatures=required_source_files,
             )
-        if row is not None:
-            return Job(dict(zip(Job.COLUMNS.keys(), row)), source_files_rows, self)
+        return Job(dict(zip(Job.COLUMNS.keys(), row)), source_files_rows, self)
 
-    def get_next_scheduled_job(self) -> Job | None:
-        res = self._get_next_scheduled_job_query()
+    def get_next_scheduled_job(self, priority:int|None=None) -> Job | None:
+        res = self._get_next_scheduled_job_query(priority=priority)
         res = MPI.COMM_WORLD.bcast(res, root=0)
         MPI.COMM_WORLD.barrier()
         return res

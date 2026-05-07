@@ -12,6 +12,7 @@ class TestGeometryBuilders(unittest.TestCase):
 
         if MPI.COMM_WORLD.rank == 0:
             gmsh.initialize()
+            print('Gmsh API:', gmsh.__version__)
             gmsh.finalize()
         MPI.COMM_WORLD.Barrier()
 

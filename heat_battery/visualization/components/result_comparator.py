@@ -222,30 +222,37 @@ class ResultComparatorComponent(GridLayout):
             }
         )
 
+        # Per-instance viewer id store so clientside JS can read self.id and
+        # build correctly-namespaced target IDs for dash_clientside.set_props.
+        viewer_id_store = dash_enrich.dcc.Store(
+            id=f'{self.id}-viewer-id-store',
+            data=self.id,
+        )
+
         # Stores for managing state
         comparator_dataset_store = dash_enrich.dcc.Store(
-            id='comparator-dataset-store',
+            id=f'{self.id}-comparator-dataset-store',
             data=initial_dataset,
         )
         
         comparator_updaters_store = dash_enrich.dcc.Store(
-            id='comparator-updaters-store',
+            id=f'{self.id}-comparator-updaters-store',
             data=[],
         )
         
         remove_comparator_chart_store = dash_enrich.dcc.Store(
-            id='remove-comparator-chart-store',
+            id=f'{self.id}-remove-comparator-chart-store',
             data=[],
         )
 
         chart_editor_store = dash_enrich.dcc.Store(
-            id="comparator-chart-editor-store",
+            id=f'{self.id}-comparator-chart-editor-store',
             data=None,
         )
 
         # Chart editor modal
         chart_editor_modal = dbc.Modal(
-            id="comparator-chart-editor-modal",
+            id=f'{self.id}-comparator-chart-editor-modal',
             fullscreen=True,
             is_open=False,
             children=[
@@ -254,31 +261,31 @@ class ResultComparatorComponent(GridLayout):
                     style={'gap': 4},
                     children=[
                         dbc.ModalTitle(
-                            id="comparator-chart-editor-modal-title", 
+                            id=f'{self.id}-comparator-chart-editor-modal-title', 
                             children="Chart editor"),
                         dbc.Button(
                             "Close without saving", 
-                            id="comparator-close-chart-editor-no-save", 
+                            id=f'{self.id}-comparator-close-chart-editor-no-save', 
                             color="danger",
                             size="sm",
                             style={'marginLeft': 'auto'},
                         ),
                         dbc.Button(
                             "Save", 
-                            id="comparator-save-chart-editor", 
+                            id=f'{self.id}-comparator-save-chart-editor', 
                             color="primary",
                             size="sm",
                         ),
                         dbc.Button(
                             "Save & Close", 
-                            id="comparator-save-and-close-chart-editor", 
+                            id=f'{self.id}-comparator-save-and-close-chart-editor', 
                             color="success",
                             size="sm",
                         ),
                     ],
                 ),
                 dce.DashChartEditor(
-                    id="comparator-chart-editor-editor",
+                    id=f'{self.id}-comparator-chart-editor-editor',
                     dataSources=df.to_dict('list'),
                     style={'width': '100%', 'height': '100%'},
                 ),
@@ -287,7 +294,7 @@ class ResultComparatorComponent(GridLayout):
         )
 
         initial_figures_store = dash_enrich.dcc.Store(
-            id='comparator-initial-figures-store',
+            id=f'{self.id}-comparator-initial-figures-store',
             data=self.initial_figures,
         )
 
@@ -298,6 +305,7 @@ class ResultComparatorComponent(GridLayout):
                     id=f'{self.id}-grid-container',   
                     children=[
                         grid_div,
+                        viewer_id_store,
                         comparator_dataset_store,
                         comparator_updaters_store,
                         remove_comparator_chart_store,
@@ -317,11 +325,13 @@ class ResultComparatorComponent(GridLayout):
         return div
 
     def set_callbacks(self, server):
-        
+
+        viewer_id = self.id
+
         # Refresh dataset callback
         @server.app.callback(
             dash_enrich.Input(f'{self.id}-refresh-button', 'n_clicks'),
-            dash_enrich.Output('comparator-dataset-store', 'data'),
+            dash_enrich.Output(f'{self.id}-comparator-dataset-store', 'data'),
             dash_enrich.Output(f'{self.id}-status-text', 'children', allow_duplicate=True),
             dash_enrich.State(f'{self.id}-exclude-pending-checkbox', 'value'),
             prevent_initial_call=True,
@@ -341,9 +351,9 @@ class ResultComparatorComponent(GridLayout):
 
         # Update charts when dataset changes
         @server.app.callback(
-            dash_enrich.Input('comparator-dataset-store', 'data'),
-            dash_enrich.State('comparator-updaters-store', 'data'),
-            dash_enrich.Output({'type': 'comparator-graph', 'index': dash_enrich.ALL}, 'figure'),
+            dash_enrich.Input(f'{self.id}-comparator-dataset-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', 'data'),
+            dash_enrich.Output({'type': 'comparator-graph', 'viewer_id': viewer_id, 'index': dash_enrich.ALL}, 'figure'),
             prevent_initial_call=True,
         )
         def update_charts_on_dataset_change(dataset, updaters_data):
@@ -377,9 +387,10 @@ class ResultComparatorComponent(GridLayout):
             ),
             dash_enrich.Input(f'{self.id}-add-scatter-button', 'n_clicks'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('comparator-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-comparator-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -391,9 +402,10 @@ class ResultComparatorComponent(GridLayout):
             ),
             dash_enrich.Input(f'{self.id}-add-bar-button', 'n_clicks'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('comparator-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-comparator-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -405,9 +417,10 @@ class ResultComparatorComponent(GridLayout):
             ),
             dash_enrich.Input(f'{self.id}-add-box-button', 'n_clicks'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('comparator-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-comparator-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -417,12 +430,12 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='remove_comparator_chart'
             ),
-            dash_enrich.Input('remove-comparator-chart-store', 'data'),
+            dash_enrich.Input(f'{self.id}-remove-comparator-chart-store', 'data'),
             dash_enrich.State(f'grid-div-{self.id}', 'children'),
-            dash_enrich.State('comparator-updaters-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children', allow_duplicate=True),
-            dash_enrich.Output('remove-comparator-chart-store', 'data', allow_duplicate=True),
-            dash_enrich.Output('comparator-updaters-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-remove-comparator-chart-store', 'data', allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-comparator-updaters-store', 'data', allow_duplicate=True),
             prevent_initial_call=True
         )
 
@@ -432,9 +445,9 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='save_and_close_comparator_chart_editor',
             ),
-            dash_enrich.Input("comparator-save-and-close-chart-editor", "n_clicks"), 
-            dash_enrich.Output("comparator-chart-editor-modal", "is_open", allow_duplicate=True),
-            dash_enrich.Output("comparator-chart-editor-editor", "saveState", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-comparator-save-and-close-chart-editor', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-comparator-chart-editor-modal', "is_open", allow_duplicate=True),
+            dash_enrich.Output(f'{self.id}-comparator-chart-editor-editor', "saveState", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -443,8 +456,8 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='save_comparator_chart_editor',
             ),
-            dash_enrich.Input("comparator-save-chart-editor", "n_clicks"), 
-            dash_enrich.Output("comparator-chart-editor-editor", "saveState", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-comparator-save-chart-editor', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-comparator-chart-editor-editor', "saveState", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -453,8 +466,8 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='close_no_save_comparator_chart_editor',
             ),
-            dash_enrich.Input("comparator-close-chart-editor-no-save", "n_clicks"), 
-            dash_enrich.Output("comparator-chart-editor-modal", "is_open", allow_duplicate=True),
+            dash_enrich.Input(f'{self.id}-comparator-close-chart-editor-no-save', "n_clicks"), 
+            dash_enrich.Output(f'{self.id}-comparator-chart-editor-modal', "is_open", allow_duplicate=True),
             prevent_initial_call=True,
         )
 
@@ -464,18 +477,19 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='replace_comparator_figure_on_save',
             ),
-            dash_enrich.Input("comparator-chart-editor-editor", "saveState"),
-            dash_enrich.State("comparator-chart-editor-editor", "figure"),
-            dash_enrich.State("comparator-chart-editor-store", "data"),
-            dash_enrich.State("comparator-updaters-store", "data"),
+            dash_enrich.Input(f'{self.id}-comparator-chart-editor-editor', "saveState"),
+            dash_enrich.State(f'{self.id}-comparator-chart-editor-editor', "figure"),
+            dash_enrich.State(f'{self.id}-comparator-chart-editor-store', "data"),
+            dash_enrich.State(f'{self.id}-comparator-updaters-store', "data"),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             prevent_initial_call=True,
         )
 
         # Update chart editor data sources when editing
         @server.app.callback(
-            dash_enrich.Input('comparator-chart-editor-store', 'data'),
-            dash_enrich.State('comparator-dataset-store', 'data'),
-            dash_enrich.Output('comparator-chart-editor-editor', 'dataSources'),   
+            dash_enrich.Input(f'{self.id}-comparator-chart-editor-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-dataset-store', 'data'),
+            dash_enrich.Output(f'{self.id}-comparator-chart-editor-editor', 'dataSources'),   
             prevent_initial_call=True,
         )
         def update_chart_editor_datasources(chart_editor_store_data, dataset):
@@ -494,10 +508,11 @@ class ResultComparatorComponent(GridLayout):
                 namespace='clientside',
                 function_name='initialize_comparator_charts'
             ),
-            dash_enrich.Input('comparator-initial-figures-store', 'data'),
-            dash_enrich.State('comparator-dataset-store', 'data'),
+            dash_enrich.Input(f'{self.id}-comparator-initial-figures-store', 'data'),
+            dash_enrich.State(f'{self.id}-comparator-dataset-store', 'data'),
+            dash_enrich.State(f'{self.id}-viewer-id-store', 'data'),
             dash_enrich.Output(f'grid-div-{self.id}', 'children'),
-            dash_enrich.Output('comparator-updaters-store', 'data'),
+            dash_enrich.Output(f'{self.id}-comparator-updaters-store', 'data'),
             dash_enrich.Output(f'{self.id}-status-text', 'children', allow_duplicate=True),
             prevent_initial_call=False
         )
