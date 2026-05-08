@@ -459,7 +459,7 @@ echo "ADIOS2 installed!"
 
 # install heat_battery
 echo "Installing heat_battery python package..."
-pip3 install .
+pip3 install . || exit 1
 if ! python3 -c "import heat_battery; print('heat_battery imported successfully!')"; then
     echo "Failed to import heat_battery"
     exit 1

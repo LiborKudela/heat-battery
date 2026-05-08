@@ -23,6 +23,5 @@ examples/Example_0*/results*
 !/assets/cloc/line_count_cache.csv
 
 # ignore these folders
-docs/
 experimental/
 wheather/

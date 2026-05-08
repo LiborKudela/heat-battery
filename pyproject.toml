@@ -10,7 +10,7 @@ authors = [
 keywords = ["finite element method", "thermal storage", "simulation", "optimization"]
 urls = { "Homepage" = "https://github.com/LiborKudela/heat-battery" }
 dependencies = [
-    "mpi4py==3.1.5",
+    "mpi4py>=3.1,<4",
     "cloudpickle>=3.0.0",
     "pandas>=2.1.2",
     "plotly>=5.18.0",

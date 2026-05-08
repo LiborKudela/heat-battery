@@ -39,10 +39,3 @@ database:
         allow_drop_schema_cascade: true
         allow_drop_table: false
 
-    sqlite:
-        base_dir: null
-        allow_create_database: false
-        allow_drop_database: false
-        allow_drop_table: false
-        allow_delete_table: false
-
